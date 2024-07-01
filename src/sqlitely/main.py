@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.06.2024
+@modified    01.07.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -210,10 +210,10 @@ ARGUMENTS = {
                       "(affected by offset and limit)"},
              {"args": ["--columns"],
               "help": "columns to import if not all,\n"
-                      "as a comma-separated list of indexes or index ranges,\n"
+                      "as a comma-separated list of columns or column ranges,\n"
                       "range as START..END or START.. or ..END\n"
                       "(no START: from first, no END: until last).\n"
-                      "Indexes can be numbers starting from 1\n"
+                      "Columns can be indexes starting from 1\n"
                       "or spreadsheet column labels like AB,\n"
                       "must be column names if import from JSON%s." %
                       ("/YAML" if importexport.yaml else "")},
@@ -781,9 +781,10 @@ def validate_args(action, args, infile=None):
     if "export" == action and args.limit == 0 and "json" == args.format:
         sys.exit("Nothing to export as JSON with limit 0.")
     if "import" == action and args.columns:
-        has_names = importexport.get_format(infile) in (["json", "yaml"] if importexport.yaml else ["json"])
-        try: args.columns = parse_columns(args.columns, numeric=not has_names)
-        except Exception: sys.exit("Invalid columns range: %r" % args.columns)
+        try: parse_columns(args.columns, numeric=True)
+        except Exception:
+            try: parse_columns(args.columns, numeric=False)
+            except Exception: sys.exit("Invalid columns range: %r" % args.columns)
 
 
 def parse_columns(value, numeric=False):
@@ -1238,21 +1239,32 @@ def run_import(infile, args):
     def build_mappings(sheets):
         """Populates source-to-table mappings for all sheets."""
         items = util.CaselessDict((n, xx[n]) for xx in db.schema.values() for n in xx)
+        chosen_tables = []
         for sheet in sheets:
             colmapping, pk, existing_ok = collections.OrderedDict(), None, False
             tname = sheet["name"] if has_sheets else os.path.splitext(os.path.basename(infile))[0]
             if args.table_name: tname = args.table_name
 
-            colnames = sheet["columns"] if has_names or args.row_header else \
+            colnames = sheet["columns"] if has_names else \
                        [util.int_to_base(i) for i in range(len(sheet["columns"]))]
             sourcecols = collections.OrderedDict(enumerate(colnames))
-            if args.columns: sourcecols = filter_columns(sourcecols, args.columns)
+            if args.columns:
+                try: col_filters = parse_columns(args.columns, numeric=True)
+                except Exception: col_filters = None
+                if col_filters and has_names:
+                    fnames = [x for x in re.split(r",|\.\.", args.columns) if x and not x.isdigit()]
+                    if fnames and set(fnames) & set(colnames):
+                        col_filters = None # Ambiguous filter: assume names instead of labels
+                if not col_filters and has_names:
+                    col_filters = parse_columns(args.columns, numeric=False)
+                sourcecols = filter_columns(sourcecols, col_filters)
 
             if not args.create_always:
                 # Find closest matching table, with the least number of columns and preferably matching names
                 candidates = [] # [(whether column names match, table column names, {item}), ]
                 name_matches = lambda s: re.match(r"%s(_\d+)?" % re.escape(tname), s, re.I)
-                for item in (x for x in items.values() if "table" == x["type"] and name_matches(x["name"])):
+                for item in (x for x in items.values() if "table" == x["type"]
+                             and x["name"] not in chosen_tables and name_matches(x["name"])):
                     tablecols = [x["name"] for x in item["columns"]]
                     if len(tablecols) >= len(sourcecols):
                         cols_match = all(any(util.lceq(a, b) for b in tablecols)
@@ -1261,26 +1273,28 @@ def run_import(infile, args):
                 for cols_match, tablecols, item in sorted(candidates, key=lambda x: (not x[0], len(x[1]))):
                     tname, existing_ok = item["name"], True
                     if cols_match:
-                        colmapping.update((a, next(b for b in tablecols if util.lceq(a, b)))
-                                          for a in (sourcecols.values() if has_names else sourcecols))
-                    elif has_names:
+                        colmapping.update((a if has_dicts else i, next(b for b in tablecols if util.lceq(a, b)))
+                                          for i, a in enumerate(sourcecols.values() if has_names else sourcecols))
+                    elif has_dicts:
                         colmapping.update(zip(sourcecols.values() , tablecols))
                     else:
                         colmapping.update(zip(sourcecols, tablecols))
+                    chosen_tables.append(tname)
                     break # for
             if not existing_ok:
-                tname = util.make_unique(tname, items)
-                if has_names: colmapping.update((c, c) for c in sourcecols.values())
+                if has_dicts: colmapping.update((c, c) for c in sourcecols.values())
                 else:
                     for i, c in sourcecols.items():
                         colmapping[i] = util.make_unique(c, list(colmapping.values()))
                 if args.add_pk: pk = util.make_unique("id", list(colmapping.values()))
+                tname = util.make_unique(tname, items)
+                chosen_tables.append(tname)
                 item = {"name": tname, "type": "table",
                         "columns": ([{"name": pk, "pk": {"autoincrement": True}}] if pk else []) + 
                                    [{"name": n} for n in colmapping.values()]}
 
             sheettotal = sheet["rows"]
-            if args.row_header and not has_names and sheet["rows"] != -1: sheettotal -= 1
+            if args.row_header and not has_dicts and sheet["rows"] != -1: sheettotal -= 1
             sheet.update(table=tname, tablecolumns=colmapping, tablepk=pk, count=None,
                          total=sheettotal, type="sheet" if has_sheets else None)
             if not existing_ok: items[tname] = item
@@ -1300,18 +1314,20 @@ def run_import(infile, args):
         info = importexport.get_import_file_data(infile)
         if args.progress: bar.pause, _ = True, output()
         has_sheets = "xls" in info["format"]
-        has_names = info["format"] in (["json", "yaml"] if importexport.yaml else ["json"])
+        has_dicts = info["format"] in ["json", "yaml"]
+        has_names = args.row_header or has_dicts
         output()
         output("Import from: %s (%s%s)", info["name"], util.format_bytes(info["size"]),
                ", %s" % util.plural("sheet", info["sheets"]) if has_sheets else "")
 
         sheets = info["sheets"]
-        if entity_rgx: sheets = [x for x in sheets if entity_rgx.match(x["name"])]
+        if entity_rgx and has_sheets: sheets = [x for x in sheets if entity_rgx.match(x["name"])]
         if not sheets:
-            extra = "" if not args.select else " using sheet selection: %s" % " ".join(args.select)
+            extra = "" if has_sheets and not args.select else \
+                    " using sheet selection: %s" % " ".join(args.select)
             output()
             sys.exit("Nothing to import from %s%s." % (infile, extra))
-        sheets = [x for x in sheets if x["rows"] and (not args.no_empty or x["total"])]
+        sheets = [x for x in sheets if x["rows"]]
         if not sheets:
             output()
             sys.exit("Nothing to import from %s." % infile)
@@ -1342,8 +1358,7 @@ def run_import(infile, args):
             get_name1 = lambda a: sheet["columns"][a] if isinstance(a, int) else a
             maxlen1 = max(len(grammar.quote(get_name1(a), force=True)) for a in sheet["tablecolumns"])
             for i, (a, b) in enumerate(sheet["tablecolumns"].items()):
-                key1 = grammar.quote(get_name1(a), force=True) \
-                       if has_names or args.row_header else ""
+                key1 = grammar.quote(get_name1(a), force=True) if has_names else ""
                 output("  %s. %s%s -> %s",
                     ("%%%ds" % math.ceil(math.log(len(sheet["tablecolumns"]) + 1, 10))) % (i + 1),
                     key1 or "column",
@@ -1409,7 +1424,7 @@ def run_import(infile, args):
 
     finally:
         util.try_ignore(db.close)
-        if not file_existed and (not total or not args.no_empty):
+        if not file_existed and (not total and not args.no_empty):
             util.try_ignore(os.unlink, dbname)
 
 

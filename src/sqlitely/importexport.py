@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.06.2024
+@modified    01.07.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1268,9 +1268,10 @@ def import_data(db, filename, tables, has_header=True, limit=None, maxcount=None
                     cursor = table = source = None
                 if result and progress:
                     result = progress(name=mytable, source=mysource, count=count, errorcount=errorcount, done=True)
-                if not result \
-                or maxcount and totalcount >= maxcount:
+                if not result:
                     break # for i, item
+                if maxcount and totalcount >= maxcount:
+                    continue # for i, item
 
             logger.info("Finished importing from %s to %s.", filename, db)
 
@@ -1432,6 +1433,8 @@ class csv_reader(object):
 
             if "utf-16" in (encoding or "").lower() and len(preview) / 2: preview += b"\x00"
             try: dialect = csv.Sniffer().sniff(preview.decode(encoding or "utf-8"), ",;\t")
+            except csv.Error as e: # Format not deducable
+                dialect = csv.excel
             except UnicodeError: # chardet is not very reliable, try UTF-8 as fallback
                 try: encoding, dialect = "utf-8", csv.Sniffer().sniff(preview.decode("utf-8"), ",;\t")
                 except Exception: dialect = csv.excel # Try default as fallback
