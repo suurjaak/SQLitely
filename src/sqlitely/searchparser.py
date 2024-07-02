@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.08.2023
+@modified    02.07.2024
 """
 import calendar
 import collections
@@ -382,6 +382,30 @@ def join_strings(strings, glue=" AND "):
     return glue.join(strings), len(strings)
 
 
+
+def match_keywords(texts, keywords, name, when=any, case=False, when_many=all):
+    """
+    Returns whether text matches inclusive or exclusive keywords.
+
+    @param   texts      one or more strings to check
+    @param   name       name of keyword being matched
+    @param   keywords   {keyword: [thisword, ], -keyword: [notthisword, ]}
+    @param   when       truth function to use, like all or any
+    @param   when_many  truth function to use for summing results from multiple texts
+    @param   case       whether match is case-sensitive
+    @return             True if inclusive keywords match and exclusive keywords do not,
+                        False if inclusive keywords do not match or exclusive keywords match,
+                        None if keyword is not present in keywords
+    """
+    pros, cons = [], []
+    for text in ([texts] if isinstance(texts, six.text_type) else texts):
+        a = match_words(text, keywords[name], when, case) if name in keywords else None
+        b = match_words(text, keywords["-" + name], when, case) if "-" + name in keywords else None
+        pros.append(a), cons.append(b)
+    if set(pros + cons) == set([None]): return None 
+    return False if (when_many(cons) or when_many(x is False for x in pros)) else True
+
+
 def match_words(text, words, when=all, case=False):
     """
     Returns whether all words match given text.
@@ -393,7 +417,7 @@ def match_words(text, words, when=all, case=False):
     words_re = [x if isinstance(w, tuple) else x.replace(r"\*", ".*")
                 for w in words for x in [re.escape(flatten(w)[0])]]
     text_search, flags = (text, 0) if case else (text.lower(), re.I)
-    return when(re.search(y, text_search, flags) for y in words_re)
+    return when(re.search(y, text_search, flags) for y in words_re) if text and words else False
 
 
 

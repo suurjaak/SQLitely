@@ -1458,20 +1458,23 @@ def run_parse(dbname, args):
         imin = 0 if args.offset is None else max(0, args.offset)
         imax = imin + (sys.maxsize if args.limit is None or args.limit < 0 else args.limit)
         db = database.Database(dbname)
+        category_kws = {x for k in kws for x in [re.sub("^-", "", k)] if x in db.CATEGORIES}
         for category in (reversed if args.reverse else list)(db.CATEGORIES):
             othercats = set(db.CATEGORIES) - set([category])
-            if category not in kws and othercats & set(kws):
+            if category_kws and category not in category_kws and othercats & set(kws):
                 continue # for category
 
             for item in (reversed if args.reverse else list)(db.get_category(category).values()):
-                if (category in kws
-                and not searchparser.match_words(item["name"], kws[category], any, args.case)
-                or "-" + category in kws
-                and searchparser.match_words(item["name"], kws["-" + category], any, args.case)):
+                if searchparser.match_keywords(item["name"], kws, category, any, args.case) is False:
                     continue # for item
 
-                if not searchparser.match_words(item["sql"], words, all, args.case) \
-                and (words or category not in kws):
+                if "column" in kws or "-column" in kws:
+                    cols = [x.get("name") or x.get("expr") or "" for x in item.get("columns", [])]
+                    cols = list(filter(bool, cols))
+                    if searchparser.match_keywords(cols, kws, "column", any, args.case) is False:
+                        continue # for item
+
+                if words and not searchparser.match_words(item["sql"], words, all, args.case):
                     continue # for item
 
                 if imin <= i < imax:

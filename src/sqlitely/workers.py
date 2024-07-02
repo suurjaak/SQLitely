@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.10.2023
+@modified    02.07.2024
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -32,7 +32,7 @@ from . lib import util
 from . import conf
 from . import database
 from . import grammar
-from . searchparser import flatten, match_words, SearchQueryParser
+from . searchparser import SearchQueryParser, flatten, match_keywords, match_words
 from . import templates
 
 logger = logging.getLogger(__name__)
@@ -162,20 +162,23 @@ class SearchThread(WorkerThread):
         result = {"output": "", "map": {}, "search": search, "count": 0}
 
         counts = OrderedDict() # {category: count}
+        category_kws = {x for k in kws for x in [re.sub("^-", "", k)] if x in db.CATEGORIES}
         for category in database.Database.CATEGORIES if (words or kws) else ():
-            othercats = set(database.Database.CATEGORIES) - set([category])
-            if category not in kws and othercats & set(kws):
+            othercats = set(db.CATEGORIES) - set([category])
+            if category_kws and category not in category_kws and othercats & set(kws):
                 continue # for category
 
             for item in search["db"].get_category(category).values():
-                if (category in kws
-                and not match_words(item["name"], kws[category], any, case)
-                or "-" + category in kws
-                and match_words(item["name"], kws["-" + category], any, case)):
+                if match_keywords(item["name"], kws, category, any, args.case) is False:
                     continue # for item
 
-                if not match_words(item["sql"], words, all, case) \
-                and (words or category not in kws):
+                if "column" in kws or "-column" in kws:
+                    cols = [x.get("name") or x.get("expr") or "" for x in item.get("columns", [])]
+                    cols = list(filter(bool, cols))
+                    if match_keywords(cols, kws, "column", any, args.case) is False:
+                        continue # for item
+
+                if words and not match_words(item["sql"], words, all, args.case):
                     continue # for item
 
                 counts[category] = counts.get(category, 0) + 1
