@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     24.06.2024
-@modified    01.07.2024
+@modified    02.07.2024
 ------------------------------------------------------------------------------
 """
 import csv
@@ -17,6 +17,7 @@ import glob
 import json
 import logging
 import os
+import re
 import shutil
 import sqlite3
 import string
@@ -49,19 +50,22 @@ class TestCLI(unittest.TestCase):
     ROWCOUNT = 10
 
     SCHEMA = {
+        "empty":   ["id"],
         "parent":  ["id"],
         "related": ["id", "fk"],
-        "empty":   ["id"],
     }
 
-    SCHEMA_SQL = """CREATE TABLE parent (id);
-                    CREATE TABLE related (id, fk REFERENCES parent (id));
-                    CREATE TABLE empty (id)"""
+    SCHEMA_SQL = ["CREATE TABLE empty (id)",
+                  "CREATE TABLE parent (id)",
+                  "CREATE TABLE related (id, fk REFERENCES parent (id))",
+                  "CREATE INDEX parent_idx ON parent (id)",
+                  "CREATE TRIGGER on_insert_empty AFTER INSERT ON empty\n"
+                  "BEGIN\nSELECT 'on' FROM empty;\nEND;"]
 
     DATA = {
-        "parent": [{"id": i} for i in range(ROWCOUNT)],
+        "empty":   [],
+        "parent":  [{"id": i} for i in range(ROWCOUNT)],
         "related": [{"id": i, "fk": i} for i in range(ROWCOUNT)],
-        "empty": [],
     }
 
 
@@ -97,7 +101,7 @@ class TestCLI(unittest.TestCase):
         logger.debug("Populating test database %r with %s tables and %s rows.",
                      filename, len(self.DATA), sum(map(len, self.DATA.values())))
         with sqlite3.connect(filename) as db:
-            db.executescript(self.SCHEMA_SQL)
+            db.executescript(";\n\n".join(self.SCHEMA_SQL))
             for item_name, data in self.DATA.items():
                 if not data: continue # for
                 rowstr = "(%s)" % ", ".join("?" * len(self.SCHEMA[item_name]))
@@ -190,6 +194,16 @@ class TestCLI(unittest.TestCase):
         self.verify_import_selections()
         self.verify_import_columns()
         self.verify_import_flags()
+
+
+    def test_parse(self):
+        """Tests 'parse' command in command-line interface."""
+        logger.info("Testing 'parse' command.")
+        self.populate_db(self._dbname)
+
+        self.verify_parse_full()
+        self.verify_parse_search()
+        self.verify_parse_limits()
 
 
     def verify_execute_blank(self):
@@ -750,6 +764,104 @@ class TestCLI(unittest.TestCase):
                 received = set(r["name"] for r in rows)
                 expected = set([TABLE + ("_%s" % (i + 1) if i else "") for i in range(len(schema) * 2)])
                 self.assertEqual(received, expected, "Unexpected tables in import.")
+
+
+    def verify_parse_full(self):
+        """Tests 'parse': full SQL dump."""
+        logger.info("Testing parse command with full output to console.")
+        res, out, err = self.run_cmd("parse", self._dbname)
+        self.assertFalse(res, "Unexpected failure from parse.")
+        for sql in self.SCHEMA_SQL:
+            self.assertIn(sql, out, "Unexpected output in parse.")
+
+        logger.info("Testing parse command with full output to file.")
+        outfile = self.mktemp(".sql")
+        res, out, err = self.run_cmd("parse", self._dbname, "-o", outfile)
+        self.assertFalse(res, "Unexpected failure from parse.")
+        self.assertTrue(os.path.isfile(outfile), "Output file not created in parse.")
+        with open(outfile, "r") as f: content = f.read()
+        for sql in self.SCHEMA_SQL:
+            self.assertIn(sql, content, "Unexpected output in parse.")
+
+        logger.info("Testing parse command output to file with --overwrite.")
+        outfile = self.mktemp(".sql", "custom")
+        res, out, err = self.run_cmd("parse", self._dbname, "-o", outfile)
+        self.assertFalse(res, "Unexpected failure from parse.")
+        self.assertEqual(os.path.getsize(outfile), 6, "Output file overwritten in parse.")
+        res, out, err = self.run_cmd("parse", self._dbname, "-o", outfile, "--overwrite")
+        self.assertFalse(res, "Unexpected failure from parse.")
+        self.assertGreater(os.path.getsize(outfile), 6, "Output file not overwritten in parse.")
+
+
+    def verify_parse_search(self):
+        """Tests 'parse': full SQL dump."""
+        logger.info("Testing parse command with filters.")
+
+        FILTERSETS = {
+            "parent":         ["parent", "related"],
+            "related":        ["TABLE related"],
+            "parent related": ["TABLE related"],
+            "empty":          ["TABLE empty", "TRIGGER on_insert_empty"],
+            "on*empty":       ["TRIGGER on_insert_empty"],
+            "table:empty":    ["TABLE empty"],
+            "trigger:empty":  ["TRIGGER on_insert_empty"],
+            "table:pa*t "
+            "index:parent":   ["TABLE parent", "INDEX parent_idx"],
+            "column:fk":      ["TABLE related"],
+            "column:id":      ["TABLE parent", "TABLE related", "TABLE empty", "INDEX parent_idx"],
+        }
+
+        for filterset, expecteds in FILTERSETS.items():
+            logger.info("Testing parse command with %r.", filterset)
+            res, out, err = self.run_cmd("parse", self._dbname, filterset)
+            self.assertFalse(res, "Unexpected failure from parse.")
+            for sql in self.SCHEMA_SQL:
+                action = self.assertIn if any(x in sql for x in expecteds) else self.assertNotIn
+                action(sql, out, "Unexpected output in parse for %r." % filterset)
+
+        logger.info("Testing parse command with --case.")
+        res, out, err = self.run_cmd("parse", self._dbname, "ON")
+        self.assertFalse(res, "Unexpected failure from parse.")
+        for sql in self.SCHEMA_SQL:
+            action = self.assertIn if "on" in sql.lower() else self.assertNotIn
+            action(sql, out, "Unexpected output in parse with --case.")
+        res, out, err = self.run_cmd("parse", self._dbname, "ON", "--case")
+        self.assertFalse(res, "Unexpected failure from parse.")
+        for sql in self.SCHEMA_SQL:
+            action = self.assertIn if "ON" in sql else self.assertNotIn
+            action(sql, out, "Unexpected output in parse with --case.")
+
+
+    def verify_parse_limits(self):
+        """Tests 'parse': output limits and offsets."""
+        logger.info("Testing parse with --reverse.")
+        res, out, err = self.run_cmd("parse", self._dbname, "--reverse")
+        self.assertFalse(res, "Unexpected failure from parse.")
+
+        seen = set()
+        creates = [x for x in out.splitlines() if x.startswith("CREATE ")]
+        order_expected = ["table", "view", "index", "trigger"][::-1]
+        order_received = [re.sub(r"CREATE (\w+)\s.+$", r"\1", x).lower() for x in creates]
+        received = [x for x in order_received if x not in seen and not seen.add(x)]
+        expected = [x for x in order_expected if x in received]
+        self.assertEqual(received, expected, "Unexpected order in parse with --reverse.")
+
+        LIMITS_OFFSETS = [(2, None), (None, 2), (1, 3)]
+
+        for limit, offset in LIMITS_OFFSETS:
+            flags  = [] if limit  is None else ["--limit",  limit]
+            flags += [] if offset is None else ["--offset", offset]
+            logger.info("Testing parse with %s." % " ".join(map(str, flags)))
+            res, out, err = self.run_cmd("parse", self._dbname, *flags)
+            self.assertFalse(res, "Unexpected failure from parse.")
+            creates = [x for x in out.splitlines() if x.startswith("CREATE ")]
+            count_expected = min(len(self.SCHEMA_SQL) - (offset or 0), limit or len(self.SCHEMA_SQL))
+            self.assertEqual(len(creates), count_expected,
+                             "Unexpected number of items in parse with --limit.")
+            for remote, local in zip(creates, self.SCHEMA_SQL[offset or 0:]):
+                received = re.sub(r"CREATE \w+ (\w+)\s.+$", r"\1", remote, flags=re.DOTALL)
+                expected = re.sub(r"CREATE \w+ (\w+)\s.+$", r"\1", local,  flags=re.DOTALL)
+                self.assertEqual(expected, received, "Unexpected items in parse with --limit.")
 
 
     def mktemp(self, suffix=None, content=None):
