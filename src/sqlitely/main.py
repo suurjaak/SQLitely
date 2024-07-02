@@ -1481,7 +1481,7 @@ def run_parse(dbname, args):
 
         headers = make_search_title(args)
         if args.OUTFILE:
-            importexport.export_sql(db, args.OUTFILE, "\n\n".join(matches), headers)
+            importexport.export_sql(db, args.OUTFILE, ";\n\n".join(matches) + ";", headers)
     except Exception:
         _, e, tb = sys.exc_info()
         if args.OUTFILE and not file_existed:
@@ -1499,7 +1499,7 @@ def run_parse(dbname, args):
             for l in headers:
                 output("-- %s", l)
             if headers: output()
-            output("\n\n".join(matches))
+            output(";\n\n".join(matches) + ";")
             if args.SEARCH:
                 output("\n-- Found %s: %s.", util.plural("entity", matches), countstr)
         else:
