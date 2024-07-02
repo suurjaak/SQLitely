@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.07.2024
+@modified    02.07.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -772,7 +772,7 @@ def validate_args(action, args, infile=None):
     @param   infile  input filename if any
     """
     prepare_args(action, args)
-    if action in ("parse", "search") and 0 in (args.limit, args.maxcount):
+    if action in ("parse", "search") and 0 in (args.limit, getattr(args, "maxcount", None)):
         sys.exit("Nothing to %s with %s." % (action,
                  ("limit %r" % args.limit if not args.limit else "max count %r" % args.maxcount)))
     if action in ("export", "import") and 0 in (args.limit, args.maxcount) and args.no_empty:
@@ -1443,6 +1443,7 @@ def run_parse(dbname, args):
                overwrite    overwrite existing output file instead of creating unique name
     """
     file_existed = args.OUTFILE and not args.overwrite and os.path.isfile(args.OUTFILE)
+    validate_args("parse", args)
     if args.OUTFILE and not args.overwrite:
         args.OUTFILE = util.unique_path(args.OUTFILE)
 
