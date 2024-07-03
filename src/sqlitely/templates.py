@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.06.2024
+@modified    03.07.2024
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1383,7 +1383,7 @@ SEARCH_ROW_DATA_HTML = """<%
 import six
 from sqlitely import conf, searchparser, templates
 
-match_kw = lambda k, x: searchparser.match_words(x["name"], keywords[k], any, search.get("case"))
+match_kw = lambda k, x: searchparser.match_words(x["name"], keywords[k], search.get("case"), any)
 wrap_hl = lambda x: "<b>%s</b>" % x.group(0)
 %>
 <tr>

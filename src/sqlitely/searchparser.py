@@ -153,27 +153,23 @@ class SearchQueryParser(object):
 
         words, keywords = self._parseWords(parse_results, words, keywords, case)
         result, params = self._makeSQL(parse_results, params, keywords, case, item)
-        match_kw = lambda k, x: match_words(x["name"], keywords[k], any, case)
         if item:
             skip_item = False
-            for kw in keywords:
-                if (item["type"] == kw and not match_kw(item["type"], item)) \
-                or (self.neg + item["type"] == kw and match_kw(self.neg + item["type"], item)):
-                    skip_item = True
-                    break # for kw
+            if match_keywords(item["name"], keywords, item["type"], case, self.neg) is False:
+                skip_item = True
             if not skip_item and item["type"] not in keywords \
             and any(map(keywords.get, self.ITEM_CATEGORIES)):
                 skip_item = True
             if skip_item:
                 result = ""
             else:
-                kw_sql = self._makeKeywordsSQL(keywords, params, item)
+                kw_sql = self._makeKeywordsSQL(keywords, params, item, case)
                 result = "SELECT * FROM %s%s%s%s%s" % (
                          grammar.quote(item["name"]),
                          " WHERE " if result else "", result,
                          " AND " if result and kw_sql else "", kw_sql)
         else:
-            kw_sql = self._makeKeywordsSQL(keywords, params, item)
+            kw_sql = self._makeKeywordsSQL(keywords, params, item, case)
         if not item and kw_sql:
             result = "%s%s" % ("%s AND " % result if result else "", kw_sql)
 
@@ -216,7 +212,6 @@ class SearchQueryParser(object):
         """
         result = ""
         if not item: return result, params
-        match_kw = lambda k, x: match_words(x["name"], keywords[k], any, case)
 
         if isinstance(parseresult, six.string_types):
             op, wild = ("GLOB", "*") if case else ("LIKE", "%")
@@ -224,8 +219,7 @@ class SearchQueryParser(object):
 
             i = len(params)
             for col in item["columns"]:
-                if (keywords.get("column") and not match_kw("column", col)) \
-                or (keywords.get(self.neg + "column") and match_kw(self.neg + "column", col)):
+                if match_keywords(col["name"], keywords, "column", case, self.neg) is False:
                     continue # for col
 
                 cname = grammar.quote(col["name"])
@@ -259,13 +253,12 @@ class SearchQueryParser(object):
         return result, params
 
 
-    def _makeKeywordsSQL(self, keywords, params, item):
+    def _makeKeywordsSQL(self, keywords, params, item, case):
         """
         Returns the keywords as an SQL string, appending SQL argument values
         to parameters dictionary.
         """
         result = ""
-        match_kw = lambda k, x: match_words(x["name"], keywords[k], any)
         kw_sqls  = {} # {"date": [], "-date": []}
 
         for keyword, word in ((k, w) for k, ww in keywords.items() for w in ww):
@@ -273,8 +266,7 @@ class SearchQueryParser(object):
 
             datecols = [c for c in (item or {}).get("columns", [])
                 if c.get("type") in ("DATE", "DATETIME", "TIMESTAMP")
-                and (not keywords.get("column")  or     match_kw( "column", c))
-                and (not keywords.get(self.neg + "column") or not match_kw(self.neg + "column", c))
+                and match_keywords(c["name"], keywords, "column", case, self.neg) is not False
             ]
             if not datecols: return "1 = 0" # Force 0 results from query
 
@@ -313,7 +305,7 @@ class SearchQueryParser(object):
                 ymd[0] = max(min(ymd[0], 9999), 1) # Year in 1..9999
                 # Force month into legal range
                 if ymd[1] is None:
-                    ymd[1] = [1, 12][i]
+                    ymd[1] = 12 if i else 1
                 else:
                     ymd[1] = max(min(ymd[1], 12), 1) # Month in 1..12
                 # Force day into legal range
@@ -387,36 +379,37 @@ def join_strings(strings, glue=" AND "):
 
 
 
-def match_keywords(texts, keywords, name, when=any, case=False, neg="-"):
+def match_keywords(texts, keywords, name, case=False, neg="-", when=any):
     """
     Returns whether text matches inclusive or exclusive keywords.
 
     @param   texts      one or more strings to check
     @param   name       name of keyword being matched
     @param   keywords   {keyword: [thisword, ], -keyword: [notthisword, ]}
-    @param   when       truth function to use, like all or any
     @param   case       whether match is case-sensitive
     @param   neg        negation character to use in front of exclusive keywords
+    @param   when       truth function to use, like all or any
     @return             True if inclusive keywords match and exclusive keywords do not,
                         False if inclusive keywords do not match or exclusive keywords match,
                         None if keyword is not present in keywords
     """
+    provals, convals = keywords.get(name), keywords.get(neg + name)
     pros, cons = [], []
     for text in ([texts] if isinstance(texts, six.text_type) else texts):
-        a = match_words(text, keywords[name], when, case) if name in keywords else None
-        b = match_words(text, keywords[neg + name], when, case) if neg + name in keywords else None
-        pros.append(a), cons.append(b)
+        pros.append(match_words(text, provals, case, when) if provals else None)
+        cons.append(match_words(text, convals, case, when) if convals else None)
     if set(pros + cons) == set([None]): return None 
+    if not texts: return not provals
     return False if (any(cons) or pros and all(x is False for x in pros)) else True
 
 
-def match_words(text, words, when=all, case=False):
+def match_words(text, words, case=False, when=any):
     """
-    Returns whether all words match given text.
+    Returns whether words match given text.
 
     @param   words  [string matched as regex, (string matched as-is), ]
-    @param   when   truth function to use, like all or any
     @param   case   whether match is case-sensitive
+    @param   when   truth function to use, like all or any
     """
     words_re = [x if isinstance(w, tuple) else x.replace(r"\*", ".*")
                 for w in words for x in [re.escape(flatten(w)[0])]]

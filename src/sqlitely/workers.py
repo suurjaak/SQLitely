@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.07.2024
+@modified    03.07.2024
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -169,16 +169,16 @@ class SearchThread(WorkerThread):
                 continue # for category
 
             for item in search["db"].get_category(category).values():
-                if match_keywords(item["name"], kws, category, any, args.case) is False:
+                if match_keywords(item["name"], kws, category, args.case) is False:
                     continue # for item
 
                 if "column" in kws or "-column" in kws:
                     cols = [x.get("name") or x.get("expr") or "" for x in item.get("columns", [])]
                     cols = list(filter(bool, cols))
-                    if match_keywords(cols, kws, "column", any, args.case) is False:
+                    if match_keywords(cols, kws, "column", args.case) is False:
                         continue # for item
 
-                if words and not match_words(item["sql"], words, all, args.case):
+                if words and not match_words(item["sql"], words, args.case, all):
                     continue # for item
 
                 counts[category] = counts.get(category, 0) + 1
