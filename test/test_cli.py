@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     24.06.2024
-@modified    02.07.2024
+@modified    03.07.2024
 ------------------------------------------------------------------------------
 """
 import csv
@@ -809,6 +809,10 @@ class TestCLI(unittest.TestCase):
             "index:parent":   ["TABLE parent", "INDEX parent_idx"],
             "column:fk":      ["TABLE related"],
             "column:id":      ["TABLE parent", "TABLE related", "TABLE empty", "INDEX parent_idx"],
+            "~column:id":     ["TRIGGER on_insert_empty"],
+            "table:* "
+            "~table:empty":   ["TABLE parent", "TABLE related"],
+            "~table:*":        ["INDEX parent_idx", "TRIGGER on_insert_empty"],
         }
 
         for filterset, expecteds in FILTERSETS.items():
