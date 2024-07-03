@@ -367,14 +367,14 @@ ARGUMENTS = {
                                           " (default)" if "txt" == k else "")
                         for k in ["html", "sql", "txt"]
                       ))},
+             {"args": ["--disk-usage"], "action": "store_true",
+              "help": "count bytes of disk usage per table and index\n"
+                      "(enabled by default in SQL output)"},
              {"args": ["--overwrite"], "action": "store_true",
               "help": "overwrite output file if already exists\n"
                       "(by default appends unique counter to filename)"},
              {"args": ["--start-file"], "action": "store_true",
               "help": "open output file with registered program"},
-             {"args": ["--disk-usage"], "action": "store_true",
-              "help": "count bytes of disk usage per table and index\n"
-                      "(enabled by default in SQL output)"},
              {"args": ["--progress"], "action": "store_true",
               "help": "display progress bar"},
 
