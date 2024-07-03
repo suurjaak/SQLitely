@@ -1539,11 +1539,11 @@ def run_pragma(dbname, args):
     db.close()
 
     if args.FILTER:
-        rgx_filters = [re.compile(re.escape(x), flags=re.I) for x in args.FILTER]
+        rgx_filters = [re.compile(re.escape(y), flags=re.I) for x in args.FILTER for y in x.split()]
         for name, value in list(pragmas.items()):
             vals = [str(v) for v in (value if isinstance(value, list) else [value])]
             if isinstance(value, bool): vals.append(str(int(value))) # Match bools as integer also
-            if not all(any(r.search(v) for v in [name] + vals) for r in rgx_filters):
+            if not any(any(r.search(v) for v in [name] + vals) for r in rgx_filters):
                 pragmas.pop(name)
 
     if not pragmas:
