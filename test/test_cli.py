@@ -206,6 +206,67 @@ class TestCLI(unittest.TestCase):
         self.verify_parse_limits()
 
 
+    def test_pragma(self):
+        """Tests 'pragma' command in command-line interface."""
+        logger.info("Testing 'pragma' command.")
+        self.populate_db(self._dbname)
+
+        self.verify_pragma_full()
+        self.verify_pragma_search()
+
+
+    def verify_pragma_full(self):
+        """Tests 'pragma': full SQL dump."""
+        SOME_EXPECTED = ["PRAGMA auto_vacuum", "PRAGMA user_version", "PRAGMA page_count",
+                         "PRAGMA count_changes"]
+
+        logger.info("Testing pragma command with full output to console.")
+        res, out, err = self.run_cmd("pragma", self._dbname)
+        self.assertFalse(res, "Unexpected failure from pragma.")
+        for expected in SOME_EXPECTED:
+            self.assertIn(expected, out, "Unexpected output in pragma.")
+
+        logger.info("Testing pragma command with full output to file.")
+        outfile = self.mktemp(".sql")
+        res, out, err = self.run_cmd("pragma", self._dbname, "-o", outfile)
+        self.assertFalse(res, "Unexpected failure from pragma.")
+        self.assertTrue(os.path.isfile(outfile), "Output file not created in pragma.")
+        with open(outfile, "r") as f: content = f.read()
+        for expected in SOME_EXPECTED:
+            self.assertIn(expected, content, "Unexpected output in pragma.")
+
+        logger.info("Testing pragma command output to file with --overwrite.")
+        outfile = self.mktemp(".sql", "custom")
+        res, out, err = self.run_cmd("pragma", self._dbname, "-o", outfile)
+        self.assertFalse(res, "Unexpected failure from pragma.")
+        self.assertEqual(os.path.getsize(outfile), 6, "Output file overwritten in pragma.")
+        res, out, err = self.run_cmd("pragma", self._dbname, "-o", outfile, "--overwrite")
+        self.assertFalse(res, "Unexpected failure from pragma.")
+        self.assertGreater(os.path.getsize(outfile), 6, "Output file not overwritten in pragma.")
+
+
+    def verify_pragma_search(self):
+        """Tests 'pragma': filter PRAGMAs."""
+        logger.info("Testing pragma command with filters.")
+
+        FILTERSETS = {
+            "temp":         ["temp_store", "temp_store_directory"],
+            "mmap schema":  ["mmap_size", "schema_version", "writable_schema"],
+            "000":          ["busy_timeout", "cache_size", "default_cache_size",
+                             "wal_autocheckpoint"],
+            "fts freelist": ["compile_options", "freelist_count"],
+        }
+
+        for filterset, expecteds in FILTERSETS.items():
+            logger.info("Testing pragma command with %r.", filterset)
+            res, out, err = self.run_cmd("pragma", self._dbname, filterset)
+            self.assertFalse(res, "Unexpected failure from pragma.")
+            pragmas = [re.sub(r"PRAGMA (\w+)\s=.+$", r"\1", x) for x in out.splitlines()
+                       if x.startswith("PRAGMA")]
+            self.assertEqual(set(pragmas), set(expecteds),
+                             "Unexpected output in pragma for %r." % filterset)
+
+
     def verify_execute_blank(self):
         """Tests 'execute': queries on missing or blank database."""
         logger.info("Testing failure of query on nonexistent file.")
@@ -794,7 +855,7 @@ class TestCLI(unittest.TestCase):
 
 
     def verify_parse_search(self):
-        """Tests 'parse': full SQL dump."""
+        """Tests 'parse': filter SQL."""
         logger.info("Testing parse command with filters.")
 
         FILTERSETS = {
