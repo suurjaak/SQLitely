@@ -35,6 +35,11 @@ except ImportError: yaml = None
 logger = logging.getLogger()
 
 
+TEXT_VALUES = ["a this that B", "a these two B"]
+
+ROWCOUNT = 10
+
+
 class TestCLI(unittest.TestCase):
     """Tests the command-line interface.."""
 
@@ -42,32 +47,30 @@ class TestCLI(unittest.TestCase):
     FORMATS = ["db", "csv", xlsxwriter and "xlsx", "html", "json", "sql", "txt", yaml and "yaml"]
     FORMATS = list(filter(bool, FORMATS))
 
-    PRINTABLE_FORMATS = [x for x in FORMATS if x not in ("html", "xlsx")]
+    PRINTABLE_FORMATS = [x for x in FORMATS if x not in ("db", "html", "xlsx")]
 
     IMPORT_FORMATS = [xlsxwriter and "xlsx", "csv", "json", yaml and "yaml"]
     IMPORT_FORMATS = list(filter(bool, IMPORT_FORMATS))
 
-    ROWCOUNT = 10
-
     SCHEMA = {
         "empty":   ["id"],
-        "parent":  ["id"],
-        "related": ["id", "fk"],
+        "parent":  ["id", "value"],
+        "related": ["id", "value", "fk"],
     }
 
     SCHEMA_SQL = ["CREATE TABLE empty (id)",
-                  "CREATE TABLE parent (id)",
-                  "CREATE TABLE related (id, fk REFERENCES parent (id))",
+                  "CREATE TABLE parent (id, value)",
+                  "CREATE TABLE related (id, value, fk REFERENCES parent (id))",
                   "CREATE INDEX parent_idx ON parent (id)",
                   "CREATE TRIGGER on_insert_empty AFTER INSERT ON empty\n"
                   "BEGIN\nSELECT 'on' FROM empty;\nEND;"]
 
     DATA = {
         "empty":   [],
-        "parent":  [{"id": i} for i in range(ROWCOUNT)],
-        "related": [{"id": i, "fk": i} for i in range(ROWCOUNT)],
+        "parent":  [{"id": i, "value": TEXT_VALUES[i % 2]} for i in range(ROWCOUNT)],
+        "related": [{"id": i, "value": TEXT_VALUES[i % 2], "fk": ROWCOUNT - i}
+                     for i in range(ROWCOUNT)],
     }
-
 
 
     def __init__(self, *args, **kwargs):
@@ -213,6 +216,16 @@ class TestCLI(unittest.TestCase):
 
         self.verify_pragma_full()
         self.verify_pragma_search()
+
+
+    def test_search(self):
+        """Tests 'search' command in command-line interface."""
+        logger.info("Testing 'search' command.")
+        self.populate_db(self._dbname)
+
+        self.verify_search_formats()
+        self.verify_search_limits()
+        self.verify_search_filters()
 
 
     def verify_pragma_full(self):
@@ -414,6 +427,7 @@ class TestCLI(unittest.TestCase):
     def verify_export_formats(self):
         """Tests 'export': output to console and file in different formats."""
         logger.info("Testing export in all formats.")
+
         for fmt in self.PRINTABLE_FORMATS:
             logger.info("Testing export as %s.", fmt.upper())
             res, out, err = self.run_cmd("export", self._dbname, "-f", fmt)
@@ -432,9 +446,9 @@ class TestCLI(unittest.TestCase):
             logger.info("Testing export to separate files as %s.", fmt.upper())
             outpath = tempfile.mkdtemp()
             self._paths.append(outpath)
-            res, out, err = self.run_cmd("export", self._dbname, "-f", "html", "--path", outpath)
+            res, out, err = self.run_cmd("export", self._dbname, "-f", fmt, "--path", outpath)
             self.assertFalse(res, "Unexpected failure from export.")
-            files = glob.glob(os.path.join(outpath, "*"))
+            files = glob.glob(os.path.join(outpath, "*." + fmt))
             self.assertTrue(files, "Output files not created in export.")
 
 
@@ -507,7 +521,7 @@ class TestCLI(unittest.TestCase):
         self._paths.append(outpath)
         res, out, err = self.run_cmd("export", self._dbname, "-f", "html", "--path", outpath)
         self.assertFalse(res, "Unexpected failure from export.")
-        files = glob.glob(os.path.join(outpath, "*"))
+        files = glob.glob(os.path.join(outpath, "*.html"))
         self.assertTrue(files, "Output files not created in export.")
         self.assertTrue(any("empty" in f for f in files), "Emtpy table not exported.")
 
@@ -516,7 +530,7 @@ class TestCLI(unittest.TestCase):
         res, out, err = self.run_cmd("export", self._dbname, "-f", "html",
                                      "--path", outpath, "--no-empty")
         self.assertFalse(res, "Unexpected failure from export.")
-        files = glob.glob(os.path.join(outpath, "*"))
+        files = glob.glob(os.path.join(outpath, "*.html"))
         self.assertTrue(files, "Output files not created in export.")
         self.assertFalse(any("empty" in f for f in files), "Emtpy table exported.")
 
@@ -737,8 +751,9 @@ class TestCLI(unittest.TestCase):
         }
         COLSETS["xlsx"] = COLSETS["csv"]
         EXPECTEDS = {
-            "id": ["id"], "id,fk": ["id", "fk"], "1": ["id"], "1..1": ["id"], "1..2": ["id", "fk"],
-            "1,2": ["id", "fk"], "A..A": ["id"], "A..B": ["id", "fk"], "A..Z": ["id", "fk"],
+            "id": ["id"], "id,fk": ["id", "fk"], "1": ["id"],
+            "1..1": ["id"], "1..2": ["id", "value"], "1,2": ["id", "value"],
+            "A..A": ["id"], "A..B": ["id", "value"], "A..Z": ["id", "value", "fk"],
         }
 
         for fmt in self.IMPORT_FORMATS:
@@ -927,6 +942,138 @@ class TestCLI(unittest.TestCase):
                 received = re.sub(r"CREATE \w+ (\w+)\s.+$", r"\1", remote, flags=re.DOTALL)
                 expected = re.sub(r"CREATE \w+ (\w+)\s.+$", r"\1", local,  flags=re.DOTALL)
                 self.assertEqual(expected, received, "Unexpected items in parse with --limit.")
+
+
+    def verify_search_formats(self):
+        """Tests 'search': output to console and file in different formats."""
+        logger.info("Testing search output in all formats.")
+
+        for fmt in self.PRINTABLE_FORMATS:
+            logger.info("Testing search output as %s.", fmt.upper())
+            res, out, err = self.run_cmd("search", self._dbname, "-f", fmt, "*")
+            self.assertFalse(res, "Unexpected failure from search.")
+            self.assertTrue(out, "Unexpected lack of output from search.")
+
+        for fmt in self.FORMATS:
+            logger.info("Testing search output to file as combined %s.", fmt.upper())
+            outfile = self.mktemp("." + fmt)
+            res, out, err = self.run_cmd("search", self._dbname, "-o", outfile, "--combine", "*")
+            self.assertFalse(res, "Unexpected failure from search.")
+            self.assertTrue(os.path.isfile(outfile), "Output file not created in search.")
+            self.assertTrue(os.path.getsize(outfile), "Output file has no content in search.")
+
+        for fmt in self.FORMATS:
+            logger.info("Testing search output to separate files as %s.", fmt.upper())
+            outpath = tempfile.mkdtemp()
+            self._paths.append(outpath)
+            res, out, err = self.run_cmd("search", self._dbname, "-f", fmt, "--path", outpath, "*")
+            self.assertFalse(res, "Unexpected failure from search.")
+            files = glob.glob(os.path.join(outpath, "*." + fmt))
+            self.assertTrue(files, "Output files not created in search.")
+
+        for fmt in self.FORMATS:
+            logger.info("Testing search output to file as combined %s with --overwrite.",
+                        fmt.upper())
+            outfile = self.mktemp("." + fmt, "custom")
+            res, out, err = self.run_cmd("search", self._dbname, "-o", outfile, "--combine", "*")
+            self.assertFalse(res, "Unexpected failure from search.")
+            self.assertEqual(os.path.getsize(outfile), 6, "Output file overwritten in search.")
+            res, out, err = self.run_cmd("search", self._dbname, "-o", outfile, "--combine",
+                                         "--overwrite", "*")
+            self.assertFalse(res, "Unexpected failure from search.")
+            self.assertGreater(os.path.getsize(outfile), 6,
+                               "Output file not overwritten in search.")
+
+
+
+    def verify_search_limits(self):
+        """Tests 'search': output to console with limits and offsets."""
+        logger.info("Testing search with result limiting.")
+
+        logger.info("Testing search with --limit.")
+        res, out, err = self.run_cmd("search", self._dbname, "-f", "json",
+                                     "--limit", 5, "table:parent")
+        self.assertFalse(res, "Unexpected failure from search.")
+        self.assertEqual(json.loads(out), {"parent": self.DATA["parent"][:5]},
+                        "Unexpected output from search.")
+
+        logger.info("Testing search with --limit --offset.")
+        res, out, err = self.run_cmd("search", self._dbname, "-f", "json",
+                                     "--limit", 5, "--offset", 5, "table:parent")
+        self.assertFalse(res, "Unexpected failure from search.")
+        self.assertEqual(json.loads(out), {"parent": self.DATA["parent"][5:]},
+                        "Unexpected output from search.")
+
+        logger.info("Testing search with --limit --max-count.")
+        res, out, err = self.run_cmd("search", self._dbname, "-f", "json",
+                                     "--limit", 5, "--max-count", 6, "*")
+        self.assertFalse(res, "Unexpected failure from search.")
+        self.assertEqual(json.loads(out), {"empty": [], "parent": self.DATA["parent"][:5],
+                                           "related": self.DATA["related"][:1]},
+                        "Unexpected output from search.")
+
+        logger.info("Testing search with --reverse.")
+        res, out, err = self.run_cmd("search", self._dbname, "-f", "json", "--reverse", "*")
+        self.assertFalse(res, "Unexpected failure from search.")
+        self.assertEqual(json.loads(out), {"empty": [], "parent": self.DATA["parent"][::-1],
+                                           "related": self.DATA["related"][::-1]},
+                        "Unexpected output from search.")
+
+
+    def verify_search_filters(self):
+        """Tests 'search': filter SQL."""
+        logger.info("Testing search command with filters.")
+
+        FILTERSETS = {
+            "table:parent 2 b":               {"parent":  [2, "b"]},
+            "table:parent table:related 2 b": {"parent":  [2, "b"],      "related": [2, "b"]},
+            "table:*a* 2 b":                  {"parent":  [2, "b"],      "related": [2, "b"]},
+            "this OR these":                  {"parent":  [],            "related": []},
+            "~these":                         {"parent":  ["this"],      "related": ["this"]},
+            '"these two"':                    {"parent":  ["these two"], "related": ["these two"]},
+            '~"these two"':                   {"parent":  ["this"],      "related": ["this"]},
+            "~table:parent 2 b":              {"related": [2, "b"]},
+            "column:fk 2":                    {"related": [("fk", 2), ]},
+            "~column:fk 2":                   {"parent":  [2],           "related": [("fk", 8)]},
+            "~ignored":                       {"parent":  [],            "related": []},
+            "nosuchthing":                    {},
+        }
+
+        for filterset, filters in FILTERSETS.items():
+            logger.info("Testing search command with %r.", filterset)
+            res, out, err = self.run_cmd("search", self._dbname, "-f", "json",
+                                         "--no-empty", filterset)
+            self.assertFalse(res, "Unexpected failure from search.")
+            received, expected = json.loads(out or "{}"), {}
+            for table, tfilters in filters.items():
+                if not tfilters:
+                    expected[table] = self.DATA[table]
+                    continue # for table, tfilters
+                rows = []
+                for v in tfilters:
+                    if isinstance(v, tuple):
+                        rows.extend(i for i, r in enumerate(self.DATA[table]) if r[v[0]] == v[1])
+                    elif isinstance(v, str):
+                        rows.extend(i for i, r in enumerate(self.DATA[table])
+                                    if any(v in x for x in r.values() if isinstance(x, str)))
+                    else:
+                        rows.extend(i for i, r in enumerate(self.DATA[table])
+                                    if any(v == x for x in r.values()))
+                expected[table] = [self.DATA[table][i] for i in sorted(set(rows))]
+            self.assertEqual(received, expected, "Unexpected output in search for %r" % filterset)
+
+        logger.info("Testing search command with --case.")
+        res, out, err = self.run_cmd("search", self._dbname, "-f", "json", "--no-empty", "b")
+        self.assertFalse(res, "Unexpected failure from search.")
+        self.assertEqual(json.loads(out or "{}"), {k: self.DATA[k] for k in ("parent", "related")},
+                         "Unexpected output in search.")
+        res, out, err = self.run_cmd("search", self._dbname, "-f", "json", "--no-empty",
+                                     "--case", "b")
+        self.assertFalse(res, "Unexpected failure from search.")
+        self.assertEqual(json.loads(out or "{}"), {}, "Unexpected output in search.")
+        res, out, err = self.run_cmd("search", self._dbname, "-f", "json", "--case", "B")
+        self.assertFalse(res, "Unexpected failure from search.")
+        self.assertEqual(json.loads(out or "{}"), self.DATA, "Unexpected output in search.")
 
 
     def mktemp(self, suffix=None, content=None):
