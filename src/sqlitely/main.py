@@ -338,6 +338,9 @@ ARGUMENTS = {
                       "view matches in reverse row_number() order"},
              {"args": ["--max-count"], "dest": "maxcount", "type": int, "metavar": "NUM",
               "help": "maximum total number of rows to export over all tables and views"},
+             {"args": ["--no-empty"], "action": "store_true",
+              "help": "skip empty tables and views from output altogether\n"
+                      "(affected by offset and limit and search text)"},
              {"args": ["--progress"], "action": "store_true",
               "help": "display progress bar"},
 
@@ -780,7 +783,8 @@ def validate_args(action, args, infile=None):
     if action in ("parse", "search") and 0 in (args.limit, getattr(args, "maxcount", None)):
         sys.exit("Nothing to %s with %s." % (action,
                  ("limit %r" % args.limit if not args.limit else "max count %r" % args.maxcount)))
-    if action in ("export", "import") and 0 in (args.limit, args.maxcount) and args.no_empty:
+    if action in ("export", "import", "search") and args.no_empty \
+    and 0 in (args.limit, args.maxcount):
         sys.exit("Nothing to %s with %s if empty entities skipped." % (action,
                  ("limit %r" % args.limit if not args.limit else "max count %r" % args.maxcount)))
     if "export" == action and args.limit == 0 and "json" == args.format:
@@ -1584,6 +1588,7 @@ def run_search(dbname, args):
                offset       number of initial matches to skip from each table or view
                reverse      query rows in reverse order
                maxcount     maximum total number of rows to export over all tables and views
+               no_empty     skip empty tables and views from data output altogether
     """
     validate_args("search", args, dbname)
 
@@ -1636,7 +1641,7 @@ def run_search(dbname, args):
                 sql, params = item["query"], item["params"]
                 create_sql = item["sql"] if "table" == item["type"] else None
                 res = importexport.export_query_to_db(db, args.OUTFILE, item["name"],
-                    sql, params, create_sql=create_sql, empty=False, progress=progress
+                    sql, params, create_sql=create_sql, empty=not args.no_empty, progress=progress
                 )
                 result = res or result
                 if res is None: break # for item
@@ -1647,7 +1652,7 @@ def run_search(dbname, args):
     elif args.OUTFILE and args.combine:
         func = importexport.export_data_combined
         posargs.extend((db, args.OUTFILE, args.format, make_search_title(args)))
-        kwargs.update(empty=False, make_iterables=make_iterables, progress=progress,
+        kwargs.update(empty=not args.no_empty, make_iterables=make_iterables, progress=progress,
                       info={"Command": " ".join(cli_args)} if cli_args else None)
 
     elif args.OUTFILE:
@@ -1668,7 +1673,7 @@ def run_search(dbname, args):
                     item["columns"], category=category, name=name, progress=progress,
                     info={"Command": " ".join(cli_args)} if cli_args else None
                 )
-                if result and item["count"]: files[name] = filename
+                if result and (item["count"] or not args.no_empty): files[name] = filename
                 else: util.try_ignore(os.unlink, filename)
                 if not result: break # for item
             return result
@@ -1678,7 +1683,7 @@ def run_search(dbname, args):
     else: # Print to console
         func = importexport.export_to_console
         posargs = [args.format, make_iterables, make_search_title(args)]
-        kwargs.update(output=output, multiple=True, progress=progress)
+        kwargs.update(output=output, multiple=True, progress=progress, empty=not args.no_empty)
 
     try: do_output("search", args, functools.partial(func, *posargs, **kwargs), entities, files)
     finally: util.try_ignore(db.close)
