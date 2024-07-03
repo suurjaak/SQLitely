@@ -387,7 +387,7 @@ def join_strings(strings, glue=" AND "):
 
 
 
-def match_keywords(texts, keywords, name, when=any, case=False, when_many=all, neg="-"):
+def match_keywords(texts, keywords, name, when=any, case=False, neg="-"):
     """
     Returns whether text matches inclusive or exclusive keywords.
 
@@ -395,7 +395,6 @@ def match_keywords(texts, keywords, name, when=any, case=False, when_many=all, n
     @param   name       name of keyword being matched
     @param   keywords   {keyword: [thisword, ], -keyword: [notthisword, ]}
     @param   when       truth function to use, like all or any
-    @param   when_many  truth function to use for summing results from multiple texts
     @param   case       whether match is case-sensitive
     @param   neg        negation character to use in front of exclusive keywords
     @return             True if inclusive keywords match and exclusive keywords do not,
@@ -408,7 +407,7 @@ def match_keywords(texts, keywords, name, when=any, case=False, when_many=all, n
         b = match_words(text, keywords[neg + name], when, case) if neg + name in keywords else None
         pros.append(a), cons.append(b)
     if set(pros + cons) == set([None]): return None 
-    return False if (when_many(cons) or when_many(x is False for x in pros)) else True
+    return False if (any(cons) or pros and all(x is False for x in pros)) else True
 
 
 def match_words(text, words, when=all, case=False):
