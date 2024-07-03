@@ -742,17 +742,22 @@ def prepare_args(action, args):
 
     format_printable = (args.format in importexport.PRINTABLE_EXTS) if hasattr(args, "format") \
                        else None
-    outfile_transient = args.OUTFILE is None and format_printable
-    outfile_required  = "stats" == action or (getattr(args, "combine", False) and args.OUTFILE == "")
+    outfile_transient = format_printable and args.OUTFILE is None and not getattr(args, "path", "")
+    outfile_required  = "stats" == action \
+                        or (getattr(args, "combine", False) and args.OUTFILE == "") \
+                        or getattr(args, "path", "")
     if not args.OUTFILE and (outfile_required or format_printable is False):
         dct = {"action": action.capitalize(), "db": os.path.basename(args.INFILE)}
         base = OUTFILE_TEMPLATES.get(action, "%(action)s from %(db)s") % dct
-        args.OUTFILE = util.unrepeat("%s.%s" % (base, args.format), ".%s" % args.format)
         if outfile_transient:
             with tempfile.NamedTemporaryFile(prefix=base + ".", suffix="." + args.format) as f:
                 args.OUTFILE = f.name
-    if hasattr(args, "path") and args.path and args.OUTFILE and not outfile_transient:
-        args.OUTFILE = os.path.join(args.path, args.OUTFILE)
+        else:
+            args.OUTFILE = util.unrepeat("%s.%s" % (base, args.format), ".%s" % args.format)
+
+    if getattr(args, "path", None):
+        tail = os.path.splitdrive(args.OUTFILE)[-1].lstrip("\\/")
+        args.OUTFILE = os.path.join(args.path, tail)
 
     if args.OUTFILE and getattr(args, "combine", True) \
     and not getattr(args, "overwrite", True) and not outfile_transient:
@@ -1182,8 +1187,7 @@ def run_export(dbname, args):
     elif args.OUTFILE:
         def do_export():
             result, basenames = True, []
-            path, prefix = os.path.split(os.path.splitext(args.OUTFILE)[0]) if args.OUTFILE \
-                           else (args.path or "",  "")
+            path, prefix = os.path.split(os.path.splitext(args.OUTFILE)[0])
             for item, make_iterable in make_iterables():
                 title = util.cap(item["title"], reverse=True)
                 basename = util.make_unique(util.safe_filename(title), basenames, suffix=" (%s)")
@@ -1649,8 +1653,7 @@ def run_search(dbname, args):
     elif args.OUTFILE:
         def do_export():
             result, basenames = True, []
-            path, prefix = os.path.split(os.path.splitext(args.OUTFILE)[0]) if args.OUTFILE \
-                           else (args.path or "",  "")
+            path, prefix = os.path.split(os.path.splitext(args.OUTFILE)[0])
             for item, make_iterable in make_iterables():
                 category, name = item["type"], item["name"]
                 title = util.cap(item["title"], reverse=True)
