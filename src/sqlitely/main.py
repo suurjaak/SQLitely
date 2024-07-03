@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.07.2024
+@modified    03.07.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1449,7 +1449,7 @@ def run_parse(dbname, args):
 
     errput = lambda s="", *a, **kw: output(s, *a, file=sys.stderr, **kw)
     infoput = errput if args.OUTFILE else output
-    _, _, words, kws = searchparser.SearchQueryParser().Parse(args.SEARCH, args.case)
+    _, _, words, kws = searchparser.SearchQueryParser("~").Parse(args.SEARCH, args.case)
 
     counts = collections.defaultdict(int) # {category: count}
     matches = [] # [SQL, ]
@@ -1465,13 +1465,13 @@ def run_parse(dbname, args):
                 continue # for category
 
             for item in (reversed if args.reverse else list)(db.get_category(category).values()):
-                if searchparser.match_keywords(item["name"], kws, category, any, args.case) is False:
+                if searchparser.match_keywords(item["name"], kws, category, any, args.case, neg="~") is False:
                     continue # for item
 
-                if "column" in kws or "-column" in kws:
+                if "column" in kws or "~column" in kws:
                     cols = [x.get("name") or x.get("expr") or "" for x in item.get("columns", [])]
                     cols = list(filter(bool, cols))
-                    if searchparser.match_keywords(cols, kws, "column", any, args.case) is False:
+                    if searchparser.match_keywords(cols, kws, "column", any, args.case, neg="~") is False:
                         continue # for item
 
                 if words and not searchparser.match_words(item["sql"], words, all, args.case):
@@ -1584,15 +1584,12 @@ def run_search(dbname, args):
     validate_args("search", args, dbname)
 
     db = database.Database(dbname)
-    queryparser = searchparser.SearchQueryParser()
+    queryparser = searchparser.SearchQueryParser("~")
 
     entities = util.CaselessDict(insertorder=True)
     _, _, _, kws = queryparser.Parse(args.SEARCH, args.case)
     for category, item in ((c, x) for c in db.DATA_CATEGORIES for x in db.schema[c].values()):
-        if (category in kws
-        and not searchparser.match_words(item["name"], kws[category], any, args.case)
-        or "-" + category in kws
-        and searchparser.match_words(item["name"], kws["-" + category], any, args.case)):
+        if searchparser.match_keywords(item["name"], kws, category, any, args.case, neg="~") is False:
             continue # for item
         title = "%s %s" % (item["type"].capitalize(), grammar.quote(item["name"], force=True))
         entities[item["name"]] = dict(item, **{"count": 0, "title": title})

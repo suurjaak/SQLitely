@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.07.2024
+@modified    03.07.2024
 """
 import calendar
 import collections
@@ -68,8 +68,12 @@ class SearchQueryParser(object):
     PATTERN_KEYWORD = re.compile("^(-?)(%s)\\:([^\\s]+)$" % "|".join(KEYWORDS), re.I)
 
 
-    def __init__(self):
+    def __init__(self, neg="-"):
+        """
+        @param   neg  negation character to use in front of texts and keywords
+        """
         if not ParserElement: return
+        self.neg = neg
         with warnings.catch_warnings():
             # In Python 2.6, pyparsing throws warnings on its own code.
             warnings.simplefilter("ignore")
@@ -80,15 +84,15 @@ class SearchQueryParser(object):
             quotedWord = Group(Suppress('"') + quoteContents + Suppress('"')
                               ).setResultsName("QUOTES")
             plainWord = Group(NotAny(CaselessLiteral("OR"))
-                              + Word(WORDCHARS.replace("-", ""), WORDCHARS)
+                              + Word(WORDCHARS.replace(neg, ""), WORDCHARS)
                              ).setResultsName("PLAINWORD")
             anyWord = Group(NotAny('(') + ~FollowedBy(')') + Word(ALLWORDCHARS)
                            ).setResultsName("ANYWORD")
-            keyWord = Group(Combine(Optional("-") + Word(string.ascii_letters)
+            keyWord = Group(Combine(Optional(neg) + Word(string.ascii_letters)
                                     + Literal(":")
                                     + (Word(WORDCHARS) | quotedWord))
                            ).setResultsName("KEYWORD")
-            notExpr = Group(Suppress("-") + NotAny(string.whitespace)
+            notExpr = Group(Suppress(neg) + NotAny(string.whitespace)
                             + (quotedWord | plainWord)
                            ).setResultsName("NOT")
             word = Group(keyWord | notExpr | quotedWord | plainWord
@@ -106,7 +110,7 @@ class SearchQueryParser(object):
             oneExpr = Group(orExpr | parens | word | anyWord
                            ).setResultsName("ONE EXPRESSION")
             parens <<= Group(
-                Group(Optional("-")).setResultsName("NOT_PARENTHESIS")
+                Group(Optional(neg)).setResultsName("NOT_PARENTHESIS")
                 + Suppress("(") + ZeroOrMore(parens | query)
                 + Suppress(")")).setResultsName("PARENTHESIS")
             query <<= ((oneExpr + query) | oneExpr
@@ -154,7 +158,7 @@ class SearchQueryParser(object):
             skip_item = False
             for kw in keywords:
                 if (item["type"] == kw and not match_kw(item["type"], item)) \
-                or ("-" + item["type"] == kw and match_kw("-" + item["type"], item)):
+                or (self.neg + item["type"] == kw and match_kw(self.neg + item["type"], item)):
                     skip_item = True
                     break # for kw
             if not skip_item and item["type"] not in keywords \
@@ -189,7 +193,7 @@ class SearchQueryParser(object):
             key, word = elements[0].split(":", 1)
             key, word = key.lower(), (word if case else word.lower())
             if key in self.KEYWORDS \
-            or key.startswith("-") and key[1:] in self.KEYWORDS:
+            or key.startswith(self.neg) and key[1:] in self.KEYWORDS:
                 if getattr(elements, "QUOTES", None): word = (word, )
                 keywords[key].append(word)
                 return words, keywords
@@ -221,7 +225,7 @@ class SearchQueryParser(object):
             i = len(params)
             for col in item["columns"]:
                 if (keywords.get("column") and not match_kw("column", col)) \
-                or (keywords.get("-column") and match_kw("-column", col)):
+                or (keywords.get(self.neg + "column") and match_kw(self.neg + "column", col)):
                     continue # for col
 
                 cname = grammar.quote(col["name"])
@@ -270,7 +274,7 @@ class SearchQueryParser(object):
             datecols = [c for c in (item or {}).get("columns", [])
                 if c.get("type") in ("DATE", "DATETIME", "TIMESTAMP")
                 and (not keywords.get("column")  or     match_kw( "column", c))
-                and (not keywords.get("-column") or not match_kw("-column", c))
+                and (not keywords.get(self.neg + "column") or not match_kw(self.neg + "column", c))
             ]
             if not datecols: return "1 = 0" # Force 0 results from query
 
@@ -335,7 +339,7 @@ class SearchQueryParser(object):
             if sql: kw_sqls.setdefault(keyword, []).append(sql)
 
         for keyword, sqls in kw_sqls.items():
-            negation = keyword.startswith("-")
+            negation = keyword.startswith(self.neg)
             result += " AND " if result else ""
             result += "%s(%s)" % ("NOT " if negation else "", " OR ".join(sqls))
         return result
@@ -383,7 +387,7 @@ def join_strings(strings, glue=" AND "):
 
 
 
-def match_keywords(texts, keywords, name, when=any, case=False, when_many=all):
+def match_keywords(texts, keywords, name, when=any, case=False, when_many=all, neg="-"):
     """
     Returns whether text matches inclusive or exclusive keywords.
 
@@ -393,6 +397,7 @@ def match_keywords(texts, keywords, name, when=any, case=False, when_many=all):
     @param   when       truth function to use, like all or any
     @param   when_many  truth function to use for summing results from multiple texts
     @param   case       whether match is case-sensitive
+    @param   neg        negation character to use in front of exclusive keywords
     @return             True if inclusive keywords match and exclusive keywords do not,
                         False if inclusive keywords do not match or exclusive keywords match,
                         None if keyword is not present in keywords
@@ -400,7 +405,7 @@ def match_keywords(texts, keywords, name, when=any, case=False, when_many=all):
     pros, cons = [], []
     for text in ([texts] if isinstance(texts, six.text_type) else texts):
         a = match_words(text, keywords[name], when, case) if name in keywords else None
-        b = match_words(text, keywords["-" + name], when, case) if "-" + name in keywords else None
+        b = match_words(text, keywords[neg + name], when, case) if neg + name in keywords else None
         pros.append(a), cons.append(b)
     if set(pros + cons) == set([None]): return None 
     return False if (when_many(cons) or when_many(x is False for x in pros)) else True
