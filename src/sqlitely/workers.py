@@ -157,28 +157,30 @@ class SearchThread(WorkerThread):
         """Searches database metadata, yielding (infotext, result)."""
         infotext, case = "database metadata", search.get("case")
         _, _, words, kws = self.parser.Parse(search["text"], case)
-        pattern_replace = self.make_replacer(words, case)
+        repl_words = words + sum((list(vv) for k, vv in kws.items() if k[0] != "-"), [])
+        pattern_replace = self.make_replacer(repl_words, case)
         tpl = step.Template(templates.SEARCH_ROW_META_HTML, escape=True)
         result = {"output": "", "map": {}, "search": search, "count": 0}
 
         counts = OrderedDict() # {category: count}
-        category_kws = {x for k in kws for x in [re.sub("^-", "", k)] if x in db.CATEGORIES}
+        category_kws = {x for k in kws for x in [re.sub("^-", "", k)]
+                        if x in search["db"].CATEGORIES}
         for category in database.Database.CATEGORIES if (words or kws) else ():
-            othercats = set(db.CATEGORIES) - set([category])
+            othercats = set(search["db"].CATEGORIES) - set([category])
             if category_kws and category not in category_kws and othercats & set(kws):
                 continue # for category
 
             for item in search["db"].get_category(category).values():
-                if match_keywords(item["name"], kws, category, args.case) is False:
+                if match_keywords(item["name"], kws, category, case) is False:
                     continue # for item
 
                 if "column" in kws or "-column" in kws:
                     cols = [x.get("name") or x.get("expr") or "" for x in item.get("columns", [])]
                     cols = list(filter(bool, cols))
-                    if match_keywords(cols, kws, "column", args.case) is False:
+                    if match_keywords(cols, kws, "column", case) is False:
                         continue # for item
 
-                if words and not match_words(item["sql"], words, args.case, all):
+                if words and not match_words(item["sql"], words, case, all):
                     continue # for item
 
                 counts[category] = counts.get(category, 0) + 1
