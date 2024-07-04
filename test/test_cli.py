@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     24.06.2024
-@modified    03.07.2024
+@modified    04.07.2024
 ------------------------------------------------------------------------------
 """
 import csv
@@ -51,6 +51,8 @@ class TestCLI(unittest.TestCase):
 
     IMPORT_FORMATS = [xlsxwriter and "xlsx", "csv", "json", yaml and "yaml"]
     IMPORT_FORMATS = list(filter(bool, IMPORT_FORMATS))
+
+    STATS_FORMATS = ["html", "sql", "txt"]
 
     SCHEMA = {
         "empty":   ["id"],
@@ -226,6 +228,15 @@ class TestCLI(unittest.TestCase):
         self.verify_search_formats()
         self.verify_search_limits()
         self.verify_search_filters()
+
+
+    def test_stats(self):
+        """Tests 'stats' command in command-line interface."""
+        logger.info("Testing 'stats' command.")
+        self.populate_db(self._dbname)
+
+        self.verify_stats_formats()
+        self.verify_stats_flags()
 
 
     def verify_pragma_full(self):
@@ -1074,6 +1085,75 @@ class TestCLI(unittest.TestCase):
         res, out, err = self.run_cmd("search", self._dbname, "-f", "json", "--case", "B")
         self.assertFalse(res, "Unexpected failure from search.")
         self.assertEqual(json.loads(out or "{}"), self.DATA, "Unexpected output in search.")
+
+
+    def verify_stats_formats(self):
+        """Tests 'stats': output to console and file in different formats."""
+        logger.info("Testing stats output in all formats.")
+
+        for fmt in (x for x in self.STATS_FORMATS if x != "html"):
+            logger.info("Testing stats output as %s.", fmt.upper())
+            res, out, err = self.run_cmd("stats", self._dbname, "-f", fmt)
+            self.assertFalse(res, "Unexpected failure from stats.")
+            self.assertTrue(out, "Unexpected lack of output from stats.") if "html" != fmt else None
+
+        for fmt in self.STATS_FORMATS:
+            logger.info("Testing stats output to file as combined %s.", fmt.upper())
+            outfile = self.mktemp("." + fmt)
+            res, out, err = self.run_cmd("stats", self._dbname, "-o", outfile)
+            self.assertFalse(res, "Unexpected failure from stats.")
+            self.assertTrue(os.path.isfile(outfile), "Output file not created in stats.")
+            self.assertTrue(os.path.getsize(outfile), "Output file has no content in stats.")
+
+        for fmt in self.STATS_FORMATS:
+            logger.info("Testing stats output to file as %s with --overwrite.", fmt.upper())
+            outfile = self.mktemp("." + fmt, "custom")
+            res, out, err = self.run_cmd("stats", self._dbname, "-o", outfile)
+            self.assertFalse(res, "Unexpected failure from stats.")
+            self.assertEqual(os.path.getsize(outfile), 6, "Output file overwritten in stats.")
+            res, out, err = self.run_cmd("stats", self._dbname, "-o", outfile, "--overwrite")
+            self.assertFalse(res, "Unexpected failure from stats.")
+            self.assertGreater(os.path.getsize(outfile), 6,
+                               "Output file not overwritten in stats.")
+
+
+    def verify_stats_flags(self):
+        """Tests 'stats': output with --disk-usage."""
+        logger.info("Testing stats output with --disk-usage.")
+
+        for fmt in (x for x in self.STATS_FORMATS if x != "sql"):
+            logger.info("Testing stats output as %s without --disk-usage.", fmt.upper())
+            outfile = self.mktemp("." + fmt)
+            res, out, err = self.run_cmd("stats", self._dbname, "-o", outfile)
+            self.assertFalse(res, "Unexpected failure from stats.")
+            self.assertTrue(os.path.getsize(outfile), "Output file has no content in stats.")
+            with open(outfile, "r") as f: content = f.read()
+            for text in ("sizes", "sizes with indexes", "index sizes"):
+                self.assertNotIn(text, content, "Unexpected disk usage in stats output.")
+
+        for fmt in (x for x in self.STATS_FORMATS if x != "sql"):
+            logger.info("Testing stats output as %s with --disk-usage.", fmt.upper())
+            outfile = self.mktemp("." + fmt)
+            res, out, err = self.run_cmd("stats", self._dbname, "-o", outfile, "--disk-usage")
+            self.assertFalse(res, "Unexpected failure from stats.")
+            self.assertTrue(os.path.getsize(outfile), "Output file has no content in stats.")
+            with open(outfile, "r") as f: content = f.read()
+            for text in ("sizes", "sizes with indexes", "index sizes"):
+                self.assertIn(text, content, "Unexpected disk usage in stats output.")
+
+        logger.info("Testing stats output as SQL.")
+        outfile = self.mktemp(".sql")
+        res, out, err = self.run_cmd("stats", self._dbname, "-o", outfile)
+        self.assertFalse(res, "Unexpected failure from stats.")
+        self.assertTrue(os.path.getsize(outfile), "Output file has no content in stats.")
+        with open(outfile, "r") as f: content = f.read()
+        testfile = self.mktemp(".db")
+        with sqlite3.connect(testfile) as db:
+            db.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
+            db.executescript(content)
+            received = set(r["name"] for r in db.execute("SELECT name FROM space_used").fetchall())
+            expected = set(self.SCHEMA) | set(["parent_idx", "sqlite_master"])
+            self.assertEqual(received, expected, "Unexpected output in stats.")
 
 
     def mktemp(self, suffix=None, content=None):
