@@ -9111,7 +9111,7 @@ class ColumnDialog(wx.Dialog):
             item_letters   = wx.MenuItem(menu_strip, -1, "Strip &letters")
             item_numbers   = wx.MenuItem(menu_strip, -1, "Strip &numbers")
             item_alnum     = wx.MenuItem(menu_strip, -1, "Strip &alphanumerics")
-            item_nonalnum  = wx.MenuItem(menu_strip, -1, "Strip non-a&lphanumerics")
+            item_nonalnum  = wx.MenuItem(menu_strip, -1, "Strip n&on-alphanumerics")
             item_hstrip    = wx.MenuItem(menu_strip, -1, "Strip &HTML tags")
 
             menu.Append(item_tabs)
