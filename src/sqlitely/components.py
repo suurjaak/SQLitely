@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    31.05.2024
+@modified    04.07.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -8934,6 +8934,15 @@ class ColumnDialog(wx.Dialog):
         page = wx.Panel(notebook)
 
 
+        def set_value(value):
+            """Sets value to text control."""
+            edit = tedit if tedit.Shown else nedit
+            if tedit.Shown: # Workaround for STC.SetValue emptying contents if very exotic string
+                try: tedit.SetTextRaw(value.encode("utf-8"))
+                except Exception: pass
+                else: return
+            edit.Value = value
+
         def do_case(category):
             edit = tedit if tedit.Shown else nedit
             value = edit.StringSelection or edit.Value
@@ -8961,10 +8970,10 @@ class ColumnDialog(wx.Dialog):
                 value = "".join(x.lower() if i % 2 else x.upper()
                                 for i, x in enumerate(value))
 
-            if not edit.StringSelection: edit.Value = value
+            if not edit.StringSelection: set_value(value)
             else:
                 v, (p1, p2) = edit.Value, edit.GetSelection()
-                edit.Value = v[:p1] + value + v[p2:]
+                set_value(v[:p1] + value + v[p2:])
                 edit.SetSelection(p1, p1 + len(value))
             on_change(edit.Value)
 
@@ -9008,10 +9017,10 @@ class ColumnDialog(wx.Dialog):
                     value = re.sub("<[^>]+?>", "", value)
             except Exception: pass
             else:
-                if not edit.StringSelection: edit.Value = value
+                if not edit.StringSelection: set_value(value)
                 else:
                     v, (p1, p2) = edit.Value, edit.GetSelection()
-                    edit.Value = v[:p1] + value + v[p2:]
+                    set_value(v[:p1] + value + v[p2:])
                     edit.SetSelection(p1, p1 + len(value))
                 on_change(edit.Value)
 
@@ -9195,7 +9204,7 @@ class ColumnDialog(wx.Dialog):
             edit.Hint = "<NULL>" if value is None else ""
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                if v != edit.Value: edit.ChangeValue(v)
+                if v != edit.Value: set_value(v)
             if reset:
                 tedit.DiscardEdits(), nedit.DiscardEdits()
                 button_case.Enable(tedit.Shown)
