@@ -661,8 +661,10 @@ class TestCLI(unittest.TestCase):
         """Tests 'import': with --add-pk."""
         logger.info("Testing import with --add-pk.")
 
-        for fmt in self.IMPORT_FORMATS:
-            logger.info("Testing import from %s with --add-pk.", fmt.upper())
+        for i, fmt in enumerate(self.IMPORT_FORMATS):
+            pk = "custom" if i % 2 else None
+            logger.info("Testing import from %s with --add-pk%s.",
+                        fmt.upper(), " %s" % pk if pk else "")
             combined = ("xlsx" == fmt)
             single_name = None if combined else "parent"
             schema = {k: self.SCHEMA[k] for k in (self.SCHEMA if combined else [single_name])}
@@ -672,7 +674,7 @@ class TestCLI(unittest.TestCase):
 
             outfile = self.mktemp(".db")
             res, out, err = self.run_cmd("import", infile, outfile, "--assume-yes",
-                                         "--row-header", "--add-pk")
+                                         "--row-header", "--add-pk", *[pk] if pk else [])
             self.assertFalse(res, "Unexpected failure from import.")
             self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
             basename = os.path.splitext(os.path.basename(infile))[0]
@@ -680,7 +682,8 @@ class TestCLI(unittest.TestCase):
                 db.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
                 for item_name in schema:
                     table_name = item_name if combined else basename
-                    expected = [dict(r, id_2=i + 1) for i, r in enumerate(data[item_name])]
+                    expected = [dict(r, **{pk or "id_2":i + 1})
+                                for i, r in enumerate(data[item_name])]
                     rows = db.execute("SELECT * FROM %s" % table_name).fetchall()
                     if "csv" == fmt: rows = [{k: intify(v) for k, v in r.items()} for r in rows]
                     self.assertEqual(rows, expected, "Unexpected data in import %r." % item_name)

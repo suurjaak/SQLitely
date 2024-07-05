@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.07.2024
+@modified    05.07.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -222,8 +222,9 @@ ARGUMENTS = {
                       "or worksheet name if Excel spreadsheet"},
              {"args": ["--create-always"], "action": "store_true",
               "help": "create new table even if a matching table already exists"},
-             {"args": ["--add-pk"], "action": "store_true",
-              "help": "add auto-increment primary key column to created tables"},
+             {"args": ["--add-pk"], "nargs": "?", "const": "", "metavar": "NAME",
+              "help": "add auto-increment primary key column to created tables;\n"
+                       'defaults to "id" if name not specified'},
              {"args": ["--assume-yes"], "action": "store_true",
               "help": "skip confirmation prompt for starting import"},
              {"args": ["--limit"], "type": int, "metavar": "NUM",
@@ -1236,7 +1237,8 @@ def run_import(infile, args):
                row_header     whether to use first row of input spreadsheet for column names
                no_empty       skip spreadsheets with no content rows (affected by offset and limit)
                columns        specific column ranges to pick if not all
-               add_pk         whether to add auto-increment primary key column to created tables
+               add_pk         whether to add auto-increment primary key column to created tables;
+                              optionally the column name itself
                assume_yes     whether to skip confirmation prompt
                limit          maximum number of rows to import per table
                offset         number of initial rows to skip from each table
@@ -1294,7 +1296,8 @@ def run_import(infile, args):
                 else:
                     for i, c in sourcecols.items():
                         colmapping[i] = util.make_unique(c, list(colmapping.values()))
-                if args.add_pk: pk = util.make_unique("id", list(colmapping.values()))
+                if args.add_pk is not None:
+                    pk = util.make_unique(args.add_pk or "id", list(colmapping.values()))
                 tname = util.make_unique(tname, items)
                 chosen_tables.append(tname)
                 item = {"name": tname, "type": "table",
