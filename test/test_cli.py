@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     24.06.2024
-@modified    04.07.2024
+@modified    05.07.2024
 ------------------------------------------------------------------------------
 """
 import csv
@@ -30,6 +30,8 @@ try: import xlsxwriter
 except ImportError: xlsxwriter = None
 try: import yaml
 except ImportError: yaml = None
+try: text_type = basestring       # Py2
+except Exception: text_type = str # Py3
 
 
 logger = logging.getLogger()
@@ -153,7 +155,6 @@ class TestCLI(unittest.TestCase):
         TIMEOUT = dict(timeout=60) if sys.version_info > (3, 2) else {}
         workdir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
         args = [str(x) for x in args]
-        #cmd = [r"c:\Program Files\Python\python.exe", "-m", "sqlitely", command] + list(args)
         cmd = ["python", "-m", "sqlitely", command] + list(args)
         logger.debug("Executing command %r.", " ".join(repr(x) if " " in x else x for x in cmd))
         self._proc = subprocess.Popen(cmd, universal_newlines=True, cwd=workdir,
@@ -278,16 +279,17 @@ class TestCLI(unittest.TestCase):
             "mmap schema":  ["mmap_size", "schema_version", "writable_schema"],
             "000":          ["busy_timeout", "cache_size", "default_cache_size",
                              "wal_autocheckpoint"],
-            "fts freelist": ["compile_options", "freelist_count"],
+            "freelist":     ["freelist_count"],
         }
 
         for filterset, expecteds in FILTERSETS.items():
             logger.info("Testing pragma command with %r.", filterset)
             res, out, err = self.run_cmd("pragma", self._dbname, filterset)
             self.assertFalse(res, "Unexpected failure from pragma.")
-            pragmas = [re.sub(r"PRAGMA (\w+)\s=.+$", r"\1", x) for x in out.splitlines()
-                       if x.startswith("PRAGMA")]
-            self.assertEqual(set(pragmas), set(expecteds),
+            pragmas = set(re.sub(r"PRAGMA (\w+)\s=.+$", r"\1", x) for x in out.splitlines()
+                          if x.startswith("PRAGMA"))
+            pragmas.discard("compile_options") # Unreliable over different python/sqlite versions
+            self.assertEqual(pragmas, set(expecteds),
                              "Unexpected output in pragma for %r." % filterset)
 
 
@@ -1064,9 +1066,9 @@ class TestCLI(unittest.TestCase):
                 for v in tfilters:
                     if isinstance(v, tuple):
                         rows.extend(i for i, r in enumerate(self.DATA[table]) if r[v[0]] == v[1])
-                    elif isinstance(v, str):
+                    elif isinstance(v, text_type):
                         rows.extend(i for i, r in enumerate(self.DATA[table])
-                                    if any(v in x for x in r.values() if isinstance(x, str)))
+                                    if any(v in x for x in r.values() if isinstance(x, text_type)))
                     else:
                         rows.extend(i for i, r in enumerate(self.DATA[table])
                                     if any(v == x for x in r.values()))
@@ -1166,7 +1168,7 @@ class TestCLI(unittest.TestCase):
 
 def intify(v):
     """Returns value as integer if numeric string."""
-    return int(v) if isinstance(v, str) and v.isdigit() else v
+    return int(v) if isinstance(v, text_type) and v.isdigit() else v
 
 
 if "__main__" == __name__:
