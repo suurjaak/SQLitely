@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.07.2024
+@modified    05.07.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1428,7 +1428,13 @@ class csv_reader(object):
             preview = f.read(self._peek)
             if   preview.startswith(b"\xFE\xFF"): encoding = "utf-16be"
             elif preview.startswith(b"\xFF\xFE"): encoding = "utf-16le"
-            elif chardet: encoding = chardet.detect_all(preview)[0]["encoding"]
+            elif chardet:
+                try:
+                    if hasattr(chardet, "detect_all"): # v4+
+                        encoding = chardet.detect_all(preview)[0]["encoding"]
+                    else:
+                        encoding = chardet.detect(preview)["encoding"]
+                except Exception: pass
             if "ascii" == encoding: encoding = "utf-8" # Failsafe: ASCII as UTF-8 is valid anyway
 
             if "utf-16" in (encoding or "").lower() and len(preview) / 2: preview += b"\x00"
