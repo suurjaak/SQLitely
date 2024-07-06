@@ -176,7 +176,6 @@ from sqlitely import conf, images
     }
     #footer {
       text-align: center;
-      margin-top: -22px;
       padding: 10px 0;
       color: #666;
     }
