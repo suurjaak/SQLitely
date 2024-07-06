@@ -1221,7 +1221,7 @@ def run_export(dbname, args):
     else: # Print to console
         func = importexport.export_to_console
         posargs = [args.format, make_iterables]
-        kwargs.update(output=output, multiple=True, empty=not args.no_empty, progress=progress)
+        kwargs.update(output=output, combined=True, empty=not args.no_empty, progress=progress)
 
     try: do_output("export", args, functools.partial(func, *posargs, **kwargs), entities, files)
     finally: util.try_ignore(db.close)
@@ -1690,7 +1690,7 @@ def run_search(dbname, args):
     else: # Print to console
         func = importexport.export_to_console
         posargs = [args.format, make_iterables, make_search_title(args)]
-        kwargs.update(output=output, multiple=True, progress=progress, empty=not args.no_empty)
+        kwargs.update(output=output, combined=True, progress=progress, empty=not args.no_empty)
 
     try: do_output("search", args, functools.partial(func, *posargs, **kwargs), entities, files)
     finally: util.try_ignore(db.close)

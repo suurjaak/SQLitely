@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.06.2024
+@modified    06.07.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -554,7 +554,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_tools_export_tables = self.menu_tools_export_tables = menu_tools_export.Append(
             wx.ID_ANY, "All tables to &individual files",
             "Export all tables to individual files")
-        menu_tools_export_multiitem = self.menu_tools_export_multiitem = menu_tools_export.Append(
+        menu_tools_export_combined = self.menu_tools_export_combined = menu_tools_export.Append(
             wx.ID_ANY, "All tables to a single &file",
             "Export all tables to a single file, "
             "each table in separate section")
@@ -658,7 +658,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["import"]),    menu_tools_import)
 
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "tables"]),     menu_tools_export_tables)
-        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "multiitem"]),  menu_tools_export_multiitem)
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "combined"]),   menu_tools_export_combined)
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "data"]),       menu_tools_export_data)
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "structure"]),  menu_tools_export_structure)
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "pragma"]),     menu_tools_export_pragma)
@@ -4086,19 +4086,19 @@ class DatabasePage(wx.Panel):
 
         elif "export" == cmd:
             arg = args[0]
-            if arg in ("tables", "multiitem", "data", "structure") \
+            if arg in ("tables", "combined", "data", "structure") \
             and not self.db.schema["table"]: return wx.MessageBox(
                 "No tables to save.", conf.Title, wx.ICON_NONE
             )
-            if arg in ("tables", "multiitem", "dump") \
+            if arg in ("tables", "combined", "dump") \
             and self.panel_data_export.IsRunning(): return wx.MessageBox(
                 "A global export is already underway.", conf.Title, wx.ICON_NONE
             )
 
             if "tables" == arg:
                 self.on_export_data_file(category=None, item=args[1:] or list(self.db.schema["table"]))
-            elif "multiitem" == arg:
-                self.on_export_multiitem(category=None, names=args[1:])
+            elif "combined" == arg:
+                self.on_export_data_combined(category=None, names=args[1:])
             elif "data" == arg:
                 self.on_export_to_db(names=args[1:] or list(self.db.schema["table"]))
             elif "sql" == arg:
@@ -5190,7 +5190,7 @@ class DatabasePage(wx.Panel):
                     for i, typelabel in enumerate(["To &individual files", "To a single &file"]):
                         item = wx.MenuItem(menu_types, -1, typelabel)
                         if i:
-                            handler = functools.partial(self.on_export_multiitem, category)
+                            handler = functools.partial(self.on_export_data_combined, category)
                         else:
                             handler = functools.partial(self.on_export_data_file, category, names)
                         menu_types.Append(item)
@@ -5705,7 +5705,7 @@ class DatabasePage(wx.Panel):
         finally: self.Thaw()
 
 
-    def on_export_multiitem(self, category, event=None, names=None):
+    def on_export_data_combined(self, category, event=None, names=None):
         """
         Handler for saving database category data from multiple items to a single file,
         opens file dialog, saves content.
@@ -7294,14 +7294,14 @@ class DatabasePage(wx.Panel):
         if data["type"] in ("data", "schema"): # Root
             names = list(self.db.schema.get("table", [])) + list(self.db.schema.get("view", []))
             exportmenu, newmenu, keys = wx.Menu(), wx.Menu(), []
-            item_copy         = wx.MenuItem(menu, -1, "&Copy schema SQL")
-            item_schema       = wx.MenuItem(exportmenu, -1, "Export &schema as SQL")
-            item_dump         = wx.MenuItem(exportmenu, -1, "Export full d&ump as SQL")
-            item_database     = wx.MenuItem(exportmenu, -1, "Export all to another &database")
-            item_file         = wx.MenuItem(exportmenu, -1, "Export all to &individual files")
-            item_file_multi   = wx.MenuItem(exportmenu, -1, "Export all to a single &file")
-            item_database_sql = wx.MenuItem(exportmenu, -1, "Export all structures to another data&base")
-            item_drop_schema  = wx.MenuItem(menu, -1, "Drop everything")
+            item_copy          = wx.MenuItem(menu, -1, "&Copy schema SQL")
+            item_schema        = wx.MenuItem(exportmenu, -1, "Export &schema as SQL")
+            item_dump          = wx.MenuItem(exportmenu, -1, "Export full d&ump as SQL")
+            item_database      = wx.MenuItem(exportmenu, -1, "Export all to another &database")
+            item_file          = wx.MenuItem(exportmenu, -1, "Export all to &individual files")
+            item_file_combined = wx.MenuItem(exportmenu, -1, "Export all to a single &file")
+            item_database_sql  = wx.MenuItem(exportmenu, -1, "Export all structures to another data&base")
+            item_drop_schema   = wx.MenuItem(menu, -1, "Drop everything")
             for category in self.db.CATEGORIES:
                 key = next((x for x in category if x not in keys), category[0])
                 it = wx.MenuItem(newmenu, -1, "New " + category.replace(key, "&" + key, 1))
@@ -7311,7 +7311,7 @@ class DatabasePage(wx.Panel):
             exportmenu.Append(item_dump)
             exportmenu.Append(item_database)
             exportmenu.Append(item_file)
-            exportmenu.Append(item_file_multi)
+            exportmenu.Append(item_file_combined)
             exportmenu.Append(item_database_sql)
             menu.Append(item_copy)
             menu.AppendSubMenu(exportmenu, text="&Export ..")
@@ -7325,7 +7325,7 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, cmd("export", "dump"), item_dump)
             menu.Bind(wx.EVT_MENU, cmd("export", "data"), item_database)
             menu.Bind(wx.EVT_MENU, cmd("export", "tables", *names), item_file)
-            menu.Bind(wx.EVT_MENU, cmd("export", "multiitem", None, *names), item_file_multi)
+            menu.Bind(wx.EVT_MENU, cmd("export", "combined", None, *names), item_file_combined)
             menu.Bind(wx.EVT_MENU, cmd("export", "structure"), item_database_sql)
             menu.Bind(wx.EVT_MENU, cmd("drop schema"), item_drop_schema)
             for c, it in zip(self.db.CATEGORIES, newmenu.MenuItems):
@@ -7337,7 +7337,7 @@ class DatabasePage(wx.Panel):
             names0 = names if data.get("parent") else []
             relcategory, relname = (data["parent"]["type"], data["parent"]["name"]) if data.get("parent") else (None, None)
             item_import = item_reindex_all = item_truncate_all = item_database_sql = None
-            item_file, item_file_multi, item_database = None, None, None
+            item_file, item_file_combined, item_database = None, None, None
 
             copymenu, exportmenu = wx.Menu(), wx.Menu()
             item_copy     = wx.MenuItem(copymenu, -1, "Copy &names")
@@ -7350,9 +7350,9 @@ class DatabasePage(wx.Panel):
                 item_import       = wx.MenuItem(menu, -1, "&Import into table from file")
                 item_truncate_all = wx.MenuItem(menu, -1, "Truncate all")
             if category in ("table", "view"):
-                item_file       = wx.MenuItem(exportmenu, -1, "Export %s to &individual files" % util.plural(category))
-                item_file_multi = wx.MenuItem(exportmenu, -1, "Export %s to a single &file" % util.plural(category))
-                item_database   = wx.MenuItem(exportmenu, -1, "Export %s to another &database" % util.plural(category))
+                item_file          = wx.MenuItem(exportmenu, -1, "Export %s to &individual files" % util.plural(category))
+                item_file_combined = wx.MenuItem(exportmenu, -1, "Export %s to a single &file"    % util.plural(category))
+                item_database      = wx.MenuItem(exportmenu, -1, "Export %s to another &database" % util.plural(category))
             if category in ("table", "index"):
                 item_reindex_all = wx.MenuItem(menu, -1, "Reindex all")
             item_create   = wx.MenuItem(menu, -1, "Create &new %s" % category)
@@ -7364,7 +7364,7 @@ class DatabasePage(wx.Panel):
             copymenu.Append(item_copy_rel)
             exportmenu.Append(item_save_sql)
             exportmenu.Append(item_file) if item_file else None
-            exportmenu.Append(item_file_multi) if item_file_multi else None
+            exportmenu.Append(item_file_combined) if item_file_combined else None
             exportmenu.Append(item_database) if item_database else None
             exportmenu.Append(item_database_sql) if item_database_sql else None
 
@@ -7391,7 +7391,7 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, cmd("copy", "related", category, *names0), item_copy_rel)
             menu.Bind(wx.EVT_MENU, cmd("export", "sql", category, *names0), item_save_sql)
             menu.Bind(wx.EVT_MENU, cmd("export", "tables", *names), item_file) if item_file else None
-            menu.Bind(wx.EVT_MENU, cmd("export", "multiitem", category, *names), item_file_multi) if item_file_multi else None
+            menu.Bind(wx.EVT_MENU, cmd("export", "combined", category, *names), item_file_combined) if item_file_combined else None
             menu.Bind(wx.EVT_MENU, cmd("export", "data", *names), item_database) if item_database else None
             menu.Bind(wx.EVT_MENU, cmd("export", "structure", *names), item_database_sql) if item_database_sql else None
             menu.Bind(wx.EVT_MENU, import_data, item_import) if item_import else None

@@ -47,7 +47,7 @@ HTML data export template header.
 Opens <html> tag.
 
 @param   title      export title, as string or a sequence of strings
-@param   ?multiple  whether not doing single item export
+@param   ?combined  whether not doing single item export
 """
 DATA_HTML_HEADER = """<%
 from sqlitely.lib import util
@@ -99,7 +99,7 @@ from sqlitely import conf, images
       border-radius: 10px;
       padding: 10px;
     }
-%if get("multiple"):
+%if get("combined"):
     table.body_table.multiple > tbody > tr:nth-child(1) > td {
       border-radius: 10px 10px 0 0;
     }
@@ -253,7 +253,7 @@ from sqlitely import conf, images
       id2 && document.getElementById(id2).classList.toggle(cls);
     };
 
-%if get("multiple"):
+%if get("combined"):
     /** Toggles all data table row toggles on or off. */
     var onToggleAll = function(a) {
       a.classList.toggle('open');
@@ -319,14 +319,14 @@ HTML data export template.
 @param   row_count    number of rows
 @param   sql          SQL query giving export data, if any
 @param   create_sql   CREATE SQL statement for export object, if any
-@param   ?multiple    whether not doing single item export
+@param   ?combined    whether not doing single item export
 @param   ?info        additional metadata for export, as {title: text or {label: text}}
 @param   ?progress    callback(name, count) returning whether to cancel, if any
 """
 DATA_HTML = """<%
 from step import Template
 from sqlitely import templates
-%>{{! Template(templates.DATA_HTML_HEADER, strip=False).expand(title=title, multiple=get("multiple")) }}
+%>{{! Template(templates.DATA_HTML_HEADER, strip=False).expand(title=title, combined=get("combined")) }}
 <body>
 <div id="root">
 {{! Template(templates.DATA_HTML_MULTIPLE_PART, strip=False).expand(locals()) }}
@@ -345,6 +345,7 @@ HTML export template for multiple items.
 @param   title        export title, as string or a sequence of strings
 @param   files        files to embed content from, as {file name: {name, title}}
 @param   ?info        additional metadata for export, as {title: text or {label: text}}
+@param   ?combined    whether not doing single item export
 @param   ?progress    callback() returning whether to cancel, if any
 """
 DATA_HTML_MULTIPLE = """<%
@@ -355,10 +356,10 @@ from sqlitely import templates
 
 progress = get("progress")
 _, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
-%>{{! Template(templates.DATA_HTML_HEADER, strip=False).expand(title=title, multiple=True) }}
+%>{{! Template(templates.DATA_HTML_HEADER, strip=False).expand(title=title, combined=True) }}
 <body>
 <div id="root">
-%if get("multiple"):
+%if get("combined"):
 
 <table class="body_table">
 <tr><td>
@@ -415,7 +416,7 @@ HTML export template for item partial file.
 @param   row_count    number of rows
 @param   sql          SQL query giving export data, if any
 @param   create_sql   CREATE SQL statement for export object, if any
-@param   ?multiple    whether actually doing multiple item export
+@param   ?combined    whether actually doing multiple item export
 @param   ?info        additional metadata for export, as {title: text or {label: text}}
 @param   ?progress    callback(name, count) returning whether to cancel, if any
 """
@@ -429,13 +430,13 @@ _, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 item_id = "item__%s" % hash(util.tuplefy(title))
 progress = get("progress")
 %>
-<table class="body_table{{ " multiple" if get("multiple") else "" }}" id="{{ item_id }}">
+<table class="body_table{{ " multiple" if get("combined") else "" }}" id="{{ item_id }}">
 <tr><td><table class="header_table">
   <tr>
     <td>
       <div class="title">
         {{! "<br />".join(util.tuplefy(title)) }}
-%if not get("multiple"):
+%if not get("combined"):
 <%
 # &#x1F313; first quarter moon symbol
 # &#xFE0E;  Unicode variation selector, force preceding character to monochrome text glyph
@@ -448,14 +449,14 @@ progress = get("progress")
       <span class="shortsql" id="{{ item_id }}__shortsql">{{ (sql or create_sql).split("\\n", 1)[0] }}</span>
       <a class="toggle" title="Toggle full SQL" onclick="onToggle(this, '{{ item_id }}__shortsql', '{{ item_id }}__sql')"> </a>
       <br />
-%if not get("multiple"):
+%if not get("combined"):
       Source: <b>{{ db }}</b>{{ " (%s)" % dbsize if dbsize else "" }}.<br />
     %if get("info"):
       {{! Template(templates.DATA_INFO_PART, strip=False).expand(info=info, format="html").strip() }}
     %endif
 %endif
       <b>{{ row_count }}</b> {{ util.plural("row", row_count, numbers=False) }}{{ " in results" if sql else "" }}.
-      <a class="toggle down open" title="Toggle rows" onclick="onToggle(this, '{{ item_id }}{{ "" if get("multiple") else "__rows" }}', null, 'collapsed')"> </a>
+      <a class="toggle down open" title="Toggle rows" onclick="onToggle(this, '{{ item_id }}{{ "" if get("combined") else "__rows" }}', null, 'collapsed')"> </a>
       <br />
     </td>
   </tr></table>
@@ -577,22 +578,22 @@ create_sql, _ = grammar.generate(meta)
 JSON export template.
 
 @param   data_buffer  iterable yielding rows data in text chunks
-@param   ?multiple    whether doing multiple item export (skips list brackets)
+@param   ?combined    whether doing multiple item export (skips list brackets)
 @param   ?progress    callback() returning whether to cancel, if any
 """
 DATA_JSON = """<%
 from sqlitely.lib import util
 from sqlitely import conf, templates
 
-multiple, progress = get("multiple"), get("progress")
+combined, progress = get("combined"), get("progress")
 
-if not multiple: echo("[\\n")
+if not combined: echo("[\\n")
 for i, chunk in enumerate(data_buffer):
     if progress and not i % 100 and not progress():
         break # for i, chunk
 
     echo(chunk)
-if not multiple: echo("\\n]\\n")
+if not combined: echo("\\n]\\n")
 %>"""
 
 
@@ -604,14 +605,14 @@ JSON export template for the rows part.
 @param   columns     [{name}, ]
 @param   name        table name
 @param   ?namespace  {"row_count"}
-@param   ?multiple   whether doing multiple item export (uses leading indentation)
+@param   ?combined   whether doing multiple item export (uses leading indentation)
 @param   ?progress   callback(name, count) returning whether to cancel, if any
 """
 DATA_ROWS_JSON = """<%
 import collections, json
 from sqlitely import templates
 
-margin = 2 if get("multiple") else 0
+margin = 2 if get("combined") else 0
 progress = get("progress")
 rows = iter(rows)
 i, row, nextrow = 0, next(rows, None), next(rows, None)

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.07.2024
+@modified    06.07.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -101,7 +101,7 @@ logger = logging.getLogger(__name__)
 
 
 def export_data(db, filename, format, make_iterable, title, columns,
-                query=None, category=None, name=None, multiple=False, info=None, progress=None):
+                query=None, category=None, name=None, combined=False, info=None, progress=None):
     """
     Exports database data to file.
 
@@ -114,7 +114,7 @@ def export_data(db, filename, format, make_iterable, title, columns,
     @param   query           the SQL query producing the data, if any
     @param   category        category producing the data, if any, "table" or "view"
     @param   name            name of the table or view producing the data, if any
-    @param   multiple        whether to use multi-item template
+    @param   combined        whether to use multi-item template
     @param   info            additional metadata for export, as {title: text or {label: text}}
     @param   progress        callback(name, count) to report progress,
                              returning false if export should cancel
@@ -124,11 +124,11 @@ def export_data(db, filename, format, make_iterable, title, columns,
     f, writer, cursor = None, None, None
     TEMPLATES = {
         "root": {
-            "html": templates.DATA_HTML_MULTIPLE_PART if multiple else templates.DATA_HTML,
+            "html": templates.DATA_HTML_MULTIPLE_PART if combined else templates.DATA_HTML,
             "json": templates.DATA_JSON,
-            "sql":  templates.DATA_SQL_MULTIPLE_PART  if multiple else templates.DATA_SQL,
-            "txt":  templates.DATA_TXT_MULTIPLE_PART  if multiple else templates.DATA_TXT,
-            "yaml": templates.DATA_YAML_MULTIPLE_PART if multiple else templates.DATA_YAML,
+            "sql":  templates.DATA_SQL_MULTIPLE_PART  if combined else templates.DATA_SQL,
+            "txt":  templates.DATA_TXT_MULTIPLE_PART  if combined else templates.DATA_TXT,
+            "yaml": templates.DATA_YAML_MULTIPLE_PART if combined else templates.DATA_YAML,
         },
         "rows": {
             "html": templates.DATA_ROWS_HTML,
@@ -184,7 +184,7 @@ def export_data(db, filename, format, make_iterable, title, columns,
                     "sql":        query,
                     "category":   category,
                     "name":       name,
-                    "multiple":   multiple,
+                    "combined":   combined,
                     "info":       info,
                     "progress":   progress,
                 }
@@ -415,7 +415,7 @@ def export_data_combined(db, filename, format, title, category=None, names=None,
                                            grammar.quote(name, force=True))
                     result = export_data(db, tmpname, format, make_iterable, itemtitle,
                                          item["columns"], category=item["type"], name=name,
-                                         multiple=True, info=info, progress=myprogress)
+                                         combined=True, info=info, progress=myprogress)
                     itemfiles[tmpname] = myitem
 
                 if not result: break # for item_i
@@ -431,7 +431,7 @@ def export_data_combined(db, filename, format, title, category=None, names=None,
                     "db":       db,
                     "title":    title,
                     "files":    itemfiles,
-                    "multiple": True,
+                    "combined": True,
                     "info":     info,
                     "progress": progress,
                 }
@@ -832,7 +832,7 @@ def export_query_to_db(db, filename, table, query, params=(), cursor=None, creat
 
 
 def export_to_console(format, make_iterables, title=None,
-                      output=None, multiple=False, empty=True, progress=None):
+                      output=None, combined=False, empty=True, progress=None):
     """
     Prints entity rows to console.
 
@@ -841,7 +841,7 @@ def export_to_console(format, make_iterables, title=None,
     @param   title           export title if any, as string or a sequence of strings
     @param   make_iterables  function yielding pairs of ({info}, function yielding rows)
     @param   output          print-function to use if not print()
-    @param   multiple        whether to output as multi-item
+    @param   combined        whether to output as multi-item
     @param   empty           do not skip iterables with no output rows
     @param   progress        callback(?done, ?error) to report export progress,
                              returning false if export should cancel
@@ -853,7 +853,7 @@ def export_to_console(format, make_iterables, title=None,
                       "yaml": templates.DATA_ROWS_YAML}
     output = output or print
     result, writer, started, hr, allnames = True, None, False, "", set()
-    ns = {"multiple": multiple}
+    ns = {"combined": combined}
 
     output()
     for line in util.tuplefy(title) if title else ():
@@ -900,17 +900,17 @@ def export_to_console(format, make_iterables, title=None,
                 if   "csv"  == format:
                     writer = csv_writer(sys.stdout)
                 elif "json" == format:
-                    if multiple: output("{")
+                    if combined: output("{")
 
             if not i:
                 if   "csv"  == format:
-                    if multiple:
+                    if combined:
                         writer.writerow()
                         writer.writerow([item["name"]])
-                    writer.writerow(([""] if multiple else []) + colnames)
+                    writer.writerow(([""] if combined else []) + colnames)
                 elif "json" == format:
                     if started: output("  ],")
-                    output("[" if not multiple else "  %s: [" % json.dumps(item["name"]))
+                    output("[" if not combined else "  %s: [" % json.dumps(item["name"]))
                 elif "sql"  == format:
                     if started:
                         output("\n")
@@ -940,7 +940,7 @@ def export_to_console(format, make_iterables, title=None,
                     output(hr)
                 elif "yaml" == format:
                     if started: output()
-                    if multiple:
+                    if combined:
                         key = yaml.safe_dump({name: None})
                         output("%s:" % key[:key.rindex(":")])
 
@@ -950,7 +950,7 @@ def export_to_console(format, make_iterables, title=None,
 
             do_break = not i % 100 and progress and not progress(name=name, count=i + 1)
             if "csv" == format:
-                writer.writerow(([""] if multiple else []) + list(row.values()))
+                writer.writerow(([""] if combined else []) + list(row.values()))
             else:
                 ns.update({"rows": [row]})
                 tpl = step.Template(ITEM_TEMPLATES[format], strip=False)
@@ -970,7 +970,7 @@ def export_to_console(format, make_iterables, title=None,
 
     if started:
         if "json" == format:
-            if multiple:
+            if combined:
                 output("  ]")
                 output("}")
             else:

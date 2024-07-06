@@ -10981,7 +10981,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             for item in copymenu.MenuItems: menu.Bind(wx.EVT_MENU, on_copy, item)
 
             menu.Bind(wx.EVT_MENU, cmd("export", "tables",    *names), item_export_indiv)
-            menu.Bind(wx.EVT_MENU, cmd("export", "multiitem", *names), item_export_combine) if item_export_combine else None
+            menu.Bind(wx.EVT_MENU, cmd("export", "combined",  *names), item_export_combine) if item_export_combine else None
             menu.Bind(wx.EVT_MENU, cmd("export", "data",      *names), item_export_data) if item_export_data else None
             menu.Bind(wx.EVT_MENU, cmd("export", "structure", *names), item_export_schema)
             menu.Bind(wx.EVT_MENU, cmd("export", "diagram",   *names), item_export_image)
