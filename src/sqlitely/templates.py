@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.07.2024
+@modified    06.07.2024
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1781,8 +1781,13 @@ except ImportError:
   <br /><br />
   All search texts and keywords are case-insensitive by default. <br />
   Keywords are global, even when in bracketed (grouped words). <br />
-  Metadata search supports only <code>table:</code> and <code>view:</code> keywords.
-
+  Metadata search supports only <font color="{{ conf.HelpCodeColour }}"><code>table:</code></font>
+  and <font color="{{ conf.HelpCodeColour }}"><code>view:</code></font> keywords,<br />
+  and does not support <font color="{{ conf.HelpCodeColour }}"><code>OR</code></font> queries.
+  <br /><br />
+  <b>Note:</b> for excluding words or keywords in the command-line interface,<br />
+  use the tilde character (<font color="{{ conf.HelpCodeColour }}"><code>~</code></font>)
+  instead of the dash (<font color="{{ conf.HelpCodeColour }}"><code>-</code></font>).
 </td></tr></table>
 </font>
 """
