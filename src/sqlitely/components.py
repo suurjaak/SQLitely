@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.07.2024
+@modified    06.07.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -10558,7 +10558,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
 
         self.Freeze()
         try:
-            self.SetZoom(self.ZOOM_DEFAULT, refresh=False)
+            self.SetZoom(self.ZOOM_DEFAULT, remake=False, refresh=False)
 
             names = list(self._layout.Items)
             if self.ShowLines:
