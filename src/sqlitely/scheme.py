@@ -1506,7 +1506,7 @@ class SchemaPlacement(object):
         """
         Returns wx.Bitmaps representing a schema item like table.
 
-        @param    opts         schema item
+        @param    opts        schema item
         @param    statistics  item statistics {?size, ?rows, ?rows_maxunits} if any
         @param    dragrect    whether to return a single bitmap for drag rectangle highlight
         @return               (default bitmap, focused bitmap) or bitmap inside drag rectangle
