@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.07.2024
+@modified    06.07.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -247,7 +247,7 @@ ARGUMENTS = {
          "arguments": [
              {"args": ["INFILE"], "metavar": "DATABASE",
               "help": "SQLite database file to parse"},
-             {"args": ["SEARCH"], "nargs": "?", "default": "", "type": str.strip,
+             {"args": ["FILTER"], "nargs": "*", "default": [],
               "help": "search text if any, with simple query syntax, for example:\n"
                       '"each word present" or "fk_* trigger:on_insert_*".\n'
                       "More at https://suurjaak.github.io/SQLitely/help.html."},
@@ -299,7 +299,7 @@ ARGUMENTS = {
          "arguments": [
              {"args": ["INFILE"], "metavar": "DATABASE",
               "help": "SQLite database file to search"},
-             {"args": ["SEARCH"], "type": str.strip,
+             {"args": ["FILTER"], "nargs": "+", "default": [],
               "help": "search text, with simple query syntax, for example:\n"
                       '"each word in some col" or "this OR that column:foo*".\n'
                       "More at https://suurjaak.github.io/SQLitely/help.html." },
@@ -687,7 +687,7 @@ def make_search_title(args):
     Returns a list of texts with search parameters.
 
     @param   args
-               SEARCH       search query
+               FILTER       search query
                case         case-sensitive search
                limit        maximum number of matches to find
                offset       number of initial matches
@@ -695,8 +695,8 @@ def make_search_title(args):
                ?maxcount    maximum total number of rows to export over all tables and views
     """
     result = []
-    if args.SEARCH:
-        result.append("Search query: %s" % args.SEARCH)
+    if args.FILTER:
+        result.append("Search query: %s" % args.FILTER)
     limit  = (-1 if args.limit  is None or args.limit  < 0 else args.limit)
     offset = (-1 if args.offset is None or args.offset < 0 else args.offset)
     if limit >= 0 or offset > 0:
@@ -726,6 +726,9 @@ def prepare_args(action, args):
     if importexport.yaml: FORMATS["yaml"] = list(importexport.YAML_EXTS)
     if action in ACTION_FORMATS:
         FORMATS = {k: v for k, v in FORMATS.items() if k in ACTION_FORMATS[action]}
+
+    if action in ("parse", "pragma", "search"):
+        args.FILTER = " ".join(x.strip() for x in args.FILTER)
 
     if "import" != action and args.OUTFILE and hasattr(args, "format") and not args.format:
         fmt = os.path.splitext(args.OUTFILE)[-1].lower().lstrip(".")
@@ -1445,7 +1448,7 @@ def run_parse(dbname, args):
 
     @param   dbname         path of database to export
     @param   args
-               SEARCH       search query
+               FILTER       search query
                OUTFILE      path of output file, if any
                case         case-sensitive search
                limit        maximum number of matches to find
@@ -1460,7 +1463,7 @@ def run_parse(dbname, args):
 
     errput = lambda s="", *a, **kw: output(s, *a, file=sys.stderr, **kw)
     infoput = errput if args.OUTFILE else output
-    _, _, words, kws = searchparser.SearchQueryParser("~").Parse(args.SEARCH, args.case)
+    _, _, words, kws = searchparser.SearchQueryParser("~").Parse(args.FILTER, args.case)
 
     counts = collections.defaultdict(int) # {category: count}
     matches = [] # [SQL, ]
@@ -1508,14 +1511,14 @@ def run_parse(dbname, args):
         if not counts:
             infoput()
             infoput("Found nothing in %s%s.",
-                    dbname, " matching %r" % args.SEARCH if db.schema and args.SEARCH else "")
+                    dbname, " matching %r" % args.FILTER if db.schema and args.FILTER else "")
         elif not args.OUTFILE:
             output("\n-- Source: %s", dbname)
             for l in headers:
                 output("-- %s", l)
             if headers: output()
             output(";\n\n".join(matches) + ";")
-            if args.SEARCH:
+            if args.FILTER:
                 output("\n-- Found %s: %s.", util.plural("entity", matches), countstr)
         else:
             fmt_bytes = lambda f, s=None: util.format_bytes((s or os.path.getsize)(f))
@@ -1551,7 +1554,7 @@ def run_pragma(dbname, args):
     db.close()
 
     if args.FILTER:
-        rgx_filters = [re.compile(re.escape(y), flags=re.I) for x in args.FILTER for y in x.split()]
+        rgx_filters = [re.compile(re.escape(x), flags=re.I) for x in args.FILTER.split()]
         for name, value in list(pragmas.items()):
             vals = [str(v) for v in (value if isinstance(value, list) else [value])]
             if isinstance(value, bool): vals.append(str(int(value))) # Match bools as integer also
@@ -1581,7 +1584,7 @@ def run_search(dbname, args):
 
     @param   dbname         path of database to export
     @param   args
-               SEARCH       search query
+               FILTER       search query
                OUTFILE      path of output file, if any
                format       export format
                path         output directory if not current
@@ -1600,7 +1603,7 @@ def run_search(dbname, args):
     queryparser = searchparser.SearchQueryParser("~")
 
     entities = util.CaselessDict(insertorder=True)
-    _, _, _, kws = queryparser.Parse(args.SEARCH, args.case)
+    _, _, _, kws = queryparser.Parse(args.FILTER, args.case)
     for category, item in ((c, x) for c in db.DATA_CATEGORIES for x in db.schema[c].values()):
         if searchparser.match_keywords(item["name"], kws, category, args.case, neg="~") is False:
             continue # for item
@@ -1610,13 +1613,13 @@ def run_search(dbname, args):
     limit = (maxrow, fromrow) if (fromrow > 0) else (maxrow, ) if (maxrow >= 0) else ()
 
     if not entities:
-        sys.exit("Nothing to search in %s with %r." % (dbname, args.SEARCH))
+        sys.exit("Nothing to search in %s with %r." % (dbname, args.FILTER))
 
 
     def make_iterables():
         """Yields pairs of ({item}, callable returning iterable cursor)."""
         for item in (reversed if args.reverse else list)(entities.values()):
-            sql, params, _, _ = queryparser.Parse(args.SEARCH, args.case, item)
+            sql, params, _, _ = queryparser.Parse(args.FILTER, args.case, item)
             if not sql: continue  # for item
 
             order_sql = db.get_order_sql(item["name"], reverse=True) if args.reverse else ""
