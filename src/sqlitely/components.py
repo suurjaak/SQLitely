@@ -8934,18 +8934,27 @@ class ColumnDialog(wx.Dialog):
         page = wx.Panel(notebook)
 
 
-        def set_value(value):
-            """Sets value to text control."""
+        def set_value(value, cursor=False, replace=False):
+            """Sets value to text control, replacing current selection if specified."""
             edit = tedit if tedit.Shown else nedit
-            if tedit.Shown: # Workaround for STC.SetValue emptying contents if very exotic string
-                try: tedit.SetTextRaw(value.encode("utf-8"))
-                except Exception: pass
-                else: return
-            edit.Value = value
+            p1, p2 = edit.GetSelection()
+            if not replace:
+                if tedit.Shown: # Workaround for STC.SetValue emptying contents if exotic string
+                    try: tedit.SetTextRaw(value.encode("utf-8"))
+                    except Exception: tedit.Value = value
+                else: nedit.Value = value
+                if cursor: edit.SetSelection(p1, p1)
+                return
+            try: # nedit not applicable if replace
+                raw = value.encode("utf-8")
+                tedit.ReplaceSelectionRaw(raw)
+                tedit.SetSelection(p1, p1 + len(raw))
+            except Exception: # Fallback to strings
+                tedit.SetValue(tedit.Value[:p1] + value + tedit.Value[p2:])
+                tedit.SetSelection(p1, p2)
 
         def do_case(category):
-            edit = tedit if tedit.Shown else nedit
-            value = edit.StringSelection or edit.Value
+            value = tedit.SelectedText or tedit.Value
             if not value: return
 
             if   "upper"    == category: value = value.upper()
@@ -8970,16 +8979,11 @@ class ColumnDialog(wx.Dialog):
                 value = "".join(x.lower() if i % 2 else x.upper()
                                 for i, x in enumerate(value))
 
-            if not edit.StringSelection: set_value(value)
-            else:
-                v, (p1, p2) = edit.Value, edit.GetSelection()
-                set_value(v[:p1] + value + v[p2:])
-                edit.SetSelection(p1, p1 + len(value))
-            on_change(edit.Value)
+            set_value(value, cursor=True, replace=not tedit.GetSelectionEmpty())
+            on_change(tedit.Value)
 
         def do_transform(category):
-            edit = tedit if tedit.Shown else nedit
-            value = edit.StringSelection or edit.Value
+            value = tedit.SelectedText or tedit.Value
             if not value: return
 
             try:
@@ -9017,12 +9021,8 @@ class ColumnDialog(wx.Dialog):
                     value = re.sub("<[^>]+?>", "", value)
             except Exception: pass
             else:
-                if not edit.StringSelection: set_value(value)
-                else:
-                    v, (p1, p2) = edit.Value, edit.GetSelection()
-                    set_value(v[:p1] + value + v[p2:])
-                    edit.SetSelection(p1, p1 + len(value))
-                on_change(edit.Value)
+                set_value(value, cursor=True, replace=not tedit.GetSelectionEmpty())
+                on_change(tedit.Value)
 
         def on_set(event):
             menu = wx.Menu()
