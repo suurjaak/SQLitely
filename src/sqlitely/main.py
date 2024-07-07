@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.07.2024
+@modified    07.07.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -839,9 +839,9 @@ def filter_columns(columns, filters):
         else:
             start, end, items = 0, len(columns), list(columns.items())
             if first is not None:
-                start = next((i for i, (_, c) in enumerate(items) if c == first), None)
+                start = next((i for i, (_, c) in enumerate(items) if util.lceq(c, first)), None)
             if last is not None:
-                end = next((i + 1 for i, (_, c) in enumerate(items) if c == last), None)
+                end = next((i + 1 for i, (_, c) in enumerate(items) if util.lceq(c, last)), None)
             if start is None or end is None: continue # for first, last
             for i in range(start, end):
                 result[items[i][0]] = items[i][1]
@@ -1262,7 +1262,7 @@ def run_import(infile, args):
                        [util.int_to_base(i) for i in range(len(sheet["columns"]))]
             sourcecols = collections.OrderedDict(enumerate(colnames))
             if args.columns:
-                try: col_filters = parse_columns(args.columns, numeric=True)
+                try: col_filters = not has_dicts and parse_columns(args.columns, numeric=True)
                 except Exception: col_filters = None
                 if col_filters and has_names:
                     fnames = [x for x in re.split(r",|\.\.", args.columns) if x and not x.isdigit()]

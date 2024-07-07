@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     24.06.2024
-@modified    05.07.2024
+@modified    07.07.2024
 ------------------------------------------------------------------------------
 """
 import csv
@@ -762,12 +762,12 @@ class TestCLI(unittest.TestCase):
         logger.info("Testing import with column selections.")
 
         COLSETS = {
-            None: ("id", "id,fk"),
+            None: ("id", "id,fk", "id,value"),
             "csv": ("1", "1..1", "1..2", "1,2", "A..A", "A..B", "A..Z"),
         }
         COLSETS["xlsx"] = COLSETS["csv"]
         EXPECTEDS = {
-            "id": ["id"], "id,fk": ["id", "fk"], "1": ["id"],
+            "id": ["id"], "id,fk": ["id", "fk"], "id,value": ["id", "value"], "1": ["id"],
             "1..1": ["id"], "1..2": ["id", "value"], "1,2": ["id", "value"],
             "A..A": ["id"], "A..B": ["id", "value"], "A..Z": ["id", "value", "fk"],
         }
@@ -782,8 +782,9 @@ class TestCLI(unittest.TestCase):
             self.populate_datafile(infile, fmt, data, schema, combined)
 
             basename = os.path.splitext(os.path.basename(infile))[0]
-            for colset in COLSETS[None] + COLSETS.get(fmt, ()):
-                flags = ["--columns", colset]
+            for i, colset in enumerate(COLSETS[None] + COLSETS.get(fmt, ())):
+                flag = colset.upper() if fmt in ("json", "yaml") and i % 2 else colset
+                flags = ["--columns", flag]
                 outfile = self.mktemp(".db")
                 logger.info("Testing import from %s with --colset %s.", fmt.upper(), colset)
                 res, out, err = self.run_cmd("import", infile, outfile, "--assume-yes",
