@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    21.05.2024
+@modified    07.07.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -490,7 +490,7 @@ class SchemaPlacement(object):
                                     "hasmeta": bool(opts.get("meta")),
                                     "size_total": opts.get("size_total"), "count": opts.get("count"),
                                     "keys": keys.get(name, ((), ())),
-                                    "columns": [dict(c)  for c in opts["columns"]],
+                                    "columns": [dict(c)  for c in opts.get("columns", [])],
                                     "bmp": bmp, "bmpsel": bmpsel, "bmparea": None}
                 self._order.append(self._objs[name])
                 if name in rects:
@@ -664,7 +664,7 @@ class SchemaPlacement(object):
         if not opts: return
 
         remake = False
-        if "columns"    in opts and self._show_cols != bool(opts["columns"]):
+        if "columns"    in opts and self._show_cols != bool(opts.get("columns", [])):
             self._show_cols = not self._show_cols
             if self._show_cols: self._show_keys = False
             remake = True
@@ -940,7 +940,7 @@ class SchemaPlacement(object):
         tablecols = util.CaselessDict()
         for name, topts in self._db.schema["table"].items():
             tablecols[name] = util.CaselessDict()
-            for c in topts["columns"]:
+            for c in topts.get("columns") or []:
                 if self.IsColumnShown(self._objs[name], c):
                     tablecols[name][c["name"]] = len(tablecols[name])
 
