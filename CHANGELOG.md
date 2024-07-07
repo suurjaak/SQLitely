@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.3, 2024-07-06
+2.3, 2024-07-07
 ---------------
 - add command-line interface, with execute, export, import, parse, pragma, search, and stats
 - add option to rename SQL window pages
@@ -39,6 +39,7 @@ CHANGELOG
 - tweak column/constraint editor layout
 - disable automatic update checks and downloads in snaps
 - include third-party license texts in snaps and stand-alone exes
+- use latest custom-built PyInstaller 6.7 for producing binaries
 
 
 2.2, 2023-10-08
