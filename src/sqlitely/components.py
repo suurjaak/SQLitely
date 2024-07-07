@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.07.2024
+@modified    07.07.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -8985,6 +8985,7 @@ class ColumnDialog(wx.Dialog):
         def do_transform(category):
             value = tedit.SelectedText or tedit.Value
             if not value: return
+            TEXT = string.printable + "£€§"
 
             try:
                 if "spaces" == category:
@@ -9012,11 +9013,11 @@ class ColumnDialog(wx.Dialog):
                 elif "letters" == category:
                     value = re.sub(r"[^\W\d]+", "", value, re.U)
                 elif "numbers" == category:
-                    value = re.sub("\d+", "", value, re.U)
-                elif "alphanums" == category:
-                    value = re.sub("\w+", "", value, re.U)
-                elif "nonalphanums" == category:
-                    value = re.sub("\W+", "", value, re.U)
+                    value = re.sub("\d+", "", value)
+                elif "text" == category:
+                    value = re.sub("[%s]+" % re.escape(TEXT), "", value, re.I)
+                elif "nontext" == category:
+                    value = re.sub("[^%s]+" % re.escape(TEXT), "", value, re.I)
                 elif "htmlstrip" == category:
                     value = re.sub("<[^>]+?>", "", value)
             except Exception: pass
@@ -9110,8 +9111,8 @@ class ColumnDialog(wx.Dialog):
             item_punct     = wx.MenuItem(menu_strip, -1, "Strip &punctuation")
             item_letters   = wx.MenuItem(menu_strip, -1, "Strip &letters")
             item_numbers   = wx.MenuItem(menu_strip, -1, "Strip &numbers")
-            item_alnum     = wx.MenuItem(menu_strip, -1, "Strip &alphanumerics")
-            item_nonalnum  = wx.MenuItem(menu_strip, -1, "Strip n&on-alphanumerics")
+            item_text      = wx.MenuItem(menu_strip, -1, "Strip &text")
+            item_nontext  = wx.MenuItem(menu_strip,  -1, "Strip non-te&xt")
             item_hstrip    = wx.MenuItem(menu_strip, -1, "Strip &HTML tags")
 
             menu.Append(item_tabs)
@@ -9126,8 +9127,8 @@ class ColumnDialog(wx.Dialog):
             menu_strip.Append(item_punct)
             menu_strip.Append(item_letters)
             menu_strip.Append(item_numbers)
-            menu_strip.Append(item_alnum)
-            menu_strip.Append(item_nonalnum)
+            menu_strip.Append(item_text)
+            menu_strip.Append(item_nontext)
             menu_strip.Append(item_hstrip)
 
             menu.Bind(wx.EVT_MENU, lambda e: do_transform("tabs"),         item_tabs)
@@ -9141,8 +9142,8 @@ class ColumnDialog(wx.Dialog):
             menu.Bind(wx.EVT_MENU, lambda e: do_transform("punctuation"),  item_punct)
             menu.Bind(wx.EVT_MENU, lambda e: do_transform("letters"),      item_letters)
             menu.Bind(wx.EVT_MENU, lambda e: do_transform("numbers"),      item_numbers)
-            menu.Bind(wx.EVT_MENU, lambda e: do_transform("alphanums"),    item_alnum)
-            menu.Bind(wx.EVT_MENU, lambda e: do_transform("nonalphanums"), item_nonalnum)
+            menu.Bind(wx.EVT_MENU, lambda e: do_transform("text"),         item_text)
+            menu.Bind(wx.EVT_MENU, lambda e: do_transform("nontext"),      item_nontext)
             menu.Bind(wx.EVT_MENU, lambda e: do_transform("htmlstrip"),    item_hstrip)
 
             event.EventObject.PopupMenu(menu, (0, event.EventObject.Size[1]))
