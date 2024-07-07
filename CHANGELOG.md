@@ -40,6 +40,7 @@ CHANGELOG
 - disable automatic update checks and downloads in snaps
 - include third-party license texts in snaps and stand-alone exes
 - use latest custom-built PyInstaller 6.7 for producing binaries
+- use _x86 suffix for 32-bit binaries, drop _x64 suffix from 64-bit binaries
 
 
 2.2, 2023-10-08
