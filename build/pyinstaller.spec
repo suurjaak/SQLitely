@@ -40,13 +40,13 @@ SQLITE_ANALYZER = "sqlite3_analyzer.exe"   if "nt"  == os.name else \
                   "sqlite3_analyzer_osx"   if "os2" == os.name else \
                   "sqlite3_analyzer_linux" if not DO_64BIT else \
                   "sqlite3_analyzer_linux_x64"
-a.datas += [("conf.py",                 "src/%s/conf.py" % NAME, "DATA"), # For configuration docstrings
-            ("3rd-party licenses.txt",  "src/%s/media/3rd-party licenses.txt" % NAME, "DATA"),
-            ("bin/" + SQLITE_ANALYZER,  "src/%s/bin/%s" % (NAME, SQLITE_ANALYZER),    "DATA"),
-            ("res/Carlito.ttf",         "src/%s/media/Carlito.ttf"            % NAME, "DATA"),
-            ("res/CarlitoBold.ttf",     "src/%s/media/CarlitoBold.ttf"        % NAME, "DATA"),
-            ("res/OpenSans.ttf",        "src/%s/media/OpenSans.ttf"           % NAME, "DATA"),
-            ("res/OpenSansBold.ttf",    "src/%s/media/OpenSansBold.ttf"       % NAME, "DATA"), ]
+a.datas += [("conf.py",                    "src/%s/conf.py" % NAME, "DATA"), # For configuration docstrings
+            ("res/3rd-party licenses.txt", "3rd-party licenses.txt", "DATA"),
+            ("bin/" + SQLITE_ANALYZER,     "src/%s/bin/%s" % (NAME, SQLITE_ANALYZER),    "DATA"),
+            ("res/Carlito.ttf",            "src/%s/media/Carlito.ttf"            % NAME, "DATA"),
+            ("res/CarlitoBold.ttf",        "src/%s/media/CarlitoBold.ttf"        % NAME, "DATA"),
+            ("res/OpenSans.ttf",           "src/%s/media/OpenSans.ttf"           % NAME, "DATA"),
+            ("res/OpenSansBold.ttf",       "src/%s/media/OpenSansBold.ttf"       % NAME, "DATA"), ]
 a.binaries = a.binaries - TOC([
     ('tcl85.dll', None, None), ('tk85.dll',  None, None), ('_tkinter',  None, None)
 ])

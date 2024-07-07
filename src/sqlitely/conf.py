@@ -32,14 +32,14 @@ except ImportError: wx = None
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "2.3.dev164"
+Version = "2.3.dev165"
 VersionDate = "07.07.2024"
 
 Frozen, Snapped = getattr(sys, "frozen", False), (sys.executable or "").startswith("/snap/")
 if Frozen: # Running as a pyinstaller executable
     ApplicationDirectory = os.path.dirname(sys.executable)
     ApplicationFile = os.path.realpath(sys.executable)
-    ResourceDirectory = os.path.join(getattr(sys, "_MEIPASS", ""), "media")
+    ResourceDirectory = os.path.join(getattr(sys, "_MEIPASS", ""), "res")
     BinDirectory = os.path.join(getattr(sys, "_MEIPASS", ""), "bin")
     EtcDirectory = ApplicationDirectory
 else:
