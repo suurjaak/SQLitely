@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.07.2024
+@modified    08.07.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -12295,9 +12295,8 @@ class ImportWizard(wx.adv.Wizard):
                     self.page2.label_gauge1.Disable()
                     self.page2.label_gauge2.Disable()
                 self.page2.log.AppendText(info)
-            if "linux" in sys.platform:
-                b = self.page2.FindWindowById(wx.ID_FORWARD)
-                b.MinSize = b.BestSize # Will not widen button otherwise
+            b = self.page2.FindWindowById(wx.ID_FORWARD)
+            b.MinSize = b.BestSize # Will not widen button otherwise
             self.Layout()
 
         if callable(callback): callback(self.page2.importing)
