@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.07.2024
+@modified    08.07.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2306,6 +2306,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             CMDS = ["page = self.page_db_latest # Database tab",
                     "db = page.db if page else None # SQLite database wrapper"]
             for cmd in CMDS: self.TopLevelParent.run_console(cmd)
+        wx.CallAfter(ColourManager.UpdateControls)
         self.SendSizeEvent() # Multiline wx.Notebooks need redrawing
 
         # Change notebook page to last visited
@@ -5041,11 +5042,11 @@ class DatabasePage(wx.Panel):
         Stops worker threads, saves page last configuration
         like search text and results.
         """
-
         for worker in self.workers_search.values(): worker.stop()
         self.worker_analyzer.stop()
         self.worker_checksum.stop()
         self.panel_data_export.Stop()
+
         for p in (p for x in self.data_pages.values() for p in x.values()):
             p.Close(force=True)
         for p in (p for x in self.schema_pages.values() for p in x.values()):
@@ -5054,6 +5055,9 @@ class DatabasePage(wx.Panel):
                      for i in range(self.notebook_sql.GetPageCount() - 1)]
         for p in self.sql_pages.values():
             p.Close(force=True)
+        self.TopLevelParent.run_console(
+            "sqlpage = None")
+
         try: self.db.connection.interrupt()
         except Exception: pass
         self.db.clear_locks()
@@ -5090,8 +5094,7 @@ class DatabasePage(wx.Panel):
             else: conf.SQLWindowTexts.pop(self.db.filename, None)
 
         # Save schema diagram state
-        if not self.db.temporary:
-            conf.SchemaDiagrams[self.db.filename] = self.diagram.GetOptions()
+        conf.SchemaDiagrams[self.db.filename] = self.diagram.GetOptions()
         self.diagram.Disable() # Stop diagram workers
 
 
@@ -6071,6 +6074,8 @@ class DatabasePage(wx.Panel):
                     self.pages_closed[self.notebook_schema].append({"name": p.Name, "type": c})
                 self.schema_pages[c].pop(k)
                 break # for c, k, p
+        self.TopLevelParent.run_console(
+            "schemapage = page.notebook_schema.GetPage(0) # Schema object subtab")
         self.update_page_header()
 
 
@@ -6202,6 +6207,8 @@ class DatabasePage(wx.Panel):
                     self.sql_pages.pop(k)
                     break # for k, p
         finally: wx.CallAfter(lambda: self and self.notebook_sql.Thaw())
+        self.TopLevelParent.run_console(
+            "sqlpage = page.notebook_sql.GetPage(0) # SQL window subtab")
 
 
     def on_close_data_page(self, event):
@@ -6215,6 +6222,8 @@ class DatabasePage(wx.Panel):
                 self.data_pages[c].pop(k)
                 break # for c, k, p
         self.update_page_header()
+        self.TopLevelParent.run_console(
+            "datapage = page.notebook_data.GetPage(0) # Data object subtab")
 
 
     def on_data_page_event(self, event):
@@ -6828,7 +6837,7 @@ class DatabasePage(wx.Panel):
             self.on_update_stc_schema()
 
         func = functools.partial(self.db.populate_schema, parse=True, progress=progress)
-        wx.CallLater(100, workers.WorkerThread(progress).work, func)
+        wx.CallLater(100, workers.WorkerThread(progress, oneshot=True).work, func)
         self.on_update_statistics()
 
 

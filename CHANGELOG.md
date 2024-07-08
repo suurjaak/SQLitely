@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.3, 2024-07-07
+2.3, 2024-07-08
 ---------------
 - add command-line interface, with execute, export, import, parse, pragma, search, and stats
 - add option to rename SQL window pages
@@ -33,6 +33,7 @@ CHANGELOG
 - add program version number and date to HTML export metadata
 - fix intermittent mouse event error on diagram
 - fix diagram selection rectangle font issues in Linux
+- fix data leaks from orphaned background threads and dangling references
 - improve handling tables WITHOUT ROWID
 - restore program window on unminimizing from tray if window iconized
 - ensure dialog windows get destroyed when closed

@@ -6284,6 +6284,7 @@ class ExportProgressPanel(wx.Panel):
 
         self.Bind(wx.EVT_BUTTON, self._OnClose, button_close) if multi else None
         self.Bind(wx.EVT_SIZE, lambda e: wx.CallAfter(lambda: self and (self.Layout(), self.Refresh())))
+        self.Bind(wx.EVT_WINDOW_DESTROY, self._OnDestroy, self)
 
         sizer_buttons.Add(button_close) if multi else None
 
@@ -6462,6 +6463,11 @@ class ExportProgressPanel(wx.Panel):
         self._Populate()
         wx.PostEvent(self, ProgressEvent(self.Id, close=True))
         if any(x["pending"] for x in self._tasks): self._OnComplete()
+
+
+    def _OnDestroy(self, event):
+        """Handler for window destruction, stops worker thread."""
+        self._worker.stop()
 
 
     def _OnCancel(self, index, event=None):
@@ -10475,6 +10481,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         self.Bind(wx.EVT_SCROLL_CHANGED,      self._OnScroll)
         self.Bind(wx.EVT_CHAR_HOOK,           self._OnKey)
         self.Bind(wx.EVT_CONTEXT_MENU,        lambda e: self.OpenContextMenu())
+        self.Bind(wx.EVT_WINDOW_DESTROY, self._OnDestroy, self)
 
 
     def GetBorderColour(self):         return self._layout.BorderColour
@@ -11538,6 +11545,13 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
                 delta = [-v for v in delta]
             self.ScrollXY(v + d for v, d in zip(self.GetViewPort().TopLeft, delta))
         else: event.Skip()
+
+
+    def _OnDestroy(self, event):
+        """Handler for window destruction, stops worker threads and clears cache."""
+        self._worker_graph.stop()
+        self._worker_bmp.stop()
+        self._layout = None
 
 
     def _PostEvent(self, **kwargs):

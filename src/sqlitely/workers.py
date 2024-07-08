@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.07.2024
+@modified    08.07.2024
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -41,14 +41,15 @@ logger = logging.getLogger(__name__)
 class WorkerThread(threading.Thread):
     """Base class for worker threads."""
 
-    def __init__(self, callback=None):
+    def __init__(self, callback=None, oneshot=False):
         """
-        @param   callback  function to invoke with {done, result, callable}
-                           or {error, callable}
+        @param   callback  function to invoke with {done, result, callable} or {error, callable}
+        @param   oneshot   stop automatically after completing one work
         """
         threading.Thread.__init__(self)
         self.daemon = True
         self._callback = callback
+        self._oneshot  = oneshot
         self._is_running   = False # Flag whether thread is running
         self._is_working   = False # Flag whether thread is currently working
         self._drop_results = False # Flag to not post back obtained results
@@ -65,7 +66,8 @@ class WorkerThread(threading.Thread):
         """
         self._drop_results = False
         self._queue.put((function, kws) if kws else function)
-        if not self._is_running: self.start()
+        if not self._is_running:
+            self.start()
 
 
     def stop(self, drop=True):
@@ -107,7 +109,11 @@ class WorkerThread(threading.Thread):
     def run(self):
         """Generic runner, expects a callable to invoke."""
         self._is_running = True
+        loops = 0
         while self._is_running:
+            if self._oneshot and loops: break # while self._is_running
+            loops += 1
+
             func, kws = self._queue.get(), {}
             if not func: continue # while self._is_running
             if isinstance(func, tuple): func, kws = func
@@ -127,6 +133,8 @@ class WorkerThread(threading.Thread):
             else: data = {"callable": func, "done": True, "result": result}
             self.postback(data, **kws)
             self._is_working = False
+        self._is_running = False
+        self._is_working = False
 
 
 

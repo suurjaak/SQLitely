@@ -5767,9 +5767,19 @@ class TextCtrlAutoComplete(wx.TextCtrl):
             self._listbox.Bind(wx.EVT_MOUSE_EVENTS, self.OnMouse)
             self._listwindow.Bind(wx.EVT_LISTBOX,   self.OnListItemSelected,
                                   self._listbox)
+            self.Bind(wx.EVT_WINDOW_DESTROY,        self.OnDestroy, self)
         self.Bind(wx.EVT_SET_FOCUS,                 self.OnFocus, self)
         self.Bind(wx.EVT_KILL_FOCUS,                self.OnFocus, self)
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED,        self.OnSysColourChange)
+
+
+    def OnDestroy(self, event):
+        """Handler for window destruction, unbinds handlers from parents."""
+        gp = self
+        while gp is not None:
+            gp.Unbind(wx.EVT_MOVE, gp, handler=self.OnSizedOrMoved)
+            gp.Unbind(wx.EVT_SIZE, gp, handler=self.OnSizedOrMoved)
+            gp = gp.GetParent()
 
 
     def OnSysColourChange(self, event):
