@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.3, 2024-07-08
+2.3, 2024-07-10
 ---------------
 - add command-line interface, with execute, export, import, parse, pragma, search, and stats
 - add option to rename SQL window pages
