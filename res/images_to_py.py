@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author    Erki Suurjaak
 @created   21.08.2019
-@modified  06.08.2023
+@modified  06.06.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -106,14 +106,22 @@ IMAGES = {
         "Toolbar icon for column form button in data grids.",
     "ToolbarCommit.png":
         "Toolbar icon for commit button in database table grids.",
+    "ToolbarCopy.png":
+        "Toolbar icon for copy-to-clipboard buttons.",
     "ToolbarDelete.png":
         "Toolbar icon for delete button in database table grids.",
+    "ToolbarFileOpen.png":
+        "Toolbar icon for open-file buttons.",
+    "ToolbarFileSave.png":
+        "Toolbar icon for save-file buttons.",
     "ToolbarForm.png":
         "Toolbar icon for form button in data grids.",
     "ToolbarFullScreen.png":
         "Toolbar icon for full screen button in row editor.",
     "ToolbarFunction.png":
         "Toolbar icon for user-defined functions button in value editor.",
+    "ToolbarGoForward.png":
+        "Toolbar icon for go-forward buttons.",
     "ToolbarGoto.png":
         "Toolbar icon for goto button in data grids.",
     "ToolbarInsert.png":
@@ -134,6 +142,8 @@ IMAGES = {
         "Toolbar icon for data button on search page.",
     "ToolbarNumbered.png":
         "Toolbar icon for line numbers button on schema STCs.",
+    "ToolbarPaste.png":
+        "Toolbar icon for paste-from-clipboard buttons.",
     "ToolbarTabs.png":
         "Toolbar icon for tabs toggle button on search page.",
     "ToolbarTick.png":

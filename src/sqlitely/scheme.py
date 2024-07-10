@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    01.10.2023
+@modified    07.07.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -30,6 +30,7 @@ except ImportError: wx = None
 from . lib import util
 try: from . lib import controls
 except ImportError: controls = None
+from . import grammar
 from . import images
 from . import templates
 
@@ -489,7 +490,7 @@ class SchemaPlacement(object):
                                     "hasmeta": bool(opts.get("meta")),
                                     "size_total": opts.get("size_total"), "count": opts.get("count"),
                                     "keys": keys.get(name, ((), ())),
-                                    "columns": [dict(c)  for c in opts["columns"]],
+                                    "columns": [dict(c)  for c in opts.get("columns", [])],
                                     "bmp": bmp, "bmpsel": bmpsel, "bmparea": None}
                 self._order.append(self._objs[name])
                 if name in rects:
@@ -663,7 +664,7 @@ class SchemaPlacement(object):
         if not opts: return
 
         remake = False
-        if "columns"    in opts and self._show_cols != bool(opts["columns"]):
+        if "columns"    in opts and self._show_cols != bool(opts.get("columns", [])):
             self._show_cols = not self._show_cols
             if self._show_cols: self._show_keys = False
             remake = True
@@ -889,8 +890,9 @@ class SchemaPlacement(object):
             if not self.IsColumnShown(opts, c):
                 continue  # for c
             coltexts.append([])
-            for k in ["name", "type"]:
-                t = util.ellipsize(util.unprint(c.get(k, "")), self.MAX_TEXT)
+            for i, k in enumerate(["name", "type"]):
+                t = c.get(k, "") if i or c.get(k) is None else util.unprint(grammar.quote(c[k], embed=True))
+                t = util.ellipsize(t, self.MAX_TEXT)
                 coltexts[-1].append(t)
                 if t: extent = self.GetTextExtent(t)
                 if t: colmax[k] = max(colmax[k], extent[0])
@@ -938,7 +940,7 @@ class SchemaPlacement(object):
         tablecols = util.CaselessDict()
         for name, topts in self._db.schema["table"].items():
             tablecols[name] = util.CaselessDict()
-            for c in topts["columns"]:
+            for c in topts.get("columns") or []:
                 if self.IsColumnShown(self._objs[name], c):
                     tablecols[name][c["name"]] = len(tablecols[name])
 
@@ -1272,7 +1274,7 @@ class SchemaPlacement(object):
         bmpname = ("bmparea" if self._dragrect else "bmpsel") if o["name"] in self._sels else "bmp"
         bmp = o[bmpname]
         if bmp is None:
-            bmp = self.GetItemBitmaps(o, dragrect=name in self._sels)
+            bmp = self.GetItemBitmaps(o, dragrect=self._dragrect and name in self._sels)
             if isinstance(bmp, tuple):
                 o["bmp"], o["bmpsel"] = bmp
                 bmp = o[bmpname]
@@ -1449,7 +1451,7 @@ class SchemaPlacement(object):
         key2 = (opts["sql0"], bool(opts.get("meta") or opts.get("hasmeta")),
                 self._show_cols, self._show_keys, self._show_nulls,
                 str(statistics) if statistics else None, False)
-        return key1 in self._cache[self._zoom] and key2 in self._cache[self._zoom][key1]
+        return key1 in self._cache[self._zoom] and self._cache[self._zoom][key1].get(key2)
 
 
     def GetItemBitmaps(self, opts, statistics=None, dragrect=False):
@@ -1504,7 +1506,7 @@ class SchemaPlacement(object):
         """
         Returns wx.Bitmaps representing a schema item like table.
 
-        @param    opts         schema item
+        @param    opts        schema item
         @param    statistics  item statistics {?size, ?rows, ?rows_maxunits} if any
         @param    dragrect    whether to return a single bitmap for drag rectangle highlight
         @return               (default bitmap, focused bitmap) or bitmap inside drag rectangle
@@ -1724,6 +1726,9 @@ class SchemaPlacement(object):
                 self.FONT_FACE = name
                 self.FONT_SIZE = size
                 success = True
+        if success:
+            self._font      = self.MakeFont(self.FONT_FACE, self.FONT_SIZE * self._zoom)
+            self._font_bold = self.MakeFont(self.FONT_FACE, self.FONT_SIZE * self._zoom, bold=True)
 
 
     def EnsureSize(self):

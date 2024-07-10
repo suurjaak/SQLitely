@@ -8,14 +8,13 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.10.2023
+@modified    08.07.2024
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
 import hashlib
 import locale
 import logging
-import multiprocessing.connection
 import os
 import re
 import sqlite3
@@ -33,7 +32,7 @@ from . lib import util
 from . import conf
 from . import database
 from . import grammar
-from . searchparser import flatten, match_words, SearchQueryParser
+from . searchparser import SearchQueryParser, flatten, match_keywords, match_words
 from . import templates
 
 logger = logging.getLogger(__name__)
@@ -42,14 +41,15 @@ logger = logging.getLogger(__name__)
 class WorkerThread(threading.Thread):
     """Base class for worker threads."""
 
-    def __init__(self, callback=None):
+    def __init__(self, callback=None, oneshot=False):
         """
-        @param   callback  function to invoke with {done, result, callable}
-                           or {error, callable}
+        @param   callback  function to invoke with {done, result, callable} or {error, callable}
+        @param   oneshot   stop automatically after completing one work
         """
         threading.Thread.__init__(self)
         self.daemon = True
         self._callback = callback
+        self._oneshot  = oneshot
         self._is_running   = False # Flag whether thread is running
         self._is_working   = False # Flag whether thread is currently working
         self._drop_results = False # Flag to not post back obtained results
@@ -66,7 +66,8 @@ class WorkerThread(threading.Thread):
         """
         self._drop_results = False
         self._queue.put((function, kws) if kws else function)
-        if not self._is_running: self.start()
+        if not self._is_running:
+            self.start()
 
 
     def stop(self, drop=True):
@@ -108,7 +109,11 @@ class WorkerThread(threading.Thread):
     def run(self):
         """Generic runner, expects a callable to invoke."""
         self._is_running = True
+        loops = 0
         while self._is_running:
+            if self._oneshot and loops: break # while self._is_running
+            loops += 1
+
             func, kws = self._queue.get(), {}
             if not func: continue # while self._is_running
             if isinstance(func, tuple): func, kws = func
@@ -128,6 +133,8 @@ class WorkerThread(threading.Thread):
             else: data = {"callable": func, "done": True, "result": result}
             self.postback(data, **kws)
             self._is_working = False
+        self._is_running = False
+        self._is_working = False
 
 
 
@@ -158,25 +165,30 @@ class SearchThread(WorkerThread):
         """Searches database metadata, yielding (infotext, result)."""
         infotext, case = "database metadata", search.get("case")
         _, _, words, kws = self.parser.Parse(search["text"], case)
-        pattern_replace = self.make_replacer(words, case)
+        repl_words = words + sum((list(vv) for k, vv in kws.items() if k[0] != "-"), [])
+        pattern_replace = self.make_replacer(repl_words, case)
         tpl = step.Template(templates.SEARCH_ROW_META_HTML, escape=True)
         result = {"output": "", "map": {}, "search": search, "count": 0}
 
         counts = OrderedDict() # {category: count}
+        category_kws = {x for k in kws for x in [re.sub("^-", "", k)]
+                        if x in search["db"].CATEGORIES}
         for category in database.Database.CATEGORIES if (words or kws) else ():
-            othercats = set(database.Database.CATEGORIES) - set([category])
-            if category not in kws and othercats & set(kws):
+            othercats = set(search["db"].CATEGORIES) - set([category])
+            if category_kws and category not in category_kws and othercats & set(kws):
                 continue # for category
 
             for item in search["db"].get_category(category).values():
-                if (category in kws
-                and not match_words(item["name"], kws[category], any, case)
-                or "-" + category in kws
-                and match_words(item["name"], kws["-" + category], any, case)):
+                if match_keywords(item["name"], kws, category, case) is False:
                     continue # for item
 
-                if not match_words(item["sql"], words, all, case) \
-                and (words or category not in kws):
+                if "column" in kws or "-column" in kws:
+                    cols = [x.get("name") or x.get("expr") or "" for x in item.get("columns", [])]
+                    cols = list(filter(bool, cols))
+                    if match_keywords(cols, kws, "column", case) is False:
+                        continue # for item
+
+                if words and not match_words(item["sql"], words, case, all):
                     continue # for item
 
                 counts[category] = counts.get(category, 0) + 1
@@ -559,45 +571,3 @@ class ChecksumThread(WorkerThread):
             elif self._is_working:
                 self.postback({"sha1": sha1.hexdigest(), "md5": md5.hexdigest()})
             self._is_working = False
-
-
-
-class IPCListener(WorkerThread):    
-    """
-    Inter-process communication server that listens on a port and posts
-    received data to application.
-    """
-
-    def __init__(self, authkey, port, callback, limit=10000):
-        super(IPCListener, self).__init__(callback)
-        self._listener = None   # multiprocessing.connection.Listener
-        self._authkey = authkey # Listener authentication text
-        self._port = port
-        self._limit = limit
-
-
-    def run(self):
-        self._is_running = True
-        port, limit = self._port, self._limit
-        while not self._listener and limit and self._is_running:
-            kwargs = {"address": ("localhost", port), "authkey": self._authkey}
-            try:    self._listener = multiprocessing.connection.Listener(**kwargs)
-            except Exception: port, limit = port + 1, limit - 1
-            else:   self._is_working = True
-        if not self._is_working:
-            self._is_running = False
-            return
-        self._port = port
-
-        while self._is_running:
-            try: self._callback(self._listener.accept().recv())
-            except Exception: logger.exception("Error on IPC port %s.", self._port)
-        self._is_working = False
-        l, self._listener = self._listener, None
-        l and util.try_ignore(l.close)
-
-
-    def stop(self, drop=True):
-        super(IPCListener, self).stop(drop)
-        l, self._listener = self._listener, None
-        l and util.try_ignore(l.close)

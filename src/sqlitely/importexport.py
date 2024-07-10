@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.10.2023
+@modified    06.07.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -18,6 +18,7 @@ import copy
 import csv
 import datetime
 import functools
+import io
 import json
 import logging
 import os
@@ -99,8 +100,8 @@ logger = logging.getLogger(__name__)
 
 
 
-def export_data(make_iterable, filename, format, title, db, columns,
-                query="", category="", name="", multiple=False, progress=None):
+def export_data(db, filename, format, make_iterable, title, columns,
+                query=None, category=None, name=None, combined=False, info=None, progress=None):
     """
     Exports database data to file.
 
@@ -113,7 +114,8 @@ def export_data(make_iterable, filename, format, title, db, columns,
     @param   query           the SQL query producing the data, if any
     @param   category        category producing the data, if any, "table" or "view"
     @param   name            name of the table or view producing the data, if any
-    @param   multiple        whether to use multi-item template
+    @param   combined        whether to use multi-item template
+    @param   info            additional metadata for export, as {title: text or {label: text}}
     @param   progress        callback(name, count) to report progress,
                              returning false if export should cancel
     @return                  True on success, False on failure, None on cancel
@@ -122,11 +124,11 @@ def export_data(make_iterable, filename, format, title, db, columns,
     f, writer, cursor = None, None, None
     TEMPLATES = {
         "root": {
-            "html": templates.DATA_HTML_MULTIPLE_PART if multiple else templates.DATA_HTML,
+            "html": templates.DATA_HTML_MULTIPLE_PART if combined else templates.DATA_HTML,
             "json": templates.DATA_JSON,
-            "sql":  templates.DATA_SQL_MULTIPLE_PART  if multiple else templates.DATA_SQL,
-            "txt":  templates.DATA_TXT_MULTIPLE_PART  if multiple else templates.DATA_TXT,
-            "yaml": templates.DATA_YAML_MULTIPLE_PART if multiple else templates.DATA_YAML,
+            "sql":  templates.DATA_SQL_MULTIPLE_PART  if combined else templates.DATA_SQL,
+            "txt":  templates.DATA_TXT_MULTIPLE_PART  if combined else templates.DATA_TXT,
+            "yaml": templates.DATA_YAML_MULTIPLE_PART if combined else templates.DATA_YAML,
         },
         "rows": {
             "html": templates.DATA_ROWS_HTML,
@@ -142,7 +144,7 @@ def export_data(make_iterable, filename, format, title, db, columns,
     tmpfile, tmpname = None, None # Temporary file for exported rows
     try:
         with open(filename, "wb") as f:
-            if category and name: db.lock(category, name, make_iterable, label="export")
+            if category and name is not None: db.lock(category, name, make_iterable, label="export")
             count = 0
             cursor = make_iterable()
 
@@ -152,9 +154,14 @@ def export_data(make_iterable, filename, format, title, db, columns,
                     writer = csv_writer(filename)
                     if query: query = query.replace("\r", " ").replace("\n", " ")
                 else:
-                    props = {"title": "; ".join(("Source: %s" % db, ) + util.tuplefy(title)),
-                             "comments": templates.export_comment()}
-                    writer = xlsx_writer(filename, name or "SQL Query", props=props)
+                    infostring = "\n\n".join("\n".join("%s: %s" % x for x in v.items()) if isinstance(v, dict)
+                                             else "%s: %s" % (k, v) for k, v in (info or {}).items())
+                    querystring = None if not query else "Query: %s" % query
+                    props = {"title": "; ".join(util.tuplefy(title)),
+                             "subject": "Source: %s" % db, "author": conf.Title,
+                             "comments": "\n\n".join(filter(bool, (infostring, querystring,
+                                                                   templates.export_comment())))}
+                    writer = xlsx_writer(filename, name if name is not None else "SQL Query", props=props)
                     writer.set_header(True)
                 if query:
                     a = [[query]] + (["bold", 0, False] if "xlsx" == format else [])
@@ -177,13 +184,14 @@ def export_data(make_iterable, filename, format, title, db, columns,
                     "sql":        query,
                     "category":   category,
                     "name":       name,
-                    "multiple":   multiple,
+                    "combined":   combined,
+                    "info":       info,
                     "progress":   progress,
                 }
                 namespace["namespace"] = namespace # To update row_count
 
                 if "txt" == format: # Run through rows once, to populate text-justify options
-                    widths = {c: len(util.unprint(c)) for c in colnames}
+                    widths = {c: len(util.unprint(grammar.quote(c))) for c in colnames}
                     justs  = {c: True   for c in colnames}
                     try:
                         cursor2 = make_iterable()
@@ -203,7 +211,7 @@ def export_data(make_iterable, filename, format, title, db, columns,
 
                 # Write out data to temporary file first, to populate row count.
                 fh, tmpname = tempfile.mkstemp(prefix="%s.rows." % os.path.basename(filename))
-                tmpfile = open(fh, "wb+")
+                tmpfile = io.open(fh, "wb+")
                 template = step.Template(TEMPLATES["rows"][format], postprocess=convert_lf,
                                          strip=False, escape="html" == format)
                 template.stream(tmpfile, namespace)
@@ -218,7 +226,13 @@ def export_data(make_iterable, filename, format, title, db, columns,
                 elif name:
                     # Add CREATE statement
                     transform = {"flags": {"exists": True}} if "sql" == format else None
-                    create_sql = db.get_sql(category, name, transform=transform)
+                    try: create_sql = db.get_sql(category, name, transform=transform)
+                    except Exception:
+                        if transform:
+                            logger.error("Error transforming CREATE SQL statement for %s %s, "
+                                         "falling back to original CREATE SQL.",
+                                         category, grammar.quote(name, force=True), exc_info=True)
+                            create_sql = db.get_sql(category, name)
                     namespace["create_sql"] = create_sql
 
                 tmpfile.flush(), tmpfile.seek(0)
@@ -235,14 +249,14 @@ def export_data(make_iterable, filename, format, title, db, columns,
         if tmpname:    util.try_ignore(os.unlink, tmpname)
         if not result: util.try_ignore(os.unlink, filename)
         if cursor:     util.try_ignore(lambda: cursor.close())
-        if category and name: db.unlock(category, name, make_iterable)
+        if category and name is not None: db.unlock(category, name, make_iterable)
 
     return result
 
 
 
-def export_data_multiple(filename, format, title, db, category=None, names=None, make_iterables=None,
-                         limit=None, maxcount=None, empty=True, reverse=False, progress=None):
+def export_data_combined(db, filename, format, title, category=None, names=None, make_iterables=None,
+                         limit=None, maxcount=None, empty=True, reverse=False, info=None, progress=None):
     """
     Exports database data from multiple tables/views to a single output file.
 
@@ -258,6 +272,7 @@ def export_data_multiple(filename, format, title, db, category=None, names=None,
     @param   maxcount        maximum total number of rows to export over all entities
     @param   empty           do not skip tables and views with no output rows
     @param   reverse         query rows in reverse order if using category
+    @param   info            additional metadata for export, as {title: text or {label: text}}
     @param   progress        callback(name, count) to report progress,
                              returning false if export should cancel
     @return                  True on success, False on failure, None on cancel
@@ -270,7 +285,7 @@ def export_data_multiple(filename, format, title, db, category=None, names=None,
                  "txt":  templates.DATA_TXT_MULTIPLE,
                  "yaml": templates.DATA_YAML_MULTIPLE}
 
-    limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else util.tuplefy(limit)
+    limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else (limit, )
     itemfiles = collections.OrderedDict() # {data name: path to partial file containing item data}
     categories = [] if make_iterables else [category] if category else db.DATA_CATEGORIES
     if names:
@@ -348,8 +363,11 @@ def export_data_multiple(filename, format, title, db, category=None, names=None,
                 if "csv" == format:
                     writer = csv_writer(filename)
                 else:
-                    props = {"title": "; ".join(("Source: %s" % db, ) + util.tuplefy(title)),
-                             "comments": templates.export_comment()}
+                    infostring = "\n\n".join("\n".join("%s: %s" % x for x in v.items()) if isinstance(v, dict)
+                                             else "%s: %s" % (k, v) for k, v in (info or {}).items())
+                    props = {"title": "; ".join(util.tuplefy(title)),
+                             "subject": "Source: %s" % db, "author": conf.Title,
+                             "comments": "\n\n".join(filter(bool, (infostring, templates.export_comment())))}
                     writer = xlsx_writer(filename, props=props)
 
             for item_i, (item, make_iterable) in enumerate(make_item_iterables()):
@@ -385,15 +403,20 @@ def export_data_multiple(filename, format, title, db, category=None, names=None,
                         is_empty, _ = not any(cursor), util.try_ignore(lambda: cursor.close())
                         if is_empty: continue # for item_i
 
+                    myitem = dict(item, count=item.get("count", 0))
+                    def myprogress(**kwargs):
+                        if "count" in kwargs: myitem["count"] = kwargs["count"]
+                        return progress(**kwargs) if progress else True
+
                     # Write item data to temporary file, later inserted into main file
                     tmpname = util.unique_path("{0}_{2}{1}".format(*os.path.splitext(filename) + 
                                                                     (util.safe_filename(name), )))
                     itemtitle = "%s %s" % (item["type"].capitalize(),
                                            grammar.quote(name, force=True))
-                    result = export_data(make_iterable, tmpname, format, itemtitle, db,
+                    result = export_data(db, tmpname, format, make_iterable, itemtitle,
                                          item["columns"], category=item["type"], name=name,
-                                         multiple=True, progress=progress)
-                    itemfiles[tmpname] = item
+                                         combined=True, info=info, progress=myprogress)
+                    itemfiles[tmpname] = myitem
 
                 if not result: break # for item_i
                 if progress and not progress():
@@ -408,6 +431,8 @@ def export_data_multiple(filename, format, title, db, category=None, names=None,
                     "db":       db,
                     "title":    title,
                     "files":    itemfiles,
+                    "combined": True,
+                    "info":     info,
                     "progress": progress,
                 }
                 template.stream(f, namespace)
@@ -428,7 +453,7 @@ def export_data_multiple(filename, format, title, db, category=None, names=None,
     return result
 
 
-def export_sql(filename, db, sql, headers=()):
+def export_sql(db, filename, sql, headers=()):
     """Exports arbitrary SQL to file."""
     template = step.Template(templates.CREATE_SQL, strip=False, postprocess=convert_lf)
     ns = {"headers": util.tuplefy(headers) if headers else (), "db": db, "sql": sql}
@@ -436,7 +461,7 @@ def export_sql(filename, db, sql, headers=()):
     return True
 
 
-def export_stats(filename, format, db, data, diagram=None):
+def export_stats(db, filename, format, data, diagram=None):
     """Exports statistics to HTML or SQL or TXT file."""
     TEMPLATES = {"html": templates.DATA_STATISTICS_HTML,
                  "sql":  templates.DATA_STATISTICS_SQL,
@@ -455,34 +480,28 @@ def export_stats(filename, format, db, data, diagram=None):
     return True
 
 
-def export_dump(filename, db, data=True, pragma=True, filters=None, related=False,
-                limit=None, maxcount=None, empty=True, reverse=False, progress=None):
+def export_dump(db, filename, schema=None, data=True, pragma=True,
+                limit=None, maxcount=None, empty=True, reverse=False, info=None, progress=None):
     """
     Exports full database dump to SQL file.
 
     @param   db        Database instance
     @param   data      whether to dump table data
     @param   pragma    whether to dump PRAGMA settings
-    @param   filters   names of database entities to dump if not all,
-                       supports * wildcards
-    @param   related   auto-include related items if using filters, recursively
-                       (for tables: indexes and triggers, and referenced foreign tables;
-                        for views: triggers, and tables and views referenced in view body;
-                        for indexes: parent tables;
-                        for triggers: parent tables or views, and referenced tables and views)
+    @param   schema    {category: [name, ]} to export if not all
     @param   limit     query limits, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
     @param   maxcount  maximum total number of rows to export over all tables
     @param   empty     do not skip items with no output rows
                        (accounting for limit)
     @param   reverse   query rows in reverse order
+    @param   info      additional metadata for export, as {title: text or {label: text}}
     @param   progress  callback(name, count) to report progress,
                        returning false if export should cancel
     @return            True on success, False on failure, None on cancel
     """
     result = False
     entities, namespace, cursors = copy.deepcopy(db.schema), {}, []
-    limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else util.tuplefy(limit)
-    related_includes = collections.defaultdict(list) # {name: [name of owned or required entity, ]}
+    limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else (limit, )
     counts = collections.defaultdict(int) # {name: number of rows yielded}
 
     def make_iterable(name):
@@ -504,24 +523,10 @@ def export_dump(filename, db, data=True, pragma=True, filters=None, related=Fals
             yield {"name": n, "columns": item["columns"], "rows": make_iterable(n)}
             if progress and not progress(name=n, done=True): break # for n, item
 
-    if filters:
-        entities.clear()
-        rgx = util.filters_to_regex(filters)
-        # Select all entities matching by name
-        default_includes = util.CaselessDict()
-        for category in db.schema:
-            for name, item in db.schema[category].items():
-                if rgx.match(name):
-                    entities[category][name] = item
-                    default_includes[name] = True
-        # Select all owned or referred entities
-        for item in [x for d in entities.values() for x in d.values()] if related else ():
-            rels, related_includes = db.get_full_related(item["type"], item["name"])
-            for category2, items2 in rels.items():
-                for name2, item2 in items2.items():
-                    if name2 not in default_includes:
-                        entities[category2][name2] = item2
-                        related_includes[item["name"]].append(name2)
+    for category in set(schema) & set(entities) if schema else ():
+        names = [x.lower() for x in schema[category]]
+        for name in list(entities[category]):
+            if name.lower() not in names: entities[category].pop(name)
 
     if not empty:
         empties = []
@@ -541,9 +546,8 @@ def export_dump(filename, db, data=True, pragma=True, filters=None, related=Fals
             if item["type"] in ("table", "view"):
                 for rels in db.get_related(item["type"], item["name"], own=True).values():
                     empties.extend(rels)
-            empties.extend(related_includes.get(item["name"], []))
 
-    if filters or not empty:
+    if schema or not empty:
         sql = "\n\n".join("\n\n".join(v["sql"] for v in entities[c].values())
                           for c in db.CATEGORIES)
     else:
@@ -557,6 +561,7 @@ def export_dump(filename, db, data=True, pragma=True, filters=None, related=Fals
                 "sql":      sql,
                 "data":     make_datas() if data else [],
                 "pragma":   db.get_pragma_values(dump=True) if pragma else {},
+                "info":     info,
                 "progress": progress,
                 "buffer":   f,
             }
@@ -597,25 +602,13 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
     @return            True on success, False on failure, None on cancel
     """
     result = True
-    CATEGORIES = db.DATA_CATEGORIES
     sqls0, sqls1, actionsqls = [], [], []
-    requireds, processeds, exporteds = {}, set(), set()
-    limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else util.tuplefy(limit)
+    limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else (limit, )
     totalcount = 0
 
     is_samefile = util.lceq(db.filename, filename)
     file_existed = is_samefile or os.path.isfile(filename)
     insert_sql = "INSERT INTO %s.%s SELECT * FROM main.%s"
-
-    for category, name in ((c, n) for c, nn in schema.items() for n in nn):
-        items = [db.schema[category][name]]
-        items.extend(db.get_related(category, name, own=True).get("trigger", {}).values())
-        for item in items:
-            # Foreign tables and tables/views used in triggers for table,
-            # tables/views used in view body and view triggers for view.
-            for name2 in util.getval(item, "meta", "__tables__", default=[]):
-                if util.lceq(name, name2): continue # for name2
-                requireds.setdefault(name, []).append(name2)
 
     finalargs, fks_on = {"done": True}, None
     db.lock(None, None, filename, label="database export")
@@ -638,32 +631,11 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
             sql = "PRAGMA foreign_keys = off"
             db.execute(sql), sqls0.append(sql)
 
-
-        for category, name in ((c, x) for c in CATEGORIES for x in schema.get(c, ())):
+        for category, name in ((c, n) for c, xx in schema.items() for n in xx):
             name2 = myrenames.get(category, {}).get(name, name)
-            processeds.add(name)
-
-            if requireds.get(name) \
-            and any(x in processeds and x not in exporteds for x in requireds[name]):
-                # Skip item if it requires something that failed to export
-                reqs = {}
-                for name0 in requireds[name]:
-                    if name0 in processeds and name0 not in exporteds:
-                        category0 = "table" if name0 in db.schema.get("table", {}) else "view"
-                        reqs.setdefault(category0, set()).add(name0)
-                err = "Requires %s" % " and ".join(
-                    "%s %s" % (util.plural(c, vv, numbers=False),
-                               ", ".join(grammar.quote(v, force=True)
-                                         for v in sorted(vv, key=lambda x: x.lower())))
-                    for c, vv in sorted(reqs.items())
-                )
-                if progress and not progress(name=name, error=err):
-                    result = None
-                    break # for category, name
-                continue # for category, name
 
             try:
-                # Create table or view structure
+                # Create structure
                 label = "%s %s" % (category, grammar.quote(name, force=True))
                 if name != name2: label += " as %s" % grammar.quote(name2, force=True)
 
@@ -682,7 +654,6 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
                         break # for category, name
                     continue # for category, name
                 db.execute(sql), actionsqls.append(sql)
-                if not data or "table" != category: exporteds.add(name)
                 allnames2[name2] = category
 
                 # Copy table data
@@ -702,7 +673,6 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
                     count = db.execute(sql).rowcount
                     db.connection.commit()
                     actionsqls.append(sql)
-                    exporteds.add(name)
                     totalcount += count
 
                     if not empty and not count:
@@ -710,32 +680,10 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
                         sql = "DROP TABLE %s.%s" % (schema2, grammar.quote(name2))
                         db.execute(sql), actionsqls.append(sql)
                         db.connection.commit()
-                        exporteds.discard(name)
                         continue # for category, name
                     if progress and not progress(name=name, count=count):
                         result = None
                         break # for category, name
-
-                # Create indexes and triggers for tables, triggers for views
-                relateds = db.get_related(category, name, own=True)
-                for subcategory, subitemmap in relateds.items():
-                    for subname, subitem in subitemmap.items():
-                        subname2 = subname
-                        if name != name2:
-                            subname2 = re.sub(re.escape(name), re.sub(r"\W", "", name2),
-                                              subname2, count=1, flags=re.I | re.U)
-                        subname2 = util.make_unique(subname2, allnames2)
-                        allnames2[subname2] = subcategory
-
-                        sublabel = "%s %s" % (subcategory, grammar.quote(subname, force=True))
-                        if subname != subname2: sublabel += " as %s" % grammar.quote(subname2, force=True)
-                        logger.info("Creating %s for %s in %s.", sublabel, label, filename)
-                        subrenames = dict(myrenames, **{subcategory: {subname: subname2}}
-                                                     if subname != subname2 else {})
-                        sql, err = grammar.transform(subitem["sql"], renames=subrenames)
-                        if sql:
-                            db.execute(sql)
-                            actionsqls.append(sql)
 
             except Exception as e:
                 logger.exception("Error exporting %s %s from %s to %s.",
@@ -774,7 +722,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
     return result    
 
 
-def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
+def export_query_to_db(db, filename, table, query, params=(), cursor=None, create_sql=None,
                        empty=True, limit=None, progress=None):
     """
     Exports query results to another database.
@@ -784,6 +732,7 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
     @param   table       target table name, expected to be unique in target database
     @param   query       SQL query text
     @param   params      SQL query parameters
+    @param   cursor      existing results cursor to use instead of making a new query
     @param   create_sql  CREATE TABLE statement if not auto-generating from query columns
     @param   empty       create target table even if query returns nothing
     @param   limit       query limits, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
@@ -799,7 +748,7 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
     schemas = [list(x.values())[1] for x in
                db.execute("PRAGMA database_list").fetchall()]
     schema2 = util.make_unique("main", schemas, suffix="%s")
-    limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else util.tuplefy(limit)
+    limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else (limit, )
 
     db.lock(None, None, filename, label="query export")
 
@@ -816,7 +765,7 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
 
         count = 0
         fullname = "%s.%s" % (schema2, grammar.quote(table))
-        if "SELECT" == query.strip()[:6].upper():
+        if "SELECT" == grammar.strip_and_collapse(query)[:6] and not cursor:
             if create_sql:
                 sql = grammar.transform(create_sql, renames={"schema": schema2})[0]
                 db.executescript(sql)
@@ -830,7 +779,7 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
             count = db.execute(sql, params).rowcount
             logs.append((sql, None))
         else:
-            cursor = db.execute(query, params)
+            if not cursor: cursor = db.execute(query, params)
             cols = [c[0] for c in cursor.description] if cursor.description else ["rowcount"]
             sql = create_sql
             sql = sql or "CREATE TABLE %s (%s)" % (fullname, ", ".join(map(grammar.quote, cols)))
@@ -851,7 +800,7 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
                 logs.append((sql, params))
                 count += 1
         db.connection.commit()
-        if count is None and (progress or not empty): # If CREATE TABLE AS query
+        if count in (None, -1) and (progress or not empty): # If CREATE TABLE AS query
             count = db.execute("SELECT COUNT(*) AS count FROM %s" % fullname).fetchone()["count"]
         if progress and not progress(name=table, count=count):
             result, count = None, None
@@ -882,8 +831,8 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
     return result
 
 
-def export_to_console(make_iterables, format, title=None,
-                      output=None, multiple=False, progress=None):
+def export_to_console(format, make_iterables, title=None,
+                      output=None, combined=False, empty=True, progress=None):
     """
     Prints entity rows to console.
 
@@ -892,7 +841,8 @@ def export_to_console(make_iterables, format, title=None,
     @param   title           export title if any, as string or a sequence of strings
     @param   make_iterables  function yielding pairs of ({info}, function yielding rows)
     @param   output          print-function to use if not print()
-    @param   multiple        whether to output as multi-item
+    @param   combined        whether to output as multi-item
+    @param   empty           do not skip iterables with no output rows
     @param   progress        callback(?done, ?error) to report export progress,
                              returning false if export should cancel
     @return                  True on success, None on cancel
@@ -903,7 +853,7 @@ def export_to_console(make_iterables, format, title=None,
                       "yaml": templates.DATA_ROWS_YAML}
     output = output or print
     result, writer, started, hr, allnames = True, None, False, "", set()
-    ns = {"multiple": multiple}
+    ns = {"combined": combined}
 
     output()
     for line in util.tuplefy(title) if title else ():
@@ -923,7 +873,7 @@ def export_to_console(make_iterables, format, title=None,
 
         # Run through rows once for txt output, to populate text-justify options
         colnames = [c["name"] for c in item["columns"]]
-        widths   = {c: len(util.unprint(c)) for c in colnames}
+        widths   = {c: len(util.unprint(grammar.quote(c))) for c in colnames}
         justs    = {c: True   for c in colnames}
         do_break = False
         for i, row in enumerate(make_iterable()) if "txt" == format else ():
@@ -943,23 +893,24 @@ def export_to_console(make_iterables, format, title=None,
 
         rows = make_iterable()
         i, row, nextrow = 0, next(rows, None), next(rows, None)
-        while row:
+        while row or (empty and not i):
 
             if not started:
                 allnames.add(name)
                 if   "csv"  == format:
                     writer = csv_writer(sys.stdout)
                 elif "json" == format:
-                    if multiple: output("{")
+                    if combined: output("{")
 
             if not i:
                 if   "csv"  == format:
-                    if multiple:
+                    if combined:
                         writer.writerow()
                         writer.writerow([item["name"]])
-                    writer.writerow(([""] if multiple else []) + colnames)
+                    writer.writerow(([""] if combined else []) + colnames)
                 elif "json" == format:
-                    output("[" if multiple else "  %s: [" % json.dumps(item["name"]))
+                    if started: output("  ],")
+                    output("[" if not combined else "  %s: [" % json.dumps(item["name"]))
                 elif "sql"  == format:
                     if started:
                         output("\n")
@@ -989,13 +940,17 @@ def export_to_console(make_iterables, format, title=None,
                     output(hr)
                 elif "yaml" == format:
                     if started: output()
-                    if multiple:
+                    if combined:
                         key = yaml.safe_dump({name: None})
                         output("%s:" % key[:key.rindex(":")])
 
+            started = True
+            if not row:
+                break # while row
+
             do_break = not i % 100 and progress and not progress(name=name, count=i + 1)
             if "csv" == format:
-                writer.writerow(([""] if multiple else []) + list(row.values()))
+                writer.writerow(([""] if combined else []) + list(row.values()))
             else:
                 ns.update({"rows": [row]})
                 tpl = step.Template(ITEM_TEMPLATES[format], strip=False)
@@ -1004,7 +959,6 @@ def export_to_console(make_iterables, format, title=None,
                     content += ","
                 output(content)
 
-            started = True
             i, row, nextrow = i + 1, nextrow, next(rows, None)
             if do_break:
                 result = None
@@ -1016,7 +970,7 @@ def export_to_console(make_iterables, format, title=None,
 
     if started:
         if "json" == format:
-            if multiple:
+            if combined:
                 output("  ]")
                 output("}")
             else:
@@ -1027,19 +981,29 @@ def export_to_console(make_iterables, format, title=None,
     return result
 
 
+def get_format(filename):
+    """Returns import/export file format like "yaml", or None, detected from filename extension."""
+    extname = os.path.splitext(filename)[-1][1:].lower()
+    if extname in set(IMPORT_EXTS + EXPORT_EXTS):
+        return "yaml" if extname in YAML_EXTS else extname
+    return None
+
 
 def get_import_file_data(filename, progress=None):
     """
     Returns import file metadata, as {
-        "name":        file name and path}.
+        "name":        file name and path,
         "size":        file size in bytes,
         "modified":    file modification timestamp
         "format":      "xlsx", "xlsx", "csv", "json" or "yaml",
         "sheets":      [
             "name":    sheet name,
             "rows":    count or -1 if file too large,
-            "columns": [first row cell value, ],
+            "columns": [first row cell value, ] for spreadsheets, or 
+                       OrderedDict(first row column name: value) for JSON/YAML
     ]}.
+
+    Skips initial empty spreadsheet rows.
 
     @param   progress  callback() returning false if function should cancel
     @return  metadata dict, or None if cancelled
@@ -1049,26 +1013,21 @@ def get_import_file_data(filename, progress=None):
     if not size: raise ValueError("File is empty.")
     modified = datetime.datetime.fromtimestamp(os.path.getmtime(filename))
 
-    extname = os.path.splitext(filename)[-1][1:].lower()
-    is_csv, is_json, is_xls, is_xlsx = \
-        (extname == x for x in ("csv", "json", "xls", "xlsx"))
-    is_yaml = extname in YAML_EXTS
-    if is_csv:
+    fmt = get_format(filename)
+    if "csv" == fmt:
         rows, columns = 0, []
         with csv_reader(filename) as f:
-            iterer = enumerate(f)
-            for i, row in iterer:
-                if row: # Skip any initial blank rows
-                    rows, columns = 1, row
-                    break # for i, row
+            for i, row in enumerate(f):
+                if not rows and not any(row): # Skip initial blank rows
+                    continue # for i, row
+                rows += 1
+                if rows == 1:
+                    columns = row
+                    if size > conf.MaxImportFilesizeForCount: break # for i, row
                 if progress and not i % 100 and not progress(): break # for i, row
             if rows and size > conf.MaxImportFilesizeForCount: rows = -1
-            elif rows and size:
-                for i, row in iterer:
-                    rows += bool(row)
-                    if progress and not i % 100 and not progress(): break # for i, row
-        sheets.append({"rows": rows, "columns": columns, "name": "<no name>"})
-    elif is_json:
+        sheets.append({"rows": rows, "columns": columns, "name": "<CSV data>"})
+    elif "json" == fmt:
         rows, columns, buffer, started = 0, {}, "", False
         decoder = json.JSONDecoder(object_pairs_hook=collections.OrderedDict)
         with open(filename) as f:
@@ -1093,18 +1052,24 @@ def get_import_file_data(filename, progress=None):
                     break # for chunk
             if rows and f.tell() < size: rows = -1
         sheets.append({"rows": rows, "columns": columns, "name": "<JSON data>"})
-    elif is_xls:
+    elif "xls" == fmt and xlrd:
         with xlrd.open_workbook(filename, on_demand=True) as wb:
             for sheet in wb.sheets():
-                if progress and not progress(): return None
-                columns = [x.value for x in next(sheet.get_rows(), [])]
-                while columns and columns[-1] is None: columns.pop(-1)
-                columns = [x.strip() if isinstance(x, six.string_types)
-                           else "" if x is None else str(x) for x in columns]
+                columns, skipped = [], 0
+                for row in sheet.get_rows():
+                    if progress and not progress(): return None
+                    if all(x.value in ("", None) for x in row): # Skip initial blank rows
+                        skipped += 1
+                        continue # for row
+                    columns = [x.value for x in row]
+                    while columns and columns[-1] in (None, ""): columns.pop(-1)
+                    columns = [x.strip() if isinstance(x, six.string_types)
+                               else "" if x is None else str(x) for x in columns]
+                    break # for row
                 if not columns: rows = 0
-                else: rows = -1 if size > conf.MaxImportFilesizeForCount else sheet.nrows
+                else: rows = -1 if size > conf.MaxImportFilesizeForCount else sheet.nrows - skipped
                 sheets.append({"rows": rows, "columns": columns, "name": sheet.name})
-    elif is_xlsx:
+    elif "xlsx" == fmt and openpyxl:
         wb = None
         try:
             with warnings.catch_warnings():
@@ -1112,17 +1077,22 @@ def get_import_file_data(filename, progress=None):
 
                 wb = openpyxl.load_workbook(filename, data_only=True, read_only=True)
                 for sheet in wb.worksheets:
-                    if progress and not progress(): return None
-                    columns = list(next(sheet.values, []))
-                    while columns and columns[-1] is None: columns.pop(-1)
-                    columns = [x.strip() if isinstance(x, six.string_types)
-                               else "" if x is None else str(x) for x in columns]
+                    columns, skipped = [], 0
+                    for row in sheet.iter_rows(values_only=True):
+                        if progress and not progress(): return None
+                        if all(x in ("", None) for x in row): # Skip initial blank rows
+                            skipped += 1
+                            continue # for row
+                        columns = list(next(sheet.values, []))
+                        while columns and columns[-1] is None: columns.pop(-1)
+                        columns = [x.strip() if isinstance(x, six.string_types)
+                                   else "" if x is None else str(x) for x in columns]
+                        break # for row
                     rows = 0 if not columns else -1 if size > conf.MaxImportFilesizeForCount \
-                           else sum(1 for _ in sheet.iter_rows())
+                           else sum(1 for _ in sheet.iter_rows()) - skipped
                     sheets.append({"rows": rows, "columns": columns, "name": sheet.title})
         finally: wb and wb.close()
-    elif is_yaml:
-        extname = "yaml"
+    elif "yaml" == fmt and yaml:
         rows, columns = 0, {}
         with open(filename, "rbU" if six.PY2 else "rb") as f:
             parser = yaml.parse(f, yaml.SafeLoader)
@@ -1160,54 +1130,57 @@ def get_import_file_data(filename, progress=None):
     else:
         raise ValueError("File type not recognized.")
 
-    return {"name": filename, "size": size, "modified": modified, "format": extname, "sheets": sheets}
+    return {"name": filename, "size": size, "modified": modified, "format": fmt, "sheets": sheets}
 
 
 
-def import_data(filename, db, tables, tablecolumns, pks=None,
-                has_header=True, progress=None):
+def import_data(db, filename, tables, has_header=True, limit=None, maxcount=None, progress=None):
     """
     Imports data from spreadsheet or JSON or YAML data file to database table.
     Will create tables if not existing yet.
 
+    Skips initial empty spreadsheet rows.
+
     @param   filename       file path to import from
     @param   db             database.Database instance
-    @param   tables         tables to import to and sheets to import from, as [(table, sheet)]
-                            (sheet can be None if file is CSV/JSON/YAML)
-    @param   tablecolumns   mapping of file columns to table columns,
-                            as {table: OrderedDict(file column key: table columm name)},
-                            where key is column index if spreadsheet else column name
-    @param   pks            names of auto-increment primary key to add
-                            for new tables, if any, as {table: pk}
+    @param   tables         tables to import to and sheets to import from, as [{
+                              "name": table name,
+                              "source": source worksheet or label, can be None if file is CSV/JSON/YAML,
+                              ?"pk": name of auto-increment primary key to add if new table,
+                              "columns": OrderedDict(file column key: table column name)
+                             }], where file column key is column index if spreadsheet else column name
     @param   has_header     whether spreadsheet file has a header row
-    @param   progress       callback(?table, ?count, ?done, ?error, ?errorcount, ?index) to report
+    @param   limit          import limits per sheet if any, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
+    @param   maxcount       maximum total number of rows to import over all sheets
+    @param   progress       callback(?name, ?source, ?count, ?done, ?error, ?errorcount, ?index) to report
                             progress, returning False if import should cancel,
                             and None if import should rollback.
                             Returning True on error will ignore further errors.
     @return                 success
     """
     result = True
+    limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else (limit, )
 
-    extname = os.path.splitext(filename)[-1][1:].lower()
-    table, sheet, cursor, isolevel = None, None, None, None
+    fmt = get_format(filename)
+    has_sheets, has_names, new_tables = "xls" in fmt, fmt in ("json", "yaml"), []
+    table, source, cursor = None, None, None
     was_open, file_existed = db.is_open(), os.path.isfile(db.filename)
     try:
-        if not was_open: db.open()
-        continue_on_error, create_sql = None, None
+        db.open()
+        continue_on_error, totalcount = None, 0
         with db.connection:
             cursor = db.connection.cursor()
             cursor.execute("BEGIN TRANSACTION")
 
-            for i, (table, sheet) in enumerate(tables):
-                sheet = sheet if extname not in ("csv", "json") else None
-                columns = tablecolumns[table]
+            for i, item in enumerate(tables):
+                create_sql = None
+                table, source, columns = item["name"], item["source"], item["columns"]
                 if table not in db.schema.get("table", {}):
                     cols = [{"name": x} for x in columns.values()]
-                    if pks.get(table):
-                        cols.insert(0, {"name": pks[table], "type": "INTEGER",
+                    if item.get("pk"):
+                        cols.insert(0, {"name": item["pk"], "type": "INTEGER",
                                         "pk": {"autoincrement": True}, "notnull": {}})
-                    meta = {"name": table, "__type__": grammar.SQL.CREATE_TABLE,
-                            "columns": cols}
+                    meta = {"name": table, "columns": cols, "__type__": grammar.SQL.CREATE_TABLE}
                     create_sql, err = grammar.generate(meta)
                     if err: raise Exception(err)
 
@@ -1220,19 +1193,39 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
                     logger.info("Creating new table %s.",
                                 grammar.quote(table, force=True))
                     cursor.execute(create_sql)
+                    new_tables.append(table)
+                    db.populate_schema(category="table", name=table, parse=True)
                 db.lock("table", table, filename, label="import")
                 logger.info("Running import from %s%s to table %s.",
-                            filename, (" sheet '%s'" % sheet) if sheet else "",
+                            filename, (" sheet '%s'" % source) if has_sheets else "",
                             grammar.quote(table, force=True))
-                index, count, errorcount = -1, 0, 0
-                for row in iter_file_rows(filename, list(columns), sheet):
+                index, indexrange, count, errorcount = -1, (), 0, 0
+                if limit:
+                    amount, fromrow = limit if len(limit) == 2 else (limit[0], 0)
+                    amount, fromrow = (sys.maxsize if amount < 0 else amount), max(0, fromrow)
+                    indexrange = fromrow, fromrow + amount
+                if maxcount and maxcount > 0:
+                    indexrange = indexrange or (0, sys.maxsize)
+                    indexrange = indexrange[0], min(indexrange[1], maxcount - totalcount)
+                elif maxcount == 0:
+                    indexrange = (sys.maxsize, -1)
+                result = progress(name=table, source=source, index=0, count=0)
+                for row in iter_file_rows(filename, list(columns), source) if result else ():
                     index += 1
-                    if has_header and not index: continue # for row
+                    if has_header and not has_names and not index: continue # for row
+                    do_import, do_report = True, False
+                    row_index = index - bool(has_header and not has_names)
+                    if indexrange and row_index < indexrange[0]:
+                        do_import, do_report = False, index and not index % 100
+                    elif indexrange and row_index >= indexrange[1]:
+                        break # for row
                     lastcount, lasterrorcount = count, errorcount
 
                     try:
-                        cursor.execute(sql, row)
-                        count += 1
+                        if do_import:
+                            cursor.execute(sql, row)
+                            count += 1
+                            totalcount += 1
                     except Exception as e:
                         errorcount += 1
                         if not progress: raise
@@ -1241,7 +1234,7 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
                         if continue_on_error is None:
                             result = progress(error=util.format_exc(e), index=index,
                                               count=count, errorcount=errorcount,
-                                              table=table)
+                                              name=table, source=source)
                             if result:
                                 continue_on_error = True
                                 continue # for row
@@ -1249,9 +1242,10 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
                                         " and rolling back" if result is None else "")
                             if result is None: cursor.execute("ROLLBACK")
                             break # for row
-                    if result and progress \
-                    and (count != lastcount and not count % 100 or errorcount != lasterrorcount and not errorcount % 100):
-                        result = progress(table=table, count=count, errorcount=errorcount)
+                    do_report = do_report or (count != lastcount and not count % 100 or
+                                              errorcount != lasterrorcount and not errorcount % 100)
+                    if result and progress and do_report:
+                        result = progress(name=table, source=source, index=index, count=count, errorcount=errorcount)
                         if not result:
                             logger.info("Cancelling%s import on user request.",
                                         " and rolling back" if result is None else "")
@@ -1264,39 +1258,43 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
                 db.unlock("table", table, filename)
                 logger.info("Finished importing %s from %s%s to table %s%s.",
                             util.plural("row", count),
-                            filename, (" sheet '%s'" % sheet) if sheet else "",
+                            filename, (" sheet '%s'" % source) if has_sheets else "",
                             grammar.quote(table, force=True),
                             ", all rolled back" if result is None and count else "")
-                mytable = table
+                mytable, mysource = table, source
                 if i == len(tables) - 1:
                     if result: cursor.execute("COMMIT")
                     util.try_ignore(cursor.close)
-                    cursor = table = sheet = None
+                    cursor = table = source = None
                 if result and progress:
-                    result = progress(table=mytable, count=count, errorcount=errorcount, done=True)
+                    result = progress(name=mytable, source=mysource, count=count, errorcount=errorcount, done=True)
                 if not result:
-                    break # for i, (table, sheet)
+                    break # for i, item
+                if maxcount and totalcount >= maxcount:
+                    continue # for i, item
 
             logger.info("Finished importing from %s to %s.", filename, db)
 
     except Exception as e:
         logger.exception("Error running import from %s%s%s in %s.",
-                         filename, (" sheet '%s'" % sheet) if sheet else "",
+                         filename, (" sheet '%s'" % source) if source and has_sheets else "",
                          (" to table %s " % grammar.quote(table, force=True) if table else ""),
                          db.filename)
         result = False
         if cursor: util.try_ignore(cursor.execute, "ROLLBACK")
         if progress:
             kwargs = dict(error=util.format_exc(e), done=True)
-            if table: kwargs.update(table=table)
+            if table: kwargs.update(name=table, source=source)
             progress(**kwargs)
     finally:
         if db.is_open():
             if cursor: util.try_ignore(cursor.close)
             if table: db.unlock("table", table, filename)
             if not was_open: db.close()
-        if result is None and not file_existed:
-            util.try_ignore(os.unlink, db.filename)
+        if result is None:
+            if not file_existed: util.try_ignore(os.unlink, db.filename)
+            for mytable in new_tables if file_existed and "table" in db.schema else ():
+                db.schema["table"].pop(mytable, None)
 
     return result
 
@@ -1306,22 +1304,25 @@ def iter_file_rows(filename, columns, sheet=None):
     """
     Yields rows as [value, ] from spreadsheet or JSON or YAML file.
 
+    Skips initial empty spreadsheet rows.
+
     @param   filename    file path to open
     @param   columns     list of column keys to return,
                          where key is column index if spreadsheet else column name
     @param   sheet       sheet name to read from, if applicable
     """
-    size = os.path.getsize(filename)
-    is_csv  = filename.lower().endswith(".csv")
-    is_json = filename.lower().endswith(".json")
-    is_xls  = filename.lower().endswith(".xls")
-    is_xlsx = filename.lower().endswith(".xlsx")
-    is_yaml = any(n.endswith("." + x) for n in [filename.lower()] for x in YAML_EXTS)
-    if is_csv:
+    size, fmt = os.path.getsize(filename), get_format(filename)
+    if "csv" == fmt:
         with csv_reader(filename) as f:
+            started = False
             for row in f:
+                if not started and not any(row): # Skip initial blank rows
+                    continue # for row
                 yield [row[i] if i < len(row) else None for i in columns]
-    elif is_json:
+                started = True
+    elif "json" == fmt:
+        # Keep structures nested in values as JSON strings in database
+        cast = lambda x: json.dumps(x, indent=2) if isinstance(x, (dict, list)) else x
         started, buffer = False, ""
         decoder = json.JSONDecoder(object_pairs_hook=collections.OrderedDict)
         with open(filename) as f:
@@ -1338,25 +1339,33 @@ def iter_file_rows(filename, columns, sheet=None):
                         data, index = decoder.raw_decode(buffer)
                         buffer = buffer[index:]
                         if isinstance(data, collections.OrderedDict):
-                            yield [data.get(x) for x in columns]
+                            yield [cast(data.get(x)) for x in columns]
                     except ValueError: # Not enough data to decode, read more
                         break # while started and buffer
                 if f.tell() >= size: break # for chunk
-    elif is_xls:
+    elif "xls" == fmt:
         with xlrd.open_workbook(filename, on_demand=True) as wb:
+            started = False
             for row in wb.sheet_by_name(sheet).get_rows():
+                if not started and all(x.value in ("", None) for x in row): # Skip initial blank rows
+                    continue # for row
                 yield [row[i].value if i < len(row) else None for i in columns]
-    elif is_xlsx:
+                started = True
+    elif "xlsx" == fmt:
         wb = None
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore") # openpyxl can throw warnings on styles etc
 
                 wb = openpyxl.load_workbook(filename, data_only=True, read_only=True)
+                started = False
                 for row in wb.get_sheet_by_name(sheet).iter_rows(values_only=True):
+                    if not started and all(x is None for x in row): # Skip initial blank rows
+                        continue # for row
                     yield [row[i] if i < len(row) else None for i in columns]
+                    started = True
         finally: wb and wb.close()
-    elif is_yaml:
+    elif "yaml" == fmt:
         # Keep structures nested in values as YAML strings in database
         cast = lambda x: yaml.safe_dump(x) if isinstance(x, (dict, list)) else x
         with open(filename, "rbU" if six.PY2 else "rb") as f:
@@ -1419,11 +1428,19 @@ class csv_reader(object):
             preview = f.read(self._peek)
             if   preview.startswith(b"\xFE\xFF"): encoding = "utf-16be"
             elif preview.startswith(b"\xFF\xFE"): encoding = "utf-16le"
-            elif chardet: encoding = chardet.detect_all(preview)[0]["encoding"]
+            elif chardet:
+                try:
+                    if hasattr(chardet, "detect_all"): # v4+
+                        encoding = chardet.detect_all(preview)[0]["encoding"]
+                    else:
+                        encoding = chardet.detect(preview)["encoding"]
+                except Exception: pass
             if "ascii" == encoding: encoding = "utf-8" # Failsafe: ASCII as UTF-8 is valid anyway
 
             if "utf-16" in (encoding or "").lower() and len(preview) / 2: preview += b"\x00"
             try: dialect = csv.Sniffer().sniff(preview.decode(encoding or "utf-8"), ",;\t")
+            except csv.Error as e: # Format not deducable
+                dialect = csv.excel
             except UnicodeError: # chardet is not very reliable, try UTF-8 as fallback
                 try: encoding, dialect = "utf-8", csv.Sniffer().sniff(preview.decode("utf-8"), ",;\t")
                 except Exception: dialect = csv.excel # Try default as fallback
@@ -1564,7 +1581,7 @@ class xlsx_writer(object):
         if self._sheet and hasattr(self._sheet, "_opt_close"):
             self._sheet._opt_close() # Close file handle to not hit ulimit
         safename = None
-        if name:
+        if name is not None:
             # Max length 31, no []:\\?/*\x00\x03, cannot start/end with '.
             stripped = name.strip("'")
             safename = re.sub(r"[\[\]\:\\\?\/\*\x00\x03]", " ", stripped)
@@ -1579,7 +1596,7 @@ class xlsx_writer(object):
                 counter += 1
         sheet = self._workbook.add_worksheet(safename)
         self._sheets[sheet.name.lower()] = self._sheet = sheet
-        self._sheetnames[sheet] = name or sheet.name
+        self._sheetnames[sheet] = name if name is not None else sheet.name
         self._col_widths[sheet.name] = collections.defaultdict(lambda: 0)
         for c in self._autowrap:
             sheet.set_column(c, c, self.COL_MAXWIDTH, self._formats[None])

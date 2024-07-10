@@ -1,7 +1,51 @@
 CHANGELOG
 =========
 
-2.2, 2023-10-09
+2.3, 2024-07-08
+---------------
+- add command-line interface, with execute, export, import, parse, pragma, search, and stats
+- add option to rename SQL window pages
+- add support for CREATE TABLE .. STRICT (Python 3.9+)
+- add support for empty or whitespacey table and column and constraint names
+- add support for column keyword in meta search
+- add dark mode toggle to HTML export
+- streamline choosing related items when exporting to another database
+- include read-only pragmas in PRAGMA SQL
+- include original encoding pragma in database recovery
+- include current filter/sort/hidden settings in data grid export
+- tweak spreadsheet properties content in Excel export, include SQL query
+- show pragma SQL in view mode as well
+- skip initial blank rows in spreadsheet imports
+- change default item action on diagram from opening schema to opening data
+- update SQLite keywords from 126 to the latest 147-element list
+- use a custom lockfile implementation for single instance check in Linux
+- show descriptive error when trying to save view with blank column names
+- skip hidden columns in data grid exports
+- fix saving nested structures in JSON/YAML data import
+- fix auto_vacuum and encoding pragmas not being editable in new databases
+- fix updating main page upon removing databases when home-row is also selected
+- fix foreign key constraint editor not allowing to add a column in duplicate
+- fix entering new value in column/constraint editor editable comboboxes like column type
+- fix rows-toggle not toggling data table in single item HTML export
+- fix working with exotic characters in value editor
+- change strip alphanumeric/non-alphanumeric strip functions to text/non-text
+- make "Toggle all" toggle item CREATE SQL statements in combined HTML export
+- add program version number and date to HTML export metadata
+- fix intermittent mouse event error on diagram
+- fix diagram selection rectangle font issues in Linux
+- fix data leaks from orphaned background threads and dangling references
+- improve handling tables WITHOUT ROWID
+- restore program window on unminimizing from tray if window iconized
+- ensure dialog windows get destroyed when closed
+- tweak export panel buttons and layout
+- tweak column/constraint editor layout
+- disable automatic update checks and downloads in snaps
+- include third-party license texts in snaps and stand-alone exes
+- use latest custom-built PyInstaller 6.7 for producing binaries
+- use _x86 suffix for 32-bit binaries, drop _x64 suffix from 64-bit binaries
+
+
+2.2, 2023-10-08
 ---------------
 - add line number and word-wrap toggles to more controls
 - add diagram export to Tools-menu

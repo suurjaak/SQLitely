@@ -18,6 +18,10 @@ It can:
 - manage database PRAGMA directives
 - fix database corruption
 
+Also, a [command line interface](https://suurjaak.github.io/SQLitely/help.html#commandline)
+is available, offering functions like exporting, importing, querying, searching, and statistics.
+The graphical version includes a Python console window.
+
 Downloads, help texts, and more screenshots at
 http://suurjaak.github.io/SQLitely.
 
@@ -49,6 +53,19 @@ triggers and views are altered automatically.
 SQLitely can check database integrity for corruption, and copy as much data
 as possible over into a new database.
 
+SQLitely offers a number of options from the
+[command line](https://suurjaak.github.io/SQLitely/help.html#commandline):
+```
+  gui                 launch SQLitely graphical program (default option)
+  execute             run SQL statements in SQLite database
+  export              export SQLite database in various output formats
+  import              import data from file to database
+  parse               search in SQLite database schema
+  pragma              output SQLite database PRAGMAs
+  search              search in SQLite database data
+  stats               print or save database statistics
+  -h [option]         show command line help, for option if specified
+```
 
 SQLitely has been tested under Windows 10, Windows 7 and Ubuntu Linux.
 In source code form, it should run wherever Python and the required 

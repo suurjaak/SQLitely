@@ -4,14 +4,13 @@ sqlitely\. Sets execute flag permission on .sh files.
 
 @author    Erki Suurjaak
 @created   21.08.2019
-@modified  21.10.2023
+@modified  10.07.2024
 """
 import glob
 import os
 import sys
 import time
 import zipfile
-import zlib
 
 
 if "__main__" == __name__:
@@ -61,7 +60,8 @@ if "__main__" == __name__:
             (pathjoin(SRC_DIR, NAME, "grammar"),       "*"),
             (pathjoin(SRC_DIR, NAME, "lib"),           "*.py"),
             (pathjoin(SRC_DIR, NAME, "media"),         "*"),
-            (pathjoin(SRC_DIR, NAME, "etc"),           "%s.ini" % NAME)
+            (pathjoin(SRC_DIR, NAME, "etc"),           "%s.ini" % NAME),
+            ("test",                                   "*"),
         ]:
             entries = glob.glob(os.path.join(BASE_DIR, subdir, wildcard))
             files = sorted([os.path.basename(x) for x in entries

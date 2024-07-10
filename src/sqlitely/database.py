@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.10.2023
+@modified    09.06.2024
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -55,6 +55,9 @@ class Database(object):
     """Schema data object categories."""
     DATA_CATEGORIES = ["table", "view"]
 
+    """SQLite features and the runtime library version they appeared in."""
+    FEATURE_SUPPORT = {"full_rename_table": (3, 25), "rename_column": (3, 25),
+                       "strict":            (3, 37), "view_columns":  (3,  9)}
 
     """
     SQLite PRAGMA settings, as {
@@ -95,7 +98,7 @@ class Database(object):
         "values": {0: "NONE", 1: "FULL", 2: "INCREMENTAL"},
         "dump": True,
         "initial": True,
-        "write": lambda db: not list(db.schema.values()) and not db.filesize,
+        "write": lambda db: not any(db.schema.values()) and not db.filesize if db else False,
         "short": "Auto-vacuum settings",
         "description": """  FULL: truncate deleted rows on every commit.
   INCREMENTAL: truncate on PRAGMA incremental_vacuum.
@@ -230,7 +233,7 @@ Must be turned on before any tables are created, not possible to change afterwar
         "type": str,
         "dump": True,
         "initial": True,
-        "write": lambda db: not list(db.schema.values()) and not db.filesize,
+        "write": lambda db: not any(db.schema.values()) and not db.filesize if db else False,
         "short": "Database text encoding",
         "values": {"UTF-8": "UTF-8", "UTF-16": "UTF-16 native byte-ordering", "UTF-16le": "UTF-16 little endian", "UTF-16be": "UTF-16 big endian"},
         "description": "The text encoding used by the database. It is not possible to change the encoding after the database has been created.",
@@ -349,7 +352,7 @@ Must be turned on before any tables are created, not possible to change afterwar
         "name": "query_only",
         "label": "Query only",
         "type": bool,
-        "initial": lambda db, v: not v, # Should be first only if false, else last
+        "initial": lambda db, v: not v, # Should be first in PRAGMA list only if false, else last after all other SQL
         "short": "Prevent database changes",
         "description": "If enabled, prevents all changes to the database file for the duration of the current session.",
       },
@@ -517,7 +520,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
 
     def open(self, log_error=True, parse=False):
-        """Opens the database."""
+        """Opens the database, if not already open."""
+        if self.connection: return
         try:
             self.connection = sqlite3.connect(self.filename, check_same_thread=False,
                                               isolation_level=None) # Autocommit mode
@@ -537,7 +541,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
 
     def close(self):
-        """Closes the database and frees all allocated data."""
+        """Closes the database if open, and frees all allocated data."""
         if self.connection:
             try: self.connection.close()
             except Exception: pass
@@ -584,7 +588,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         try: pragma = self.get_pragma_values(dump=True)
         except Exception: logger.exception("Failed to get PRAGMAs for %s.", self.name)
         pragma_first = {k: v for k, v in pragma.items()
-                        if k in ("auto_vacuum", "page_size")}
+                        if util.getval(self.PRAGMA, k, "initial") is True}
         if pragma_first:
             sql = pragma_tpl.expand(pragma=pragma_first, schema="new")
             self.executescript(sql)
@@ -691,11 +695,11 @@ WARNING: misuse can easily result in a corrupt database file.""",
         @param   key       any hashable to identify lock by
         @param   label     an informational label for lock
         """
-        category, name = (x.lower() if x else x for x in (category, name))
-        if name and name not in self.schema.get(category, {}): return            
+        category, name = (x.lower() if x else x is not None for x in (category, name))
+        if name is not None and name not in self.schema.get(category, {}): return            
         self.locks[category][name].add(key)
         self.locklabels[key] = label
-        if "view" == category and name:
+        if "view" == category and name is not None:
             relateds = self.get_related(category, name, data=True, clone=False)
             if not relateds: return
             subkey = (hash(key), category, name)
@@ -709,10 +713,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
     def unlock(self, category, name, key):
         """Unlocks a schema object for altering or deleting."""
-        category, name = (x.lower() if x else x for x in (category, name))
+        category, name = (x.lower() if x is not None else x for x in (category, name))
         self.locks[category][name].discard(key)
         self.locklabels.pop(key, None)
-        if "view" == category and name:
+        if "view" == category and name is not None:
             subkey = (hash(key), category, name)
             relateds = self.get_related(category, name, data=True, clone=False)
             for subcategory, itemmap in relateds.items():
@@ -750,7 +754,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         skipkeys = set(util.tuplefy(kwargs.pop("skip", ())))
         result, keys = "", ()
 
-        if kwargs.get("category") and kwargs.get("name"):
+        if kwargs.get("category") and kwargs.get("name") is not None:
             category, name = kwargs["category"], kwargs["name"]
             keys = self.locks.get(category, {}).get(name)
             if keys and skipkeys: keys = keys - skipkeys
@@ -793,7 +797,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 keys = keys - skipkeys
                 if not keys: continue # for name, keys
                 t, labels = "", list(filter(bool, map(self.locklabels.get, keys)))
-                if category and name:
+                if category and name is not None:
                     name = self.schema.get(category, {}).get(name, {}).get("name", name)
                     t = "%s %s" % (category, util.unprint(grammar.quote(name, force=True)))
                 elif category: t = util.plural(category)
@@ -808,9 +812,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
         Returns ROWID name for table, or None if table is WITHOUT ROWID
         or has columns shadowing all ROWID aliases (ROWID, _ROWID_, OID).
         """
-        if util.getval(self.schema["table"], table, "meta", "without"): return None
-        sql = self.schema["table"].get(table, {}).get("sql")
-        if not sql or re.search("WITHOUT\s+ROWID[\s;]*$", sql, re.I): return None
+        meta = util.getval(self.schema, "table", table, "meta") or {}
+        if any(x.get("without") for x in meta.get("options", [])) or not meta \
+        and "WITHOUT ROWID" in grammar.strip_and_collapse(self.schema["table"][table]["sql"]):
+            return None
         ALIASES = ("_rowid_", "rowid", "oid")
         cols = [c["name"].lower() for c in self.schema["table"][table]["columns"]]
         return next((x for x in ALIASES if x not in cols), None)
@@ -882,24 +887,6 @@ WARNING: misuse can easily result in a corrupt database file.""",
         ) if mylimit else ""
 
 
-    def has_view_columns(self):
-        """Returns whether SQLite supports view columns (from version 3.9)."""
-        return sqlite3.sqlite_version_info >= (3, 9)
-
-
-    def has_rename_column(self):
-        """Returns whether SQLite supports renaming columns (from version 3.25)."""
-        return sqlite3.sqlite_version_info >= (3, 25)
-
-
-    def has_full_rename_table(self):
-        """
-        Returns whether SQLite supports cascading table rename
-        to triggers/views referring the table (from version 3.25).
-        """
-        return sqlite3.sqlite_version_info >= (3, 25)
-
-
     def execute(self, sql, params=(), log=True, cursor=None):
         """
         Shorthand for self.connection.execute(), returns cursor.
@@ -935,8 +922,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
         """
         if cursor or self.connection:
             if log and conf.LogSQL: logger.info("SQL: %s", sql)
-            (cursor or self.connection).executescript(sql)
+            cursor = (cursor or self.connection).executescript(sql)
             if name: self.log_query(name, sql)
+            return cursor
 
 
     def log_query(self, action, sql, params=None):
@@ -986,13 +974,13 @@ WARNING: misuse can easily result in a corrupt database file.""",
                             returning false if populate should cancel
         """
         if not self.is_open(): return
-        category, name = (x.lower() if x else x for x in (category, name))
+        category, name = (x.lower() if x is not None else x for x in (category, name))
 
         schema0 = CaselessDict((c, CaselessDict(
             (k, copy.copy(v)) for k, v in d.items()
         )) for c, d in self.schema.items())
         if category:
-            if name: self.schema[category].pop(name, None)
+            if name is not None: self.schema[category].pop(name, None)
             else: self.schema[category].clear()
         else: self.schema.clear()
 
@@ -1001,15 +989,17 @@ WARNING: misuse can easily result in a corrupt database file.""",
         args = {"sql": "", "notname": "sqlite_%"}
         if category:
             where += " AND type = :type"; args.update(type=category)
-            if name: where += " AND LOWER(name) = :name"; args.update(name=name)
+            if name is not None: where += " AND LOWER(name) = :name"; args.update(name=name)
         for row in self.execute(
             "SELECT type, name, tbl_name, sql FROM sqlite_master "
             "WHERE %s ORDER BY type, name COLLATE NOCASE" % where, args, log=False
         ).fetchall():
             if "table" == row["type"] \
             and "ENABLE_ICU" not in self.compile_options: # Unsupported tokenizer
-                if  re.match(r"CREATE\s+VIRTUAL\s+TABLE", row["sql"], re.I) \
-                and re.search(r"TOKENIZE\s*[\W]*icu[\W]", row["sql"], re.I):
+                stripped = grammar.strip_and_collapse(row["sql"], literals=False)
+                if stripped.startswith("CREATE VIRTUAL TABLE") \
+                and re.search(r"USING\W.+((\(icu\W)|(\(.*\Wicu\W))", stripped, re.I):
+                    # Various e.g. USING module_name(icu) or USING module_name(tokenizer=icu) etc
                     continue # for row
 
             sqlraw = row["sql"].strip().replace("\r\n", "\n")
@@ -1018,7 +1008,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             self.schema[row["type"]][row["name"]] = row
 
         index, total = 0, sum(len(vv) for vv in self.schema.values())
-        if category and name: progress = None # Skip progress report if one item
+        if category and name is not None: progress = None # Skip progress report if one item
         elif category: total = len(self.schema.get(category) or {})
         if progress and not progress(index=0, total=total): return
 
@@ -1026,7 +1016,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         for mycategory, itemmap in self.schema.items():
             if category and category != mycategory: continue # for mycategory
             for myname, opts in itemmap.items():
-                if category and name and not util.lceq(myname, name): continue # for myname
+                if category and name is not None and not util.lceq(myname, name): continue # for myname
 
                 opts0 = schema0.get(mycategory, {}).get(myname, {})
                 opts["__id__"] = opts0.get("__id__") or next(self.id_counter)
@@ -1079,7 +1069,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         for mycategory, itemmap in self.schema.items():
             if category and category != mycategory: continue # for mycategory
             for myname, opts in itemmap.items():
-                if category and name and not util.lceq(myname, name): continue # for myname
+                if category and name is not None and not util.lceq(myname, name): continue # for myname
 
                 # Parse metainfo from SQL if commanded and not already available
                 meta, sql = None, None
@@ -1112,7 +1102,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
                 # Retrieve table row counts if commanded
                 if "table" == mycategory and count:
-                    opts.update(self.get_count(myname))
+                    mycounts = self.get_count(myname)
+                    opts = self.schema[mycategory][myname] # get_count() can trigger parse for rowid
+                    opts.update(mycounts)
 
                 index += 1
                 if progress and not progress(index=index, total=total): return
@@ -1204,7 +1196,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
         result = CaselessDict()
         for myname, opts in self.schema.get(category, {}).items():
-            if name and myname not in name: continue # for myname
+            if name is not None and myname not in name: continue # for myname
             result[myname] = copy.deepcopy(opts)
         return result
 
@@ -1223,7 +1215,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
                         if False, returns only indirectly associated items,
                         like tables and views and triggers for tables and views
                         that query them in view or trigger body,
-                        also foreign tables for tables;
+                        also foreign tables for tables,
+                        other tables and views for triggers that query them in body;
                         if None, returns all relations.
                         Ignored if data=True.
         @param   data   return cascading data dependency relations:
@@ -1280,55 +1273,63 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return result
 
 
-    def get_full_related(self, category, name):
+    def get_full_related(self, category, name, foreign=True):
         """
         Returns the full dependency tree of a database object: its own objects
         like indexes and triggers, plus everything it and its own objects refer to, recursively.
 
-        @return   {category: CaselessDict({name: item, })}, {originating name: [related name]}
+        @param   foreign  whether to include foreign relations
+        @return  {category: CaselessDict({name: item, })}
         """
         category, name = category.lower(), name.lower()
-        result, deps = defaultdict(CaselessDict), defaultdict(list)
+        result = defaultdict(CaselessDict)
         item = self.schema[category][name]
+        skip_foreign = not foreign and "table" == category
 
         # Take all tables and views the item refers to
-        for name2 in util.getval(item, "meta", "__tables__", default=[]):
+        for name2 in util.getval(item, "meta", "__tables__", default=[]) if not skip_foreign else ():
             category2 = next((c for c in self.schema if name2 in self.schema[c]), None)
             if category2:
                 result[category2][name2] = self.schema[category2][name2]
-                if name2 not in deps[name]: deps[name].append(name2)
         # Take all owned or required related entities
         own = None if "trigger" == category else True
         for relcategory, rels in self.get_related(category, name, own=own).items():
             for relname, relitem in rels.items():
                 result[relcategory][relname] = relitem
-                if relname not in deps[name]: deps[name].append(relname)
 
         processed = set()
         while True:
-            processed0 = processed.copy()
+            processed0, processed2 = processed.copy(), set()
             # Take all owned or required related entities
             for category2, name2 in [(c, n) for c in result for n in result[c]]:
                 if name2 in processed: continue # for category2
-                processed.add(name2)
+                processed2.add(name2)
 
                 own = None if "trigger" == category2 else True
                 for relcategory, rels in self.get_related(category2, name2, own=own).items():
                     for relname, relitem in rels.items():
                         result[relcategory][relname] = relitem
-                        if relname not in deps[name2]: deps[name2].append(relname)
-            # Take tables and views that views query, recursively
-            for name2 in [n for n in result.get("view", {})]:
+            # Take foreign tables
+            for name2 in list(result.get("table", {})) if not skip_foreign else ():
                 if name2 in processed: continue # for name2
-                processed.add(name2)
+                processed2.add(name2)
+
+                item2 = self.schema["table"][name2]
+                for relname in util.getval(item2, "meta", "__tables__", default=[]):
+                    if relname in self.schema["table"]:
+                        result["table"][relname] = self.schema["table"][relname]
+            # Take tables and views that views query, recursively
+            for name2 in list(result.get("view", {})):
+                if name2 in processed: continue # for name2
+                processed2.add(name2)
 
                 for relcategory, rels in self.get_related("view", name2, data=True).items():
                     for relname, relitem in rels.items():
                         result[relcategory][relname] = relitem
-                        if relname not in deps[name2]: deps[name2].append(relname)
+            processed.update(processed2)
             if processed0 == processed: break # while True
 
-        return result, deps
+        return result
 
 
     def get_keys(self, table, pks_only=False):
@@ -1414,10 +1415,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 if names and myname.lower() not in names:
                     continue # for myname, opts
 
-                if names and column and mycategory in ("table", "view", "index"):
+                if names and column is not None and mycategory in ("table", "view", "index"):
                     columns = opts["columns"]
                     if opts.get("meta", {}).get("columns"): columns = opts["meta"]["columns"]
-                    col = next((c for c in columns if util.lceq(c.get("name") or c["expr"], column)), None)
+                    col = next((c for c in columns if util.lceq(c.get("expr") or c["name"], column)), None)
                     if not col: continue # for myname, opts
                     gentype = "index column" if "index" == mycategory else "column"
                     sql, err = grammar.generate(dict(col, __type__=gentype), indent=False)
@@ -1474,9 +1475,16 @@ WARNING: misuse can easily result in a corrupt database file.""",
         Tables must not start with "sqlite_", no limitations otherwise.
         """
         result = False
-        if table:    result = not util.lceq(table[:7], "sqlite_")
-        elif column: result = True
+        if table is not None:    result = not util.lceq(table[:7], "sqlite_")
+        elif column is not None: result = True
         return result
+
+
+    @classmethod
+    def has_feature(cls, name):
+        """Returns whether the current SQLite version supports given feature."""
+        version_min = cls.FEATURE_SUPPORT.get(name, (sys.maxsize, ))
+        return sqlite3.sqlite_version_info >= version_min
 
 
     def get_size(self):
@@ -1537,7 +1545,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         existing = dict(existing or {})
         for c in cols:
             c, t = (c["name"], c.get("type")) if isinstance(c, dict) else (c, None)
-            name, v = re.sub(r"\W", "", c, flags=re.I), data[c]
+            name, v = re.sub(r"\W", "", c, flags=re.I) or "unnamed", data[c]
             name = util.make_unique(name, existing, counter=1, case=True)
             if None not in (t, v) and not isinstance(v, sqlite3.Binary) \
             and "BLOB" == self.get_affinity(t):
@@ -1894,7 +1902,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         else:
             resets  = defaultdict(dict) # {category: {name: SQL}}
             if "table" == category \
-            and (name2 == grammar.quote(name2) or not self.has_full_rename_table()):
+            and (name2 == grammar.quote(name2) or not self.has_feature("full_rename_table")):
                 # Modify sqlite_master directly, as "ALTER TABLE x RENAME TO y"
                 # sets a quoted name "y" to CREATE statements, including related objects,
                 # regardless of whether the name required quoting.
@@ -1918,7 +1926,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                    for c in (item or {}).get("meta", {}).get("columns", [])):
             return
         table = item["name"]
-        if self.has_rename_column():
+        if self.has_feature("rename_column"):
             altersql, err = grammar.generate(dict(
                 name=table, name2=table, columns=[(name, name2)]
             ), category="ALTER TABLE")

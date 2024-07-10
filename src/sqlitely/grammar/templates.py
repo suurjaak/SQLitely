@@ -24,7 +24,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    03.10.2023
+@modified    20.11.2023
 ------------------------------------------------------------------------------
 """
 
@@ -382,20 +382,22 @@ RELEASE SAVEPOINT alter_master;{{ LF() }}
 COLUMN_DEFINITION = """<%
 from collections import OrderedDict
 
-get_constraints = lambda: (
+get_constraints = lambda: ( # Yield column constraints in fixed order
     (k, data[k]) for k in ("pk", "notnull", "unique", "default", "collate", "check", "fk")
     if data.get(k) is not None and (k != "collate" or data[k].get("value") not in (None, ""))
-    and (k not in ("default", "check") or data[k].get("expr")  not in (None, ""))
+    and (k not in ("default", "check") or data[k].get("expr") not in (None, ""))
 )
 
+# Add constraint on separate line if preceded by a named constraint,
+# or is named unless PRIMARY KEY for column with no type.
 cnstr_breaks, name0 = OrderedDict(), None
-for ctype, cnstr in get_constraints():
-    cnstr_breaks[ctype] = name0 or cnstr.get("name") and (name0 is not None or data.get("type"))
-    name0 = cnstr.get("name") or ""
+for i, (ctype, cnstr) in enumerate(get_constraints()):
+    cnstr_breaks[ctype] = name0 is not None or cnstr.get("name") is not None and (i or data.get("type"))
+    name0 = cnstr.get("name")
 %>
 
 {{ GLUE() }}
-    %if data.get("name"):
+    %if data.get("name") is not None:
   {{ Q(data["name"]) }}
     %else:
   {{ WS("") }}
@@ -418,7 +420,7 @@ for ctype, cnstr in get_constraints():
   {{ LF() }}
   {{ PAD("name", {"name": ""}) }}
         %endif
-        %if data["pk"].get("name"):
+        %if data["pk"].get("name") is not None:
   CONSTRAINT {{ Q(data["pk"]["name"]) }}
         %endif
   PRIMARY KEY {{ data["pk"].get("order", "") }}
@@ -436,7 +438,7 @@ for ctype, cnstr in get_constraints():
   {{ LF() }}
   {{ PAD("name", {"name": ""}) }}
         %endif
-        %if data["notnull"].get("name"):
+        %if data["notnull"].get("name") is not None:
   CONSTRAINT {{ Q(data["notnull"]["name"]) }}
         %endif
   NOT NULL
@@ -451,7 +453,7 @@ for ctype, cnstr in get_constraints():
   {{ LF() }}
   {{ PAD("name", {"name": ""}) }}
         %endif
-        %if data["unique"].get("name"):
+        %if data["unique"].get("name") is not None:
   CONSTRAINT {{ Q(data["unique"]["name"]) }}
         %endif
   UNIQUE
@@ -466,7 +468,7 @@ for ctype, cnstr in get_constraints():
   {{ LF() }}
   {{ PAD("name", {"name": ""}) }}
         %endif
-        %if data["default"].get("name"):
+        %if data["default"].get("name") is not None:
   CONSTRAINT {{ Q(data["default"]["name"]) }}
         %endif
   DEFAULT {{ WS(data["default"]["expr"]) }}
@@ -478,7 +480,7 @@ for ctype, cnstr in get_constraints():
   {{ LF() }}
   {{ PAD("name", {"name": ""}) }}
         %endif
-        %if data["collate"].get("name"):
+        %if data["collate"].get("name") is not None:
   CONSTRAINT {{ Q(data["collate"]["name"]) }}
         %endif
   COLLATE {{ data["collate"]["value"] }}
@@ -490,7 +492,7 @@ for ctype, cnstr in get_constraints():
   {{ LF() }}
   {{ PAD("name", {"name": ""}) }}
         %endif
-        %if data["check"].get("name"):
+        %if data["check"].get("name") is not None:
   CONSTRAINT {{ Q(data["check"]["name"]) }}
         %endif
   CHECK ({{ WS(data["check"]["expr"]) }})
@@ -502,11 +504,11 @@ for ctype, cnstr in get_constraints():
   {{ LF() }}
   {{ PAD("name", {"name": ""}) }}
         %endif
-        %if data["fk"].get("name"):
+        %if data["fk"].get("name") is not None:
   CONSTRAINT {{ Q(data["fk"]["name"]) }}
         %endif
   REFERENCES {{ Q(data["fk"]["table"]) if data["fk"].get("table") else "" }}
-        %if data["fk"].get("key"):
+        %if data["fk"].get("key") is not None:
   {{ WS(" ") }}({{ Q(data["fk"]["key"]) }})
         %endif
         %for action, act in data["fk"].get("action", {}).items():
@@ -601,9 +603,15 @@ TABLE
 {{ GLUE() }}
 )
 
-%if data.get("without"):
+%for i, c in enumerate(data.get("options") or []):
+    %if c.get("without"):
 WITHOUT ROWID
-%endif
+    %elif c.get("strict"):
+STRICT
+    %endif
+  {{ CM("options", i, root=root) }}
+  {{ GLUE() }}
+%endfor
 {{ GLUE() }};
 """
 
@@ -733,7 +741,7 @@ else: cmpath = ["constraints", i]
 %>
 
 {{ GLUE() }}
-%if data.get("name"):
+%if data.get("name") is not None:
   CONSTRAINT {{ Q(data["name"]) }}
 %endif
 
@@ -747,7 +755,7 @@ else: cmpath = ["constraints", i]
   (
   {{ GLUE() }}
     %for j, col in enumerate(data.get("key") or []):
-  {{ Q(col["name"]) if col.get("name") else "" }}
+  {{ Q(col["name"]) if col.get("name") is not None else "" }}
         %if col.get("collate") is not None:
   COLLATE {{ col["collate"] }}
         %endif
@@ -779,7 +787,7 @@ else: cmpath = ["constraints", i]
   (
   {{ GLUE() }}
         %for j, c in enumerate(data["key"]):
-  {{ Q(c) if c else "" }}{{ CM(*cmpath + ["key", j], root=root) }}
+  {{ Q(c) if c is not None else "" }}{{ CM(*cmpath + ["key", j], root=root) }}
         %endfor
   )
     %endif

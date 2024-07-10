@@ -4,6 +4,8 @@
 #
 # mkdir -p snap/gui && cp build/snapcraft.yaml snap/ && cp build/sqlitely.desktop snap/gui/ \
 #   && cp res/Icon256x256_32bit.png snap/gui/sqlitely.png \
+#   && cp "build/3rd-party licenses.txt" src/sqlitely/media \
+#   && sed -i 's/ttf/ttf *.txt/' MANIFEST.in \
 #   && sed -i 's/Icon=.*/Icon=${SNAP}\/meta\/gui\/sqlitely.png/' snap/gui/sqlitely.desktop
 #
 # To build, execute the following in project directory:
@@ -13,7 +15,7 @@
 #
 # @author      Erki Suurjaak
 # @created     05.07.2022
-# @modified    05.07.2022
+# @modified    03.06.2024
 name:    sqlitely
 title:   SQLitely
 summary: SQLite database tool

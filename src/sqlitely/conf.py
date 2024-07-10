@@ -10,11 +10,11 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.10.2023
+@modified    08.07.2024
 ------------------------------------------------------------------------------
 """
-try: from ConfigParser import RawConfigParser                 # Py2
-except ImportError: from configparser import RawConfigParser  # Py3
+try: from configparser import RawConfigParser                 # Py3
+except ImportError: from ConfigParser import RawConfigParser  # Py2
 import copy
 import datetime
 import json
@@ -22,22 +22,24 @@ import os
 import platform
 import sys
 
-import appdirs
-import six
+try: import appdirs
+except ImportError: appdirs = None
+try: from urllib.parse import quote_plus           # Py3
+except ImportError: from urllib import quote_plus  # Py2
 try: import wx
 except ImportError: wx = None
 
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "2.2"
-VersionDate = "09.10.2023"
+Version = "2.3.dev166"
+VersionDate = "08.07.2024"
 
-if getattr(sys, "frozen", False):
-    # Running as a pyinstaller executable
+Frozen, Snapped = getattr(sys, "frozen", False), (sys.executable or "").startswith("/snap/")
+if Frozen: # Running as a pyinstaller executable
     ApplicationDirectory = os.path.dirname(sys.executable)
     ApplicationFile = os.path.realpath(sys.executable)
-    ResourceDirectory = os.path.join(getattr(sys, "_MEIPASS", ""), "media")
+    ResourceDirectory = os.path.join(getattr(sys, "_MEIPASS", ""), "res")
     BinDirectory = os.path.join(getattr(sys, "_MEIPASS", ""), "bin")
     EtcDirectory = ApplicationDirectory
 else:
@@ -64,7 +66,7 @@ FileDirectives = ["AllowMultipleInstances", "ConsoleHistoryCommands", "DBFiles",
 ]
 """List of user-modifiable attributes, saved if changed from default."""
 OptionalFileDirectives = [
-    "DBExtensions", "ExportDbTemplate", "LogSQL", "MinWindowSize",
+    "DBExtensions", "ExportOptions", "LogSQL", "MinWindowSize",
     "MaxConsoleHistory", "MaxDBSizeForFullCount", "MaxTableRowIDForFullCount",
     "MaxHistoryInitialMessages", "MaxImportFilesizeForCount", "MaxRecentFiles",
     "MaxSearchHistory", "MaxSearchResults", "MaxParseCache", "PopupUnexpectedErrors",
@@ -95,9 +97,8 @@ launched instances if not AllowMultipleInstances.
 IPCPort = 59987
 
 """Identifier for inter-process communication."""
-IPCName = six.moves.urllib.parse.quote_plus(
-    "%s-%s" % (wx.GetUserId(), ApplicationFile)
-).encode("latin1", "replace") if wx else ""
+IPCName = quote_plus("%s-%s" % (wx.GetUserId(), ApplicationFile)).encode("latin1", "replace") \
+          if wx else ""
 
 """History of commands entered in console."""
 ConsoleHistoryCommands = []
@@ -344,6 +345,10 @@ FontDiagramFile     = os.path.join(ResourceDirectory, "OpenSans.ttf")
 FontDiagramBoldFile = os.path.join(ResourceDirectory, "OpenSansBold.ttf")
 FontDiagramSize     = 9
 
+"""Path for licences of bundled open-source software."""
+LicenseFile = os.path.join(ResourceDirectory, "3rd-party licenses.txt") \
+              if Frozen or Snapped else None
+
 
 def load(configfile=None):
     """
@@ -353,8 +358,8 @@ def load(configfile=None):
     """
     global Defaults, ConfigFile, ConfigFileStatic
 
-    try: VARTYPES = (basestring, bool, int, long, list, tuple, dict, type(None))         # Py2
-    except Exception: VARTYPES = (bytes, str, bool, int, list, tuple, dict, type(None))  # Py3
+    try: VARTYPES = (basestring, bool, float, int, long, list, tuple, dict, type(None))        # Py2
+    except Exception: VARTYPES = (bytes, str, float, bool, int, list, tuple, dict, type(None)) # Py3
 
     def safecopy(v):
         """Tries to return a deep copy, or a shallow copy, or given value if copy fails."""

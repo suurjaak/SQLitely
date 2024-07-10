@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.10.2023
+@modified    06.07.2024
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -47,7 +47,7 @@ HTML data export template header.
 Opens <html> tag.
 
 @param   title      export title, as string or a sequence of strings
-@param   ?multiple  whether not doing single item export
+@param   ?combined  whether not doing single item export
 """
 DATA_HTML_HEADER = """<%
 from sqlitely.lib import util
@@ -55,7 +55,8 @@ from sqlitely import conf, images
 %><!DOCTYPE HTML><html lang="en">
 <head>
   <meta http-equiv='Content-Type' content='text/html;charset=utf-8' />
-  <meta name="Author" content="{{ conf.Title }}">
+  <meta name="author" content="{{ conf.Title }}">
+  <meta name="generator" content="{{ conf.Title.lower() }} v{{ conf.Version }} ({{ conf.VersionDate }})">
   <title>{{ util.tuplefy(title)[0] }}</title>
   <link rel="shortcut icon" type="image/png" href="data:image/png;base64,{{! images.Icon16x16_8bit.data }}"/>
   <style>
@@ -98,7 +99,7 @@ from sqlitely import conf, images
       border-radius: 10px;
       padding: 10px;
     }
-%if get("multiple"):
+%if get("combined"):
     table.body_table.multiple > tbody > tr:nth-child(1) > td {
       border-radius: 10px 10px 0 0;
     }
@@ -108,6 +109,12 @@ from sqlitely import conf, images
     table.body_table:first-child div.title {
       display: flex;
       justify-content: space-between;
+    }
+    table.body_table.multiple.collapsed > tbody > tr:nth-child(1) > td {
+      border-radius: 10px;
+    }
+    table.body_table.multiple.collapsed > tbody > tr:nth-child(2) > td {
+      display: none;
     }
     ol.title {
       min-width: 200px;
@@ -120,6 +127,10 @@ from sqlitely import conf, images
     }
     ol.title li > div > span {
       font-weight: normal;
+    }
+%else:
+    table.body_table > tbody > tr.collapsed > td {
+      display: none;
     }
 %endif
     table.content_table {
@@ -134,6 +145,35 @@ from sqlitely import conf, images
     }
     a, a.visited { color: #3399FF; text-decoration: none; }
     a:hover, a.visited:hover { text-decoration: underline; }
+    a#darkmode {
+      color: black;
+      display: inline-block;
+      margin-left: 5px;
+      text-decoration: none;
+    }
+    body.darkmode {
+      background: black;
+      color: white;
+    }
+    body.darkmode table *,
+    body.darkmode table.body_table > tbody > tr > td {
+      background: #1E2224;
+      color: white;
+    }
+    body.darkmode .title,
+    body.darkmode a, body.darkmode a.visited {
+      color: #80FF74;
+    }
+    a#darkmode {
+      color: black;
+      display: inline-block;
+      margin-left: 5px;
+      margin-right: auto;
+      text-decoration: none;
+    }
+    body.darkmode a#darkmode {
+      color: white;
+    }
     #footer {
       text-align: center;
       padding: 10px 0;
@@ -146,6 +186,7 @@ from sqlitely import conf, images
     th { padding-left: 5px; padding-right: 5px; text-align: center; white-space: nowrap; }
     .sqlintro { font-family: monospace; white-space: pre-wrap; }
     .sql { font-family: monospace; white-space: pre-wrap; }
+    pre { display: inline; font-family: monospace; white-space: pre-line; }
     a.toggle:hover { cursor: pointer; text-decoration: none; }
     a.toggle::after { content: ".. \\25b6"; font-size: 1.2em; }
     a.toggle.open::after { content: " \\25b2"; font-size: 0.7em; }
@@ -187,6 +228,7 @@ from sqlitely import conf, images
       return false;
     };
 
+    /** Schedules doSearch() for filtering table by event target value. */
     var onSearch = function(table_id, evt) {
       search_state[table_id] = search_state[table_id] || {};
       window.clearTimeout(search_state[table_id].timer); // Avoid reacting to rapid changes
@@ -202,22 +244,33 @@ from sqlitely import conf, images
       }, 200);
     };
 
-    var onToggle = function(a, id1, id2) {
+    /** Toggles class "open" on link and given class on given elements; class defaults to "hidden". */
+    var onToggle = function(a, id1, id2, cls) {
+      cls = cls || 'hidden';
       a.classList.toggle('open');
-      document.getElementById(id1).classList.toggle('hidden');
-      id2 && document.getElementById(id2).classList.toggle('hidden');
+      id1 && document.getElementById(id1).classList.toggle(cls);
+      id2 && document.getElementById(id2).classList.toggle(cls);
     };
 
-%if get("multiple"):
+%if get("combined"):
+    /** Toggles all data table row toggles on or off. */
     var onToggleAll = function(a) {
       a.classList.toggle('open');
       var on = !a.classList.contains('open');
-      document.querySelectorAll('table.header_table a.toggle.down').forEach(function(elem) {
+      document.querySelectorAll('table.header_table a.toggle').forEach(function(elem) {
           if (on != !elem.classList.contains('open')) elem.click();
       });
     };
 
 %endif
+
+    /** Toggles dark mode on or off. */
+    function onToggleDarkmode() {
+      document.body.classList.toggle("darkmode");
+      return false;
+    };
+
+    /** Filters table rows by current search state for table. */
     var doSearch = function(table_id) {
       var words = String(search_state[table_id].text).split(/\s/g).filter(Boolean);
       var regexes = words.map(function(word) { return new RegExp(escapeRegExp(word), "i"); });
@@ -265,16 +318,17 @@ HTML data export template.
 @param   row_count    number of rows
 @param   sql          SQL query giving export data, if any
 @param   create_sql   CREATE SQL statement for export object, if any
-@param   ?multiple    whether not doing single item export
+@param   ?combined    whether not doing single item export
+@param   ?info        additional metadata for export, as {title: text or {label: text}}
 @param   ?progress    callback(name, count) returning whether to cancel, if any
 """
 DATA_HTML = """<%
 from step import Template
 from sqlitely import templates
-%>{{! Template(templates.DATA_HTML_HEADER).expand(title=title, multiple=get("multiple")) }}
+%>{{! Template(templates.DATA_HTML_HEADER, strip=False).expand(title=title, combined=get("combined")) }}
 <body>
 <div id="root">
-{{! Template(templates.DATA_HTML_MULTIPLE_PART).expand(locals()) }}
+{{! Template(templates.DATA_HTML_MULTIPLE_PART, strip=False).expand(locals()) }}
 <div id="footer">{{ templates.export_comment() }}</div>
 </div>
 </body>
@@ -289,6 +343,8 @@ HTML export template for multiple items.
 @param   db           database.Database instance
 @param   title        export title, as string or a sequence of strings
 @param   files        files to embed content from, as {file name: {name, title}}
+@param   ?info        additional metadata for export, as {title: text or {label: text}}
+@param   ?combined    whether not doing single item export
 @param   ?progress    callback() returning whether to cancel, if any
 """
 DATA_HTML_MULTIPLE = """<%
@@ -299,20 +355,28 @@ from sqlitely import templates
 
 progress = get("progress")
 _, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
-%>{{! Template(templates.DATA_HTML_HEADER).expand(title=title, multiple=True) }}
+%>{{! Template(templates.DATA_HTML_HEADER, strip=False).expand(title=title, combined=True) }}
 <body>
 <div id="root">
-%if len(files) > 1:
+%if get("combined"):
 
 <table class="body_table">
 <tr><td>
   <div class="title">
     {{! "<br />".join(util.tuplefy(title)) }}
+<%
+# &#x1F313; first quarter moon symbol
+# &#xFE0E;  Unicode variation selector, force preceding character to monochrome text glyph
+%>
+    <a href="javascript:;" onclick="onToggleDarkmode()" id="darkmode" title="Click to toggle dark/light mode">&#x1F313;&#xFE0E;</a>
     <span class="toggle header">
       <a class="toggle down open" title="Toggle all rows opened or closed" onclick="onToggleAll(this)">Toggle all</a>
     </span>
   </div><br />
   Source: <b>{{ db }}</b>{{ " (%s)" % dbsize if dbsize else "" }}.<br />
+%if get("info"):
+  {{! Template(templates.DATA_INFO_PART, strip=False).expand(info=info, format="html").strip() }}
+%endif
   <ol class="title">
 %for item in files.values():
     <li><div>
@@ -351,33 +415,47 @@ HTML export template for item partial file.
 @param   row_count    number of rows
 @param   sql          SQL query giving export data, if any
 @param   create_sql   CREATE SQL statement for export object, if any
-@param   ?multiple    whether actually doing multiple item export
+@param   ?combined    whether actually doing multiple item export
+@param   ?info        additional metadata for export, as {title: text or {label: text}}
 @param   ?progress    callback(name, count) returning whether to cancel, if any
 """
 DATA_HTML_MULTIPLE_PART = """<%
 import os
+from step import Template
 from sqlitely.lib import util
-from sqlitely import grammar
+from sqlitely import grammar, templates
 
 _, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 item_id = "item__%s" % hash(util.tuplefy(title))
 progress = get("progress")
 %>
-<table class="body_table{{ " multiple" if get("multiple") else "" }}" id="{{ item_id }}">
+<table class="body_table{{ " multiple" if get("combined") else "" }}" id="{{ item_id }}">
 <tr><td><table class="header_table">
   <tr>
     <td>
-      <div class="title">{{! "<br />".join(util.tuplefy(title)) }}</div><br />
+      <div class="title">
+        {{! "<br />".join(util.tuplefy(title)) }}
+%if not get("combined"):
+<%
+# &#x1F313; first quarter moon symbol
+# &#xFE0E;  Unicode variation selector, force preceding character to monochrome text glyph
+%>
+        <a href="javascript:;" onclick="onToggleDarkmode()" id="darkmode" title="Click to toggle dark/light mode">&#x1F313;&#xFE0E;</a>
+%endif
+      </div><br />
       <b>SQL:</b>
       <span class="sql hidden" id="{{ item_id }}__sql">{{ sql or create_sql }}</span>
       <span class="shortsql" id="{{ item_id }}__shortsql">{{ (sql or create_sql).split("\\n", 1)[0] }}</span>
       <a class="toggle" title="Toggle full SQL" onclick="onToggle(this, '{{ item_id }}__shortsql', '{{ item_id }}__sql')"> </a>
       <br />
-%if not get("multiple"):
+%if not get("combined"):
       Source: <b>{{ db }}</b>{{ " (%s)" % dbsize if dbsize else "" }}.<br />
+    %if get("info"):
+      {{! Template(templates.DATA_INFO_PART, strip=False).expand(info=info, format="html").strip() }}
+    %endif
 %endif
       <b>{{ row_count }}</b> {{ util.plural("row", row_count, numbers=False) }}{{ " in results" if sql else "" }}.
-      <a class="toggle down open" title="Toggle rows" onclick="onToggle(this, '{{ item_id }}__rows')"> </a>
+      <a class="toggle down open" title="Toggle rows" onclick="onToggle(this, '{{ item_id }}{{ "" if get("combined") else "__rows" }}', null, 'collapsed')"> </a>
       <br />
     </td>
   </tr></table>
@@ -391,7 +469,7 @@ progress = get("progress")
   <tr>
     <th class="index asc"><a class="sort asc" title="Sort by index" onclick="onSort(this)">#</a></th>
 %for i, c in enumerate(columns):
-    <th><a class="sort" title="Sort by {{ grammar.quote(c["name"]) }}" onclick="onSort(this)">{{ util.unprint(c["name"]) }}</a></th>
+    <th><a class="sort" title="Sort by {{ escape(util.unprint(grammar.quote(c["name"], embed=True))) }}" onclick="onSort(this)">{{ util.unprint(grammar.quote(c["name"], embed=True)) }}</a></th>
 %endfor
   </tr>
 <%
@@ -499,22 +577,22 @@ create_sql, _ = grammar.generate(meta)
 JSON export template.
 
 @param   data_buffer  iterable yielding rows data in text chunks
-@param   ?multiple    whether doing multiple item export (skips list brackets)
+@param   ?combined    whether doing multiple item export (skips list brackets)
 @param   ?progress    callback() returning whether to cancel, if any
 """
 DATA_JSON = """<%
 from sqlitely.lib import util
 from sqlitely import conf, templates
 
-multiple, progress = get("multiple"), get("progress")
+combined, progress = get("combined"), get("progress")
 
-if not multiple: echo("[\\n")
+if not combined: echo("[\\n")
 for i, chunk in enumerate(data_buffer):
     if progress and not i % 100 and not progress():
         break # for i, chunk
 
     echo(chunk)
-if not multiple: echo("\\n]\\n")
+if not combined: echo("\\n]\\n")
 %>"""
 
 
@@ -526,14 +604,14 @@ JSON export template for the rows part.
 @param   columns     [{name}, ]
 @param   name        table name
 @param   ?namespace  {"row_count"}
-@param   ?multiple   whether doing multiple item export (uses leading indentation)
+@param   ?combined   whether doing multiple item export (uses leading indentation)
 @param   ?progress   callback(name, count) returning whether to cancel, if any
 """
 DATA_ROWS_JSON = """<%
 import collections, json
 from sqlitely import templates
 
-margin = 2 if get("multiple") else 0
+margin = 2 if get("combined") else 0
 progress = get("progress")
 rows = iter(rows)
 i, row, nextrow = 0, next(rows, None), next(rows, None)
@@ -593,10 +671,12 @@ SQL insert statements export template.
 @param   data_buffer  iterable yielding rows data in text chunks
 @param   ?sql         SQL query giving export data, if any
 @param   ?create_sql  CREATE SQL statement for export object, if any
+@param   ?info        additional metadata for export, as {title: text or {label: text}}
 @param   ?progress    callback(name, count) returning whether to cancel, if any
 """
 DATA_SQL = """<%
 import os
+from step import Template
 from sqlitely.lib import util
 from sqlitely import conf, templates
 
@@ -604,6 +684,9 @@ _, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 progress = get("progress")
 %>-- {{ "\\n-- ".join(util.tuplefy(title)) }}.
 -- Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
+%if get("info"):
+{{! Template(templates.DATA_INFO_PART, strip=False).expand(info=info, format="sql").strip() }}
+%endif
 -- {{ templates.export_comment() }}
 -- {{ row_count }} {{ util.plural("row", row_count, numbers=False) }}.
 %if get("sql"):
@@ -633,16 +716,21 @@ TXT SQL insert statements export template for multiple items.
 
 @param   db          database.Database instance
 @param   files       files to embed content from, as {file name: {name, title}}
+@param   ?info        additional metadata for export, as {title: text or {label: text}}
 @param   ?progress   callback() returning whether to cancel, if any
 """
 DATA_SQL_MULTIPLE = """<%
 import os
+from step import Template
 from sqlitely.lib import util
 from sqlitely import conf, templates
 
 _, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 progress = get("progress")
 %>-- Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
+%if get("info"):
+{{! Template(templates.DATA_INFO_PART, strip=False).expand(info=info, format="sql").strip() }}
+%endif
 -- {{ templates.export_comment() }}
 
 
@@ -723,7 +811,7 @@ i = 0
 if get("namespace"): namespace["row_count"] += 1
 values = [grammar.format(row[c["name"]], c) for c in columns]
 %>
-INSERT INTO {{ name }} ({{ str_cols }}) VALUES ({{ ", ".join(values) }});
+INSERT INTO {{ grammar.quote(name) }} ({{ str_cols }}) VALUES ({{ ", ".join(values) }});
 <%
 if not i % 100 and progress and not progress(name=name, count=i):
     break # for i, row
@@ -757,7 +845,7 @@ setstr = ", ".join("%s = %s" % (grammar.quote(c["name"]).encode("utf-8").decode(
 wherestr = " AND ".join("%s = %s" % (grammar.quote(c["name"]).encode("utf-8").decode("latin1"), grammar.format(original[c["name"]], c))
                        for c in columns if c["name"] in pks and c["name"] in original)
 %>
-UPDATE {{ name }} SET {{ setstr }}{{ (" WHERE " + wherestr) if wherestr else "" }};
+UPDATE {{ grammar.quote(name) }} SET {{ setstr }}{{ (" WHERE " + wherestr) if wherestr else "" }};
 %endfor
 """
 
@@ -775,24 +863,29 @@ TXT data export template.
 @param   columnwidths  {col name: char length}
 @param   ?sql          SQL query giving export data, if any
 @param   ?create_sql   CREATE SQL statement for export object, if any
+@param   ?info        additional metadata for export, as {title: text or {label: text}}
 @param   ?progress     callback() returning whether to cancel, if any
 """
 DATA_TXT = """<%
 import os
+from step import Template
 from sqlitely.lib import util
-from sqlitely import templates
+from sqlitely import grammar, templates
 
 _, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 progress = get("progress")
 %>{{ "\\n".join(util.tuplefy(title)) }}.
 Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
+%if get("info"):
+{{! Template(templates.DATA_INFO_PART, strip=False).expand(info=info, format="txt").strip() }}
+%endif
 {{ templates.export_comment() }}
 {{ row_count }} {{ util.plural("row", row_count, numbers=False) }}.
 %if get("sql"):
 
 SQL: {{ sql }}
 %endif
-%if name and get("create_sql"):
+%if name is not None and get("create_sql"):
 
 {{ create_sql.rstrip(";\\n") }};
 %endif
@@ -800,7 +893,7 @@ SQL: {{ sql }}
 <%
 headers = []
 for c in columns:
-    fc = util.unprint(c["name"])
+    fc = util.unprint(grammar.quote(c["name"], embed=True))
     headers.append((fc.ljust if columnjusts[c["name"]] else fc.rjust)(columnwidths[c["name"]]))
 hr = "|-" + "-|-".join("".ljust(columnwidths[c["name"]], "-") for c in columns) + "-|"
 header = "| " + " | ".join(headers) + " |"
@@ -827,16 +920,21 @@ TXT export template for multiple items.
 
 @param   db           database.Database instance
 @param   files        files to embed content from, as {file name: {..}}
+@param   ?info        additional metadata for export, as {title: text or {label: text}}
 @param   ?progress    callback() returning whether to cancel, if any
 """
 DATA_TXT_MULTIPLE = """<%
 import os
+from step import Template
 from sqlitely.lib import util
 from sqlitely import templates
 
 _, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 progress = get("progress")
 %>Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
+%if get("info"):
+{{! Template(templates.DATA_INFO_PART, strip=False).expand(info=info, format="txt").strip() }}
+%endif
 {{ templates.export_comment() }}
 
 
@@ -872,6 +970,7 @@ TXT export template for item partial file in multiple item export.
 """
 DATA_TXT_MULTIPLE_PART = """<%
 from sqlitely.lib import util
+from sqlitely import grammar
 
 progress = get("progress")
 %>{{ "\\n".join(util.tuplefy(title)) }}.
@@ -880,7 +979,7 @@ progress = get("progress")
 
 SQL: {{ sql }}
 %endif
-%if name and get("create_sql"):
+%if name is not None and get("create_sql"):
 
 {{ create_sql.rstrip(";\\n") }};
 %endif
@@ -888,7 +987,7 @@ SQL: {{ sql }}
 
 headers = []
 for c in columns:
-    fc = util.unprint(c["name"])
+    fc = util.unprint(grammar.quote(c["name"], embed=True))
     headers.append((fc.ljust if columnjusts[c["name"]] else fc.rjust)(columnwidths[c["name"]]))
 hr = "|-" + "-|-".join("".ljust(columnwidths[c["name"]], "-") for c in columns) + "-|"
 header = "| " + " | ".join(headers) + " |"
@@ -963,9 +1062,9 @@ TXT data template for copying rows as page.
 DATA_ROWS_PAGE_TXT = """<%
 import six
 from sqlitely.lib import util
-from sqlitely import templates
+from sqlitely import grammar, templates
 
-fmtcols = [util.unprint(c["name"]) for c in columns]
+fmtcols = [util.unprint(grammar.quote(c["name"])) for c in columns]
 colwidth = max(map(len, fmtcols))
 %>
 %for i, row in enumerate(rows):
@@ -995,10 +1094,12 @@ YAML export template.
 @param   data_buffer  iterable yielding rows data in text chunks
 @param   ?sql         SQL query giving export data, if any
 @param   ?create_sql  CREATE SQL statement for export object, if any
+@param   ?info        additional metadata for export, as {title: text or {label: text}}
 @param   ?progress    callback() returning whether to cancel, if any
 """
 DATA_YAML = """<%
 import os
+from step import Template
 from sqlitely.lib import util
 from sqlitely import templates
 
@@ -1006,6 +1107,9 @@ _, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 progress = get("progress")
 %># {{ "\\n# ".join(util.tuplefy(title)) }}
 # Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
+%if get("info"):
+{{! Template(templates.DATA_INFO_PART, strip=False).expand(info=info, format="yaml").strip() }}
+%endif
 # {{ templates.export_comment() }}
 # {{ row_count }} {{ util.plural("row", row_count, numbers=False) }}.
 %if get("sql"):
@@ -1064,10 +1168,12 @@ YAML export template for multiple items.
 @param   db           database.Database instance
 @param   title        export title, as string or a sequence of strings
 @param   files        files to embed content from, as {file name: {..}}
+@param   ?info        additional metadata for export, as {title: text or {label: text}}
 @param   ?progress    callback() returning whether to cancel, if any
 """
 DATA_YAML_MULTIPLE = """<%
 import os
+from step import Template
 from sqlitely.lib import util
 from sqlitely import templates
 
@@ -1075,6 +1181,9 @@ _, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 progress = get("progress")
 %># {{ "\\n# ".join(util.tuplefy(title)) }}
 # Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
+%if get("info"):
+{{! Template(templates.DATA_INFO_PART, strip=False).expand(info=info, format="yaml").strip() }}
+%endif
 # {{ templates.export_comment() }}
 
 <%
@@ -1162,6 +1271,44 @@ for i, row in enumerate(rows, 1):
 
 
 """
+Data export template for export info part.
+
+@param   info    additional metadata for export, as {title: text or {label: text}}
+@param   format  export format, one of "html" "sql" "txt" "yaml"
+"""
+DATA_INFO_PART = """<%
+prefix = {"sql": "-- ", "yaml": "# "}.get(format, "")
+%>
+%if "html" == format:
+    %for label, value in info.items():
+        %if value and isinstance(value, dict):
+  {{ label }}:
+  <table>
+            %for k, v in value.items():
+    <tr><td>{{ k }}:</td><td>{{ v }}</td></tr>
+            %endfor
+  </table>
+        %elif value:
+  {{ label }}: <pre>{{ value }}</pre><br />
+        %endif
+    %endfor
+%else:
+    %for label, value in (get("info") or {}).items():
+        %if value and isinstance(value, dict):
+{{ prefix }}{{ label }}:
+            %for k, v in value.items():
+{{ prefix }}  {{ k }}: {{ v }}
+            %endfor
+        %elif value:
+{{ prefix }}{{ label }}: {{ value }}
+        %endif
+    %endfor
+%endif
+"""
+
+
+
+"""
 HTML template for search results header.
 
 @param   text      search query
@@ -1214,7 +1361,7 @@ from sqlitely import conf, grammar
 <tr>
 <th>#</th>
 %for c in item["columns"]:
-<th>{{ util.unprint(c["name"]) }}</th>
+<th>{{ util.unprint(grammar.quote(c["name"], embed=True)) }}</th>
 %endfor
 </tr>
 """
@@ -1236,14 +1383,12 @@ SEARCH_ROW_DATA_HTML = """<%
 import six
 from sqlitely import conf, searchparser, templates
 
-match_kw = lambda k, x: searchparser.match_words(x["name"], keywords[k], any, search.get("case"))
+match_kw = lambda k, x: searchparser.match_words(x["name"], keywords[k], search.get("case"), any)
 wrap_hl = lambda x: "<b>%s</b>" % x.group(0)
 %>
 <tr>
 <td align="right" valign="top">
-  <a href="{{ category }}:{{ item["name"] }}:{{ count }}">
-    <font color="{{ conf.LinkColour }}">{{ count }}</font>
-  </a>
+  <a href="{{ category }}:{{ item["name"] }}:{{ count }}"><font color="{{ conf.LinkColour }}">{{ count }}</font></a>
 </td>
 %for c in item["columns"]:
 <%
@@ -1265,13 +1410,14 @@ and not (keywords.get("-column") and match_kw("-column", c)):
 
 """Text shown in Help -> About dialog (HTML content)."""
 ABOUT_HTML = """<%
-import sys, wx
+import os, sys, wx
+from sqlitely.lib import util
 from sqlitely import conf
 %>
 <font size="2" face="{{ conf.HtmlFontName }}" color="{{ conf.FgColour }}">
 <table cellpadding="0" cellspacing="0"><tr><td valign="top">
 <img src="memory:{{ conf.Title.lower() }}.png" /></td><td width="10"></td><td valign="center">
-<b>{{ conf.Title }} version {{ conf.Version }}</b>, {{ conf.VersionDate }}.<br /><br />
+<b>{{ conf.Title }}</b> version {{ conf.Version }}, {{ conf.VersionDate }}.<br /><br />
 
 
 {{ conf.Title }} is an SQLite database manager, released as free open source software
@@ -1321,16 +1467,8 @@ under the MIT License.
   <li>XlsxWriter,
       <a href="https://pypi.org/project/XlsxWriter"><font color="{{ conf.LinkColour }}">
           pypi.org/project/XlsxWriter</font></a></li>
-</ul><br /><br />
-%if getattr(sys, 'frozen', False):
-Installer and binary executable created with:
-<ul>
-  <li>Nullsoft Scriptable Install System, <a href="https://nsis.sourceforge.io"><font color="{{ conf.LinkColour }}">nsis.sourceforge.io</font></a></li>
-  <li>PyInstaller, <a href="https://www.pyinstaller.org"><font color="{{ conf.LinkColour }}">pyinstaller.org</font></a></li>
-</ul><br /><br />
-%endif
-
-
+</ul>
+<br /><br />
 
 Several icons from Fugue Icons, &copy; 2010 Yusuke Kamiyamane<br />
 <a href="https://p.yusukekamiyamane.com/"><font color="{{ conf.LinkColour }}">p.yusukekamiyamane.com</font></a>
@@ -1339,12 +1477,21 @@ Includes fonts Carlito Regular and Carlito bold,
 <a href="https://fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts"><font color="{{ conf.LinkColour }}">fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts</font></a><br /><br />
 Includes fonts Open Sans Regular and Open Sans Bold,
 <a href="https://fonts.google.com/specimen/Open+Sans"><font color="{{ conf.LinkColour }}">fonts.google.com/specimen/Open+Sans</font></a>
-%if getattr(sys, 'frozen', False):
+
+%if conf.Frozen:
 <br /><br />
-Installer created with Nullsoft Scriptable Install System,
-<a href="http://nsis.sourceforge.net/"><font color="{{ conf.LinkColour }}">nsis.sourceforge.net</font></a>
+Installer and binary executable created with:
+<ul>
+  <li>Nullsoft Scriptable Install System, <a href="https://nsis.sourceforge.io"><font color="{{ conf.LinkColour }}">nsis.sourceforge.io</font></a></li>
+  <li>PyInstaller, <a href="https://www.pyinstaller.org"><font color="{{ conf.LinkColour }}">pyinstaller.org</font></a></li>
+</ul>
 %endif
 
+%if conf.LicenseFile:
+<br /><br />
+Licensing for bundled software and resources:
+<a href="{{ util.path_to_url(conf.LicenseFile) }}"><font color="{{ conf.LinkColour }}">{{ os.path.basename(conf.LicenseFile) }}</font></a>
+%endif
 </font>
 """
 
@@ -1634,8 +1781,13 @@ except ImportError:
   <br /><br />
   All search texts and keywords are case-insensitive by default. <br />
   Keywords are global, even when in bracketed (grouped words). <br />
-  Metadata search supports only <code>table:</code> and <code>view:</code> keywords.
-
+  Metadata search supports only <font color="{{ conf.HelpCodeColour }}"><code>table:</code></font>
+  and <font color="{{ conf.HelpCodeColour }}"><code>view:</code></font> keywords,<br />
+  and does not support <font color="{{ conf.HelpCodeColour }}"><code>OR</code></font> queries.
+  <br /><br />
+  <b>Note:</b> for excluding words or keywords in the command-line interface,<br />
+  use the tilde character (<font color="{{ conf.HelpCodeColour }}"><code>~</code></font>)
+  instead of the dash (<font color="{{ conf.HelpCodeColour }}"><code>-</code></font>).
 </td></tr></table>
 </font>
 """
@@ -1854,7 +2006,8 @@ def wrapclass(v):
 %><!DOCTYPE HTML><html lang="en">
 <head>
   <meta http-equiv='Content-Type' content='text/html;charset=utf-8' />
-  <meta name="Author" content="{{ conf.Title }}">
+  <meta name="author" content="{{ conf.Title }}">
+  <meta name="generator" content="{{ conf.Title.lower() }} v{{ conf.Version }} ({{ conf.VersionDate }})">
   <title>{{ title }}</title>
   <link rel="shortcut icon" type="image/png" href="data:image/png;base64,{{! images.Icon16x16_8bit.data }}"/>
   <style>
@@ -1901,7 +2054,7 @@ def wrapclass(v):
     #diagram { position: relative; }
     #diagram .img {
       max-width: 100%;
-      padding-top: 10px;
+      padding-top: 15px;
     }
     #diagram .diagram-format {
       position: absolute;
@@ -1992,6 +2145,54 @@ def wrapclass(v):
     a.sort.desc::after { content: "↑"; }
     th a.sort:only-child { display: block; }
     th a.toggle { display: inline-block; }
+    a#darkmode {
+      color: black;
+      display: inline-block;
+      margin-left: 5px;
+      text-decoration: none;
+    }
+    body.darkmode {
+      background: black;
+      color: white;
+    }
+    body.darkmode #body_table > tbody > tr > td {
+      background: #1E2224;
+    }
+    body.darkmode #title,
+    body.darkmode a, body.darkmode a.visited {
+      color: #80FF74;
+    }
+    a#darkmode {
+      color: black;
+      display: inline-block;
+      text-decoration: none;
+    }
+    body.darkmode a#darkmode {
+      color: white;
+    }
+    body.darkmode svg {
+      background: #1E2224;
+    }
+    body.darkmode svg path {
+      stroke: #F5FEA9;
+    }
+    body.darkmode svg text {
+      fill: white;
+    }
+    body.darkmode svg .item .box {
+      stroke: #FF8080;
+      fill: url(#item-background-darkmode);
+    }
+    body.darkmode svg .item .content {
+      fill: #1E2224;
+    }
+    body.darkmode svg .item .separator {
+      stroke: #FF8080;
+    }
+    body.darkmode svg .relation .label {
+      fill: #F5FEA9;
+      filter: url(#clearbg-darkmode);
+    }
     #footer {
       text-align: center;
       padding-bottom: 10px;
@@ -2077,6 +2278,11 @@ def wrapclass(v):
       return false;
     };
 
+    function onToggleDarkmode() {
+      document.body.classList.toggle("darkmode");
+      return false;
+    };
+
     function onSwitch(a1, id1, aid2, id2) {
       var on = a1.classList.contains("open");
       var a2 = document.getElementById(aid2);
@@ -2110,7 +2316,14 @@ dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
 <tr><td><table id="header_table">
   <tr>
     <td>
-      <div id="title">{{ title }}</div><br />
+      <div id="title">
+        {{ title }}
+<%
+# &#x1F313; first quarter moon symbol
+# &#xFE0E;  Unicode variation selector, force preceding character to monochrome text glyph
+%>
+        <a href="javascript:;" onclick="onToggleDarkmode()" id="darkmode" title="Click to toggle dark/light mode">&#x1F313;&#xFE0E;</a>
+      </div><br />
       Source: <b>{{ db }}</b>.<br />
       Size: <b title="{{ stats.get("size", db.filesize) }}">{{ util.format_bytes(stats.get("size", db.filesize)) }}</b> (<span title="{{ stats.get("size", db.filesize) }}">{{ util.format_bytes(stats.get("size", db.filesize), max_units=False) }}</span>).<br />
 %if dt_created and dt_modified and dt_created != dt_modified:
@@ -2200,7 +2413,7 @@ dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
     </tr>
     %for item in sorted(stats["table"], key=lambda x: (-x["size"], x["name"].lower())):
     <tr>
-      <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML).expand(dict(category="table", size=item["size"], total=total)) }}</td>
+      <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML, strip=False).expand(dict(category="table", size=item["size"], total=total)) }}</td>
       <td title="{{ item["name"] }}">{{ util.unprint(item["name"]) }}</td>
       <td class="right" title="{{ util.format_bytes(item["size"]) }}">{{ util.format_bytes(item["size"], max_units=False, with_units=False) }}</td>
     </tr>
@@ -2219,7 +2432,7 @@ dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
   </tr>
         %for item in sorted(stats["table"], key=lambda x: (-x["size_total"], x["name"].lower())):
   <tr>
-    <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML).expand(dict(category="table", size=item["size_total"], total=total)) }}</td>
+    <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML, strip=False).expand(dict(category="table", size=item["size_total"], total=total)) }}</td>
     <td title="{{ item["name"] }}">{{ util.unprint(item["name"]) }}</td>
     <td class="right" title="{{ util.format_bytes(item["size_total"]) }}">{{ util.format_bytes(item["size_total"], max_units=False, with_units=False) }}</td>
   </tr>
@@ -2237,7 +2450,7 @@ dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
   </tr>
         %for item in sorted([x for x in stats["table"] if "index" in x], key=lambda x: (-x["size_index"], x["name"].lower())):
   <tr>
-    <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML).expand(dict(category="index", size=item["size_index"], total=total)) }}</td>
+    <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML, strip=False).expand(dict(category="index", size=item["size_index"], total=total)) }}</td>
     <td title="{{ item["name"] }} ({{ len(item["index"]) }})">{{ util.unprint(item["name"]) }} ({{ len(item["index"]) }})</td>
     <td class="right" title="{{ util.format_bytes(item["size_index"]) }}">{{ util.format_bytes(item["size_index"], max_units=False, with_units=False) }}</td>
     <td class="right">{{ int(round(100 * util.safedivf(item["size_index"], index_total))) }}%</td>
@@ -2256,7 +2469,7 @@ dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
   </tr>
         %for item in sorted(stats["index"], key=lambda x: (-x["size"], x["name"].lower())):
   <tr>
-    <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML).expand(dict(category="index", size=item["size"], total=total)) }}</td>
+    <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML, strip=False).expand(dict(category="index", size=item["size"], total=total)) }}</td>
     <td title="{{ item["name"] }}">{{ util.unprint(item["name"]) }}</td>
     <td title="{{ item["table"] }}">{{ item["table"] }}</td>
     <td class="right" title="{{ util.format_bytes(item["size"]) }}">{{ util.format_bytes(item["size"], max_units=False, with_units=False) }}</td>
@@ -2306,7 +2519,7 @@ relateds = db.get_related(category, item["name"])
       <table class="subtable">
         <tr>
           <td title="{{ item["name"] }}" {{! wrapclass(item["name"]) }}>
-            {{ util.unprint(item["name"]) }}
+            {{ util.unprint(grammar.quote(item["name"], embed=True)) }}
           </td>
           <td>
             <a class="toggle" title="Toggle SQL" onclick="onToggle(this, '{{ category }}/{{! urlquote(item["name"]) }}/sql')">SQL</a>
@@ -2328,7 +2541,7 @@ countstr = util.count(item)
       <a class="toggle right" title="Toggle columns" onclick="onToggle(this, '{{ category }}/{{! urlquote(item["name"]) }}/cols')">{{ len(item["columns"]) }}</a>
       <table class="columns hidden" id="{{ category }}/{{! urlquote(item["name"]) }}/cols">
                 %for i, c in enumerate(item["columns"]):
-        <tr data-content="{{ i + 1 }}"><td {{! wrapclass(c["name"]) }}>{{ util.unprint(c["name"]) }}</td><td {{! wrapclass(c.get("type")) }}>{{ util.unprint(c.get("type", "")) }}</td></tr>
+        <tr data-content="{{ i + 1 }}"><td {{! wrapclass(c["name"]) }}>{{ util.unprint(grammar.quote(c["name"], embed=True)) }}</td><td {{! wrapclass(c.get("type")) }}>{{ util.unprint(c.get("type", "")) }}</td></tr>
                 %endfor
       </table>
     </td>
@@ -2344,7 +2557,7 @@ rels = [] # [(source, keys, target, keys)]
 <%
 
 lks2, fks2 = db.get_keys(item2["name"])
-fmtkeys = lambda x: ("(%s)" if len(x) > 1 else "%s") % ", ".join(map(util.unprint, map(grammar.quote, x)))
+fmtkeys = lambda x: ("(%s)" if len(x) > 1 else "%s") % ", ".join(map(util.unprint, (grammar.quote(y, embed=True) for y in x)))
 for col in lks2:
     for table, keys in col.get("table", {}).items():
         if util.lceq(table, item["name"]):
@@ -2354,7 +2567,7 @@ for col in fks2:
         if util.lceq(table, item["name"]):
             rels.append((item2["name"], col["name"], None, keys or []))
 %>
-  <a href="#{{category}}/{{! urlquote(item2["name"]) }}" title="Go to {{ category }} {{ grammar.quote(item2["name"], force=True) }}" {{! wrapclass(item2["name"]) }}>{{ item2["name"] }}</a><br />
+  <a href="#{{category}}/{{! urlquote(item2["name"]) }}" title="Go to {{ category }} {{ grammar.quote(item2["name"], force=True) }}" {{! wrapclass(item2["name"]) }}>{{ grammar.quote(item2["name"], embed=True) }}</a><br />
                 %endfor
           </td>
                 %if rels:
@@ -2369,7 +2582,7 @@ for col in fks2:
       <div class="hidden" id="{{ category }}/{{! urlquote(item["name"]) }}/related">
         <br />
                     %for (a, c1, b, c2) in rels:
-                        %if a:
+                        %if a is not None:
         <a href="#table/{{! urlquote(a) }}" title="Go to table {{ grammar.quote(a, force=True) }}" {{! wrapclass(a) }}>{{ util.unprint(grammar.quote(a)) }}</a>{{ "." if c1 else "" }}{{ fmtkeys(c1) }} <span class="nowrap">REFERENCES</span> {{ fmtkeys(c2) }}<br />
                         %else:
         {{ fmtkeys(c1) }} <span class="nowrap">REFERENCES</span> <a href="#table/{{! urlquote(b) }}" title="Go to table {{ util.unprint(grammar.quote(b, force=True)) }}" {{! wrapclass(b) }}>{{ grammar.quote(b) }}</a>{{ "." if c2 else "" }}{{ fmtkeys(c2) }}<br />
@@ -2385,7 +2598,7 @@ for col in fks2:
 <%
 flags["has_direct"] = True
 %>
-  {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}" {{! wrapclass(item2["name"]) }}>{{ util.unprint(item2["name"]) }}</a><br />
+  {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}" {{! wrapclass(item2["name"]) }}>{{ util.unprint(grammar.quote(item2["name"])) }}</a><br />
                     %endif
                 %endfor
 
@@ -2397,7 +2610,7 @@ flags["has_direct"] = True
 <%
 flags["has_indirect"] = True
 %>
-  <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}" {{! wrapclass(item2["name"]) }}>{{ util.unprint(item2["name"]) }}</a></em><br />
+  <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}" {{! wrapclass(item2["name"]) }}>{{ util.unprint(grammar.quote(item2["name"])) }}</a></em><br />
                     %endif
                 %endfor
     </td>
@@ -2426,7 +2639,7 @@ size = next((x["size_total"] for x in stats["table"] if util.lceq(x["name"], ite
                     %if col.get("expr"):
       <pre>{{ col["expr"] }}</pre>
                     %else:
-      {{ util.unprint(col["name"] or "") }}
+      {{ util.unprint(grammar.quote(col["name"], embed=True)) }}
                     %endif
       <br />
                 %endfor
@@ -2458,7 +2671,7 @@ mycategory = "view" if item["tbl_name"] in db.schema["view"] else "table"
     <td>
                 %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values()):
                     %if not util.lceq(item2["name"], item["tbl_name"]):
-  <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}" {{! wrapclass(item2["name"]) }}>{{ util.unprint(item2["name"]) }}</a></em><br />
+  <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}" {{! wrapclass(item2["name"]) }}>{{ util.unprint(grammar.quote(item2["name"])) }}</a></em><br />
                     %endif
                 %endfor
     </td>
@@ -2470,28 +2683,28 @@ mycategory = "view" if item["tbl_name"] in db.schema["view"] else "table"
       <a class="toggle right" title="Toggle columns" onclick="onToggle(this, '{{ category }}/{{! urlquote(item["name"]) }}/cols')">{{ len(item["columns"]) }}</a>
       <table class="columns hidden" id="{{ category }}/{{! urlquote(item["name"]) }}/cols">
                 %for i, col in enumerate(item["columns"]):
-        <tr data-content="{{ i + 1 }}"><td {{! wrapclass(col["name"]) }}>{{ util.unprint(col["name"]) }}</td><td {{! wrapclass(col.get("type")) }}>{{ util.unprint(col.get("type", "")) }}</td></tr>
+        <tr data-content="{{ i + 1 }}"><td {{! wrapclass(col["name"]) }}>{{ util.unprint(grammar.quote(col["name"], embed=True)) }}</td><td {{! wrapclass(col.get("type")) }}>{{ util.unprint(col.get("type", "")) }}</td></tr>
                 %endfor
       </table>
     </td>
 
     <td>
                 %for item2 in (x for c in ("table", "view") for x in relateds.get(c, {}).values() if x["name"].lower() in item["meta"]["__tables__"]):
-      {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}" {{! wrapclass(item2["name"]) }}>{{ util.unprint(item2["name"]) }}</a><br />
+      {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}" {{! wrapclass(item2["name"]) }}>{{ util.unprint(grammar.quote(item2["name"])) }}</a><br />
                 %endfor
 
                 %for i, item2 in enumerate(x for c in ("trigger", ) for x in relateds.get(c, {}).values() if util.lceq(x.get("tbl_name"), item["name"])):
                     %if not i:
       <br />
                     %endif
-      {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}" {{! wrapclass(item2["name"]) }}>{{ util.unprint(item2["name"]) }}</a><br />
+      {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}" {{! wrapclass(item2["name"]) }}>{{ util.unprint(grammar.quote(item2["name"])) }}</a><br />
                 %endfor
 
     </td>
 
     <td>
                 %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values() if item["name"].lower() in x["meta"]["__tables__"]):
-      <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}" {{! wrapclass(item2["name"]) }}>{{ util.unprint(item2["name"]) }}</a></em><br />
+      <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}" {{! wrapclass(item2["name"]) }}>{{ util.unprint(grammar.quote(item2["name"])) }}</a></em><br />
                 %endfor
     </td>
             %endif
@@ -2518,7 +2731,7 @@ mycategory = "view" if item["tbl_name"] in db.schema["view"] else "table"
     %if pragma:
 <h2><a class="toggle" title="Toggle PRAGMAs" onclick="onToggle(this, 'pragma')">PRAGMA settings</a></h2>
 <div class="hidden sql" id="pragma">
-{{! Template(templates.PRAGMA_SQL).expand(pragma=pragma) }}
+{{! Template(templates.PRAGMA_SQL).expand(pragma=pragma, db=db) }}
 </div>
     %endif
 
@@ -2905,6 +3118,7 @@ Database dump SQL template.
 @param   data       iterable yielding {name, columns, rows}
 @param   pragma     PRAGMA values as {name: value}
 @param   buffer     file or file-like buffer being written to
+@param   ?info      additional metadata for export, as {title: text or {label: text}}
 @param   ?progress  callback(name, count) returning whether to cancel, if any
 """
 DUMP_SQL = """<%
@@ -2923,10 +3137,13 @@ progress = get("progress")
 %>
 -- Database dump.
 -- Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
+%if get("info"):
+{{! Template(templates.DATA_INFO_PART, strip=False).expand(info=info, format="sql").strip() }}
+%endif
 -- {{ templates.export_comment() }}
 %if pragma_first:
 
-{{! Template(templates.PRAGMA_SQL).expand(pragma=pragma_first) }}
+{{! Template(templates.PRAGMA_SQL).expand(pragma=pragma_first, db=db) }}
 
 %endif
 %if sql:
@@ -2961,7 +3178,7 @@ except Exception as e:
 
 %endfor
 
-{{! Template(templates.PRAGMA_SQL).expand(pragma=pragma_last) }}
+{{! Template(templates.PRAGMA_SQL).expand(pragma=pragma_last, db=db) }}
 """
 
 
@@ -2970,24 +3187,26 @@ except Exception as e:
 Database PRAGMA statements SQL template.
 
 @param   pragma   PRAGMA values as {name: value}
+@param   ?db      database, if any
 @param   ?schema  schema for PRAGMA directive, if any
 """
 PRAGMA_SQL = """<%
 import six
 from sqlitely import database, grammar
 
-pragma = dict(pragma)
+pragma, db = dict(pragma), get("db")
 for name, opts in database.Database.PRAGMA.items():
-    if opts.get("read") or opts.get("write") is False:
+    if opts.get("read") is False:
         pragma.pop(name, None)
 
-lastopts, lastvalue, count = {}, None, 0
-is_initial = lambda o, v: o["initial"](None, v) if callable(o.get("initial")) else o.get("initial")
+lastopts, lastvalue, flags, count = {}, None, {}, 0
+is_initial  = lambda o, v: o["initial"](db, v) if callable(o.get("initial")) else o.get("initial")
+is_readonly = lambda o: False if "initial" in o else (o["write"](db) if callable(o.get("write")) else o.get("write")) is False
 def sortkey(x):
     k, v, o = x
     return ((-1, not callable(o.get("initial"))) if is_initial(o, v)
             else (1, 0) if callable(o.get("initial")) else (0, 0),
-            bool(o.get("deprecated")), o.get("label", k))
+            bool(o.get("deprecated")), is_readonly(o), o.get("label", k))
 %>
 %for name, value, opts in sorted(((k, pragma.get(k), o) for k, o in database.Database.PRAGMA.items()), key=sortkey):
 <%
@@ -3006,9 +3225,13 @@ if name not in pragma:
     %elif not opts.get("deprecated") and not is_initial(opts, value) and (not count or is_initial(lastopts, lastvalue)):
 
 -- COMMON PRAGMAS:
+    %elif is_readonly(opts) and not flags.get("readonly"):
+
+-- READ-ONLY PRAGMAS:
     %endif
 <%
 lastopts, lastvalue = opts, value
+flags["readonly"] = is_readonly(opts)
 if isinstance(value, six.string_types):
     value = '"%s"' % value.replace('"', '""')
 elif isinstance(value, bool): value = str(value).upper()
@@ -3038,14 +3261,18 @@ Database schema diagram SVG template.
 @param   ?embed           whether to omit full XML headers and provide links for embedding in HTML
 """
 DIAGRAM_SVG = """<%
-import math, wx
+import math
+try: import wx
+except ImportError: wx = None
 from sqlitely.lib import util
-from sqlitely.scheme import SchemaPlacement, Point, Rect, Size
+from sqlitely.scheme import SchemaPlacement, Colour, Point, Rect, Size
 from sqlitely import grammar, images, templates
 from sqlitely.templates import urlquote
 
+C2S_HTML    = wx.C2S_HTML_SYNTAX if wx else Colour.C2S_HTML_SYNTAX
 CRADIUS     = 1
 MARGIN      = 10
+FKWIDTH     = images.DiagramFK.Bitmap.Width if hasattr(images.DiagramFK, "Bitmap") else 9
 wincolour   = SchemaPlacement.DEFAULT_COLOURS["Background"]
 wtextcolour = SchemaPlacement.DEFAULT_COLOURS["Foreground"]
 gtextcolour = SchemaPlacement.DEFAULT_COLOURS["Border"]
@@ -3067,11 +3294,11 @@ for item in items:
     cols = item.get("columns") or []
     colmax = itemcolmax[item["name"]] = {"name": 0, "type": 0}
     coltexts = itemcoltexts[item["name"]] = [] # [[name, type]]
-    for i, c in enumerate(cols):
+    for c in cols:
         coltexts.append([])
-        for k in ["name", "type"]:
-            v = c.get(k)
-            t = util.ellipsize(util.unprint(c.get(k, "")), SchemaPlacement.MAX_TEXT)
+        for i, k in enumerate(["name", "type"]):
+            t = c.get(k, "") if i or c.get(k) is None else util.unprint(grammar.quote(c[k], embed=True))
+            t = util.ellipsize(t, SchemaPlacement.MAX_TEXT)
             coltexts[-1].append(t)
             if t: extent = get_extent(t)
             if t: colmax[k] = max(colmax[k], extent[0])
@@ -3134,8 +3361,12 @@ DIAGRAM_WIDTH = (800 - 2*30 - 2*10 - 2*1)
   <desc>{{ templates.export_comment() }}</desc>
   <defs>
     <linearGradient id="item-background">
-      <stop style="stop-color: {{ wincolour.GetAsString(wx.C2S_HTML_SYNTAX) }}; stop-opacity: 1;" offset="0" />
-      <stop style="stop-color: {{ gradcolour.GetAsString(wx.C2S_HTML_SYNTAX) }}; stop-opacity: 1;" offset="1" />
+      <stop style="stop-color: {{ wincolour.GetAsString(C2S_HTML) }}; stop-opacity: 1;" offset="0" />
+      <stop style="stop-color: {{ gradcolour.GetAsString(C2S_HTML) }}; stop-opacity: 1;" offset="1" />
+    </linearGradient>
+    <linearGradient id="item-background-darkmode">
+      <stop style="stop-color: #003131; stop-opacity: 1;" offset="0" />
+      <stop style="stop-color: #80FF80; stop-opacity: 1;" offset="1" />
     </linearGradient>
 
     <image id="pk" width="9" height="9" xlink:href="data:image/png;base64,{{! images.DiagramPK.data }}" />
@@ -3143,7 +3374,11 @@ DIAGRAM_WIDTH = (800 - 2*30 - 2*10 - 2*1)
     <image id="null" width="9" height="9" xlink:href="data:image/png;base64,{{! images.DiagramNull.data }}" />
 
     <filter x="0" y="0" width="1" height="1" id="clearbg">
-       <feFlood flood-color="{{ wincolour.GetAsString(wx.C2S_HTML_SYNTAX) }}" />
+       <feFlood flood-color="{{ wincolour.GetAsString(C2S_HTML) }}" />
+       <feComposite in="SourceGraphic" in2="" />
+    </filter>
+    <filter x="0" y="0" width="1" height="1" id="clearbg-darkmode">
+       <feFlood flood-color="#1E2224" />
        <feComposite in="SourceGraphic" in2="" />
     </filter>
   </defs>
@@ -3152,18 +3387,18 @@ DIAGRAM_WIDTH = (800 - 2*30 - 2*10 - 2*1)
     <![CDATA[
 
       svg {
-        background:      {{ wincolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
+        background:      {{ wincolour.GetAsString(C2S_HTML) }};
         shape-rendering: crispEdges;
       }
 
       path {
         fill:            none;
-        stroke:          {{ gtextcolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
+        stroke:          {{ gtextcolour.GetAsString(C2S_HTML) }};
         stroke-width:    1px;
       }
 
       text {
-        fill:            {{ wtextcolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
+        fill:            {{ wtextcolour.GetAsString(C2S_HTML) }};
         font-size:       {{ fontsize }}px;
         font-family:     {{ ", ".join(('"%s"' if " " in n else '%s') % n for n in font_faces) }};
         white-space:     pre;
@@ -3171,12 +3406,12 @@ DIAGRAM_WIDTH = (800 - 2*30 - 2*10 - 2*1)
 
       .item .box {
          fill:           url(#item-background);
-         stroke:         {{ gtextcolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
+         stroke:         {{ gtextcolour.GetAsString(C2S_HTML) }};
          stroke-width:   1px;
       }
 
       .item .content {
-        fill:            {{ wincolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
+        fill:            {{ wincolour.GetAsString(C2S_HTML) }};
         fill-opacity:    1;
       }
 
@@ -3190,22 +3425,22 @@ DIAGRAM_WIDTH = (800 - 2*30 - 2*10 - 2*1)
       }
 
       .item .stats .size {
-        fill:            {{ wincolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
+        fill:            {{ wincolour.GetAsString(C2S_HTML) }};
         text-anchor:     end;
       }
 
       .item .separator {
-        stroke:          {{ gtextcolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
+        stroke:          {{ gtextcolour.GetAsString(C2S_HTML) }};
         stroke-width:    1px;
       }
 
       .relation path {
-        stroke:          {{ btextcolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
+        stroke:          {{ btextcolour.GetAsString(C2S_HTML) }};
         stroke-width:    1px;
       }
 
       .relation .label {
-        fill:            {{ btextcolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
+        fill:            {{ btextcolour.GetAsString(C2S_HTML) }};
         filter:          url(#clearbg);
         text-anchor:     middle;
       }
@@ -3279,7 +3514,7 @@ dash = "M %s,%s L %s,%s" % (adjust(*ptd1) + adjust(*ptd2))
       <path d="{{ crow2 }}" />
       <path d="{{ dash }}" />
     %if show_labels:
-      <text x="{{ tx }}" y="{{ ty }}" class="label">{{ util.ellipsize(util.unprint(line["name"]), SchemaPlacement.MAX_TEXT) }}</text>
+      <text x="{{ tx }}" y="{{ ty }}" class="label">{{ util.ellipsize(util.unprint(grammar.quote(line["name"], embed=True)), SchemaPlacement.MAX_TEXT) }}</text>
     %endif
     </g>
 
@@ -3363,7 +3598,7 @@ if w1 + w2 + 2 * SchemaPlacement.BRADIUS > item["bounds"].Width and item.get("co
       <use xlink:href="#pk" x="{{ itemx + 3 }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + i * SchemaPlacement.LINEH }}" />
         %endif
         %if any(col["name"] in x.get("name", ()) for x in fks):
-      <use xlink:href="#fk" x="{{ itemx + item["bounds"].Width - 5 - images.DiagramFK.Bitmap.Width }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + i * SchemaPlacement.LINEH }}" />
+      <use xlink:href="#fk" x="{{ itemx + item["bounds"].Width - 5 - FKWIDTH }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + i * SchemaPlacement.LINEH }}" />
         %endif
         %if "notnull" not in col and show_nulls:
       <use xlink:href="#null" x="{{ itemx + 3 }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + i * SchemaPlacement.LINEH }}" />

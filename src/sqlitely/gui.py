@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.10.2023
+@modified    08.07.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -18,7 +18,6 @@ import datetime
 import functools
 import inspect
 import logging
-import math
 import os
 import re
 import shutil
@@ -27,7 +26,6 @@ import tempfile
 import webbrowser
 
 import six
-from six.moves import urllib
 import step
 import wx
 import wx.adv
@@ -76,7 +74,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                  else images.Icon24x24_32bit)
 
     def __init__(self):
-        controls.Patch.patch_wx()
+        # Override default wx images with ones from 4.1.1 for better looks
+        art_imgs = {wx.ART_COPY:  images.ToolbarCopy,  wx.ART_FILE_OPEN: images.ToolbarFileOpen,
+                    wx.ART_PASTE: images.ToolbarPaste, wx.ART_FILE_SAVE: images.ToolbarFileSave,
+                    wx.ART_GO_FORWARD: images.ToolbarGoForward} if "win32" == sys.platform else {}
+        controls.Patch.patch_wx(art={k: v.Bitmap for k, v in art_imgs.items()})
         wx.Frame.__init__(self, parent=None, title=conf.Title, size=conf.WindowSize)
         guibase.TemplateFrameMixIn.__init__(self)
 
@@ -107,7 +109,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         # List of Notebook pages user has visited, used for choosing page to
         # show when closing one.
         self.pages_visited = []
-        self.ipc_listener = None # workers.IPCListener instance
         self.is_started = False
         self.is_minimizing = False
         self.is_dragging_page = False
@@ -232,9 +233,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.list_db.SetFocus()
 
         if not conf.AllowMultipleInstances:
-            args = conf.IPCName, conf.IPCPort, self.on_ipc
-            self.ipc_listener = workers.IPCListener(*args)
-            self.ipc_listener.start()
+            wx.GetApp().SingleChecker.StartReceive(self.on_ipc, conf.IPCPort)
 
         if conf.WindowMinimizedToTray:
             conf.WindowMinimizedToTray = False
@@ -242,7 +241,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         else:
             self.Show(True)
         plugins.init_plugins("ValueEditorFunctions")
-        wx.CallLater(20000, self.update_check)
+        wx.CallLater(20000, self.update_check) if not conf.Snapped else None
         wx.CallLater(1, self.populate_database_list)
         logger.info("Started application.")
         wx.CallAfter(setattr, self, "is_started", True)
@@ -389,7 +388,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         splitter.Bind(wx.EVT_SPLITTER_SASH_POS_CHANGED, lambda e: self.list_db.ResetColumnWidths())
 
-        panel_main.Sizer.Add(label_main, border=10, flag=wx.ALL)
+        panel_main.Sizer.Add(label_main, border=10, flag=wx.ALL | wx.GROW)
         panel_main.Sizer.Add((0, 10))
         panel_main.Sizer.Add(self.button_new,    flag=wx.GROW)
         panel_main.Sizer.Add(self.button_import, flag=wx.GROW)
@@ -457,7 +456,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 "Show/hide %s icon in system tray" % conf.Title, kind=wx.ITEM_CHECK)
         menu_autoupdate_check = self.menu_autoupdate_check = menu_options.Append(
             wx.ID_ANY, "Automatic &update check",
-            "Automatically check for program updates periodically", kind=wx.ITEM_CHECK)
+            "Automatically check for program updates periodically", kind=wx.ITEM_CHECK
+        ) if not conf.Snapped else None
         menu_allow_multi = self.menu_allow_multi = menu_options.Append(
             wx.ID_ANY, "Allow &multiple instances",
             "Allow multiple %s instances to run at the same time" % conf.Title,
@@ -552,10 +552,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_tools_export = wx.Menu()
         self.menu_tools_export = menu_tools.AppendSubMenu(menu_tools_export, "&Export")
         menu_tools_export_tables = self.menu_tools_export_tables = menu_tools_export.Append(
-            wx.ID_ANY, "All tables to &file",
+            wx.ID_ANY, "All tables to &individual files",
             "Export all tables to individual files")
-        menu_tools_export_multiitem = self.menu_tools_export_multiitem = menu_tools_export.Append(
-            wx.ID_ANY, "All tables to sing&le file",
+        menu_tools_export_combined = self.menu_tools_export_combined = menu_tools_export.Append(
+            wx.ID_ANY, "All tables to a single &file",
             "Export all tables to a single file, "
             "each table in separate section")
         menu_tools_export_data = self.menu_tools_export_data = menu_tools_export.Append(
@@ -587,7 +587,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         menu_update = self.menu_update = menu_help.Append(wx.ID_ANY,
             "Check for &updates",
-            "Check whether a new version of %s is available" % conf.Title)
+            "Check whether a new version of %s is available" % conf.Title
+        )
         menu_homepage = self.menu_homepage = menu_help.Append(wx.ID_ANY,
             "Go to &homepage",
             "Open the %s homepage, %s" % (conf.Title, conf.HomeUrl))
@@ -614,7 +615,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                   id2=wx.ID_FILE1 + conf.MaxRecentFiles)
         if self.trayicon.IsAvailable():
             menu_tray.Check(conf.TrayIconEnabled)
-        menu_autoupdate_check.Check(conf.UpdateCheckAutomatic)
+        menu_autoupdate_check.Check(conf.UpdateCheckAutomatic) if menu_autoupdate_check else None
         menu_allow_multi.Check(conf.AllowMultipleInstances)
 
         menu.Bind(wx.EVT_MENU_OPEN, self.on_menu_open)
@@ -635,7 +636,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.Bind(wx.EVT_MENU, self.on_toggle_to_tray,      menu_to_tray)
             self.Bind(wx.EVT_MENU, self.on_toggle_trayicon,     menu_tray)
         self.Bind(wx.EVT_MENU, self.on_toggle_autoupdate_check,
-                  menu_autoupdate_check)
+                  menu_autoupdate_check) if menu_autoupdate_check else None
         self.Bind(wx.EVT_MENU, self.on_toggle_allow_multi, menu_allow_multi)
         self.Bind(wx.EVT_MENU, self.on_about, menu_about)
 
@@ -657,7 +658,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["import"]),    menu_tools_import)
 
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "tables"]),     menu_tools_export_tables)
-        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "multiitem"]),  menu_tools_export_multiitem)
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "combined"]),   menu_tools_export_combined)
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "data"]),       menu_tools_export_data)
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "structure"]),  menu_tools_export_structure)
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "pragma"]),     menu_tools_export_pragma)
@@ -812,19 +813,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
 
     def on_toggle_allow_multi(self, event):
-        """
-        Handler for toggling allowing multiple instances, starts-stops the
-        IPC server.
-        """
+        """Handler for toggling allowing multiple instances, starts-stops the IPC server."""
         allow = conf.AllowMultipleInstances = event.IsChecked()
         util.run_once(conf.save)
-        if allow:
-            self.ipc_listener.stop()
-            self.ipc_listener = None
-        else:
-            args = conf.IPCName, conf.IPCPort, self.on_ipc
-            self.ipc_listener = workers.IPCListener(*args)
-            self.ipc_listener.start()
+        checker = wx.GetApp().SingleChecker
+        checker.StopReceive() if allow else checker.StartReceive(self.on_ipc, conf.IPCPort)
 
 
     def on_toggle_trayicon(self, event=None):
@@ -1013,6 +1006,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if conf.WindowPosition and not conf.WindowMaximized:
                 self.Position = conf.WindowPosition
             self.Show()
+            self.IsIconized() and self.Restore()
             if self.menu_console.IsChecked():
                 self.frame_console.Show(), self.frame_console.Iconize(False)
         wx.CallAfter(setattr, self, "is_minimizing", False)
@@ -1042,12 +1036,13 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             util.run_once(conf.save)
 
 
-    def on_ipc(self, data):
+    def on_ipc(self, data=()):
         """
-        Handler for responding to an inter-process message from another
-        program instance that was launched and then exited because of
-        conf.AllowMultipleInstances. Raises the program window and loads
-        given databases if any.
+        Handler for responding to an inter-process message from another program instance,
+        which will exit because of conf.AllowMultipleInstances. Raises program window
+        and loads given databases if any.
+
+        @param   data  zero or more filenames to load, as string or sequence of strings
         """
         def after(data):
             if not self: return
@@ -1055,8 +1050,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if conf.WindowMinimizedToTray: self.on_toggle_to_tray()
             else: self.Restore()
             self.Raise()
-            data = data if isinstance(data, (list, set, tuple)) else list(filter(bool, [data]))
-            if data: self.load_database_pages(data, clearselection=True)
+            filenames = data if isinstance(data, (list, set, tuple)) else list(filter(bool, [data]))
+            if filenames: self.load_database_pages(filenames, clearselection=True)
         wx.CallAfter(after, data)
 
 
@@ -1250,7 +1245,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             selected = self.list_db.GetNextSelected(selected)
         if event.GetIndex() >= 0 and event.GetIndex() not in selecteds:
             if event.GetIndex():
-                files, selecteds = [event.GetText()], [event.GetIndex()]
+                files, selecteds = [self.list_db.GetItemText(event.GetIndex())], [event.GetIndex()]
         if not files:
             menu = wx.Menu()
             label1 = "Stop &import from folder" if self.worker_folder.is_working() \
@@ -1399,22 +1394,19 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         guibase.status("")
         if check_result:
             version, url, changes = check_result
-            MAX = 1000
             guibase.status("New %s version %s available.", conf.Title, version)
-            if wx.YES == controls.YesNoMessageBox(
-                "Newer version (%s) available. You are currently on "
-                "version %s.%s\nDownload and install %s %s?" %
-                (version, conf.Version, "\n\n%s\n" % util.ellipsize(changes, MAX),
-                 conf.Title, version),
-                "Update information", wx.ICON_INFORMATION
-            ):
+            func = wx.MessageBox if conf.Snapped else controls.YesNoMessageBox
+            text = "Newer version (%s) available. You are currently on version %s.%s" % \
+                   (version, conf.Version, "\n\n%s\n" % util.ellipsize(changes, 1000))
+            if not conf.Snapped: text += "\nDownload and install %s %s?" % (conf.Title, version)
+            if wx.YES == func(text, "Update information", wx.ICON_INFORMATION):
                 wx.CallAfter(support.download_and_install, url)
         elif full_response and check_result is not None:
             wx.MessageBox("You are using the latest version of %s, %s.\n\n " %
                 (conf.Title, conf.Version), "Update information",
                 wx.OK | wx.ICON_INFORMATION)
         elif full_response:
-            wx.MessageBox("Could not contact download server.",
+            wx.MessageBox("Could not contact server.",
                           "Update information", wx.OK | wx.ICON_WARNING)
         if check_result is not None:
             conf.LastUpdateCheck = datetime.date.today().strftime("%Y%m%d")
@@ -1717,7 +1709,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     self.list_db.DeleteItem(i)
         finally: self.list_db.Thaw()
         del self.dbs_selected[:]
-        self.list_db.Select(0)
+        self.list_db.Select(0, False), self.list_db.Select(0)
         self.update_database_list()
         util.run_once(conf.save)
 
@@ -1729,17 +1721,20 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         file_indexes = list(filter(filter_func, file_indexes))
         if not file_indexes: return
 
-        for i in range(len(file_indexes)):
-            # - i, as item count is getting smaller one by one
-            selected = file_indexes[i] - i
-            filename = self.list_db.GetItemText(selected)
-            self.clear_database_data(filename, recent=True)
-            self.db_datas.get(filename, {}).pop("name", None)
-            self.list_db.DeleteItem(selected)
+        self.list_db.Freeze()
+        try:
+            for i in range(len(file_indexes)):
+                # - i, as item count is getting smaller one by one
+                selected = file_indexes[i] - i
+                filename = self.list_db.GetItemText(selected)
+                self.clear_database_data(filename, recent=True)
+                self.db_datas.get(filename, {}).pop("name", None)
+                self.list_db.DeleteItem(selected)
+        finally: self.list_db.Thaw()
 
         self.update_database_list()
         if self.dbs_selected: self.update_database_detail()
-        else: self.list_db.Select(0)
+        else: self.list_db.Select(0, False), self.list_db.Select(0)
 
         util.run_once(conf.save)
         guibase.status("Removed %s from the database list.",
@@ -1783,29 +1778,32 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             ): return
 
         errors = []
-        for filename in self.dbs_selected[:]:
-            try:
-                page = next((k for k, v in self.db_pages.items()
-                             if v.filename == filename), None)
-                if page:
-                    page.on_close()
-                    self.notebook.DeletePage(self.notebook.GetPageIndex(page))
-                os.unlink(filename)
+        self.list_db.Freeze()
+        try:
+            for filename in self.dbs_selected[:]:
+                try:
+                    page = next((k for k, v in self.db_pages.items()
+                                 if v.filename == filename), None)
+                    if page:
+                        page.on_close()
+                        self.notebook.DeletePage(self.notebook.GetPageIndex(page))
+                    os.unlink(filename)
 
-                self.clear_database_data(filename, recent=True)
-                self.dbs.pop(filename, None)
-                conf.DBsOpen.pop(filename, None)
-                self.db_datas.get(filename, {}).pop("name", None)
+                    self.clear_database_data(filename, recent=True)
+                    self.dbs.pop(filename, None)
+                    conf.DBsOpen.pop(filename, None)
+                    self.db_datas.get(filename, {}).pop("name", None)
 
-                for i in range(self.list_db.GetItemCount())[::-1]:
-                    if self.list_db.GetItemText(i) == filename:
-                        self.list_db.DeleteItem(i)
-                self.dbs_selected.remove(filename)
-            except Exception as e:
-                logger.exception("Error deleting %s.", filename)
-                errors.append("%s: %s" % (filename, util.format_exc(e)))
+                    for i in range(self.list_db.GetItemCount())[::-1]:
+                        if self.list_db.GetItemText(i) == filename:
+                            self.list_db.DeleteItem(i)
+                    self.dbs_selected.remove(filename)
+                except Exception as e:
+                    logger.exception("Error deleting %s.", filename)
+                    errors.append("%s: %s" % (filename, util.format_exc(e)))
+        finally: self.list_db.Thaw()
 
-        self.list_db.Select(0)
+        self.list_db.Select(0, False), self.list_db.Select(0)
         self.update_database_list()
         util.run_once(conf.save)
         if errors:
@@ -1896,7 +1894,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         def get_field_doc(name, tree=ast.parse(source)):
             """Returns the docstring immediately before name assignment."""
             for i, node in enumerate(tree.body):
-                if i and isinstance(node, ast.Assign) and node.targets[0].id == name:
+                if i and isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name) \
+                and node.targets[0].id == name:
                     prev = tree.body[i - 1]
                     if isinstance(prev, ast.Expr) \
                     and isinstance(prev.value, (ast.Str, ast.Constant)):  # Py2: Str, Py3: Constant
@@ -1927,11 +1926,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         if wx.ID_OK == dialog.ShowModal():
             for k, v in dialog.GetProperties():
-                # Keep numbers in sane regions
-                if isinstance(v, six.integer_types): v = max(1, min(sys.maxsize, v))
+                # Keep numbers in sane regions (no isinstance as bool is an int)
+                if type(v) in six.integer_types: v = max(1, min(sys.maxsize, v))
                 setattr(conf, k, v)
             util.run_once(conf.save)
             self.MinSize = conf.MinWindowSize
+        dialog.Destroy()
 
 
     def on_open_database(self, event):
@@ -2306,6 +2306,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             CMDS = ["page = self.page_db_latest # Database tab",
                     "db = page.db if page else None # SQLite database wrapper"]
             for cmd in CMDS: self.TopLevelParent.run_console(cmd)
+        wx.CallAfter(ColourManager.UpdateControls)
         self.SendSizeEvent() # Multiline wx.Notebooks need redrawing
 
         # Change notebook page to last visited
@@ -2504,7 +2505,7 @@ class DatabasePage(wx.Panel):
         self.pragma_ctrls   = {}    # {pragma_name: wx control}
         self.pragma_items   = {}    # {pragma_name: [all wx components for directive]}
         self.pragma_edit = False    # Whether in PRAGMA edit mode
-        self.pragma_fullsql = False # Whether show SQL for all PRAGMAs, changed or not
+        self.pragma_fullsql = True  # Whether show SQL for all PRAGMAs, changed or not
         self.pragma_filter = ""     # Current PRAGMA filter
         self.memoryfs = memoryfs
         parent_notebook.InsertPage(1, self, title)
@@ -2575,6 +2576,17 @@ class DatabasePage(wx.Panel):
         for i, idx in enumerate(idxs): notebook.SetPageImage(i, idx)
 
         sizer.Add(notebook, proportion=1, border=5, flag=wx.GROW | wx.ALL)
+
+        # Register Ctrl-Shift-1..7 page handlers
+        def on_page_hotkey(number, event):
+            if notebook and notebook.GetSelection() != number:
+                notebook.SetSelection(number)
+        accelerators = []
+        for i in range(7):
+            id_page = controls.NewId()
+            accelerators += [(wx.ACCEL_CMD | wx.ACCEL_SHIFT, ord(str(i + 1)), id_page)]
+            notebook.Bind(wx.EVT_MENU, functools.partial(on_page_hotkey, i), id=id_page)
+        notebook.SetAcceleratorTable(wx.AcceleratorTable(accelerators))
 
         self.dialog_savefile = wx.FileDialog(
             self, defaultDir=six.moves.getcwd(), wildcard=importexport.EXPORT_WILDCARD,
@@ -2828,7 +2840,7 @@ class DatabasePage(wx.Panel):
             "index":    il.Add(images.TreeIndex.Bitmap),
             "trigger":  il.Add(images.TreeTrigger.Bitmap),
             "view":     il.Add(images.TreeView.Bitmap),
-            "columns":  il.Add(wx.ArtProvider.GetBitmap(wx.ART_FOLDER,          wx.ART_TOOLBAR, isize)),
+            "columns":  il.Add(wx.ArtProvider.GetBitmap(wx.ART_FOLDER, wx.ART_TOOLBAR, isize)),
         }
         tree.AssignImageList(il)
 
@@ -3042,7 +3054,8 @@ class DatabasePage(wx.Panel):
             self.add_sql_page(name, text, console=(i == len(oldpages) - 1))
         if self.sql_pages:
             self.sql_page_counter = max(
-                int(re.sub(r"[^\d]", "", x) or 0) for x in self.sql_pages
+                int(re.sub(r"[^\d]", "", x)) if re.match(r"^SQL \(\d+\)$", x, re.I) else 0
+                for x in self.sql_pages
             ) or len(self.sql_pages)
         else: self.add_sql_page()
         nb.AddPage(page=wx.Panel(page), text="+")
@@ -3174,13 +3187,13 @@ class DatabasePage(wx.Panel):
                     sizer_pragma.SetItemMinSize(x, (widths[i], -1))
 
         check_sql = self.check_pragma_sql = \
-            wx.CheckBox(panel_sql, label="See change S&QL")
-        check_sql.ToolTip = "See SQL statements for PRAGMA changes"
+            wx.CheckBox(panel_sql, label="See PRAGMA S&QL")
+        check_sql.ToolTip = "See SQL statements for setting all PRAGMA values"
         check_sql.Value = True
-        check_fullsql = self.check_pragma_fullsql = \
-            wx.CheckBox(panel_sql, label="See f&ull SQL")
-        check_fullsql.ToolTip = "See SQL statements for setting all current PRAGMA values"
-        check_fullsql.Hide()
+        check_changesql = self.check_pragma_changesql = \
+            wx.CheckBox(panel_sql, label="See chan&ge SQL")
+        check_changesql.ToolTip = "See SQL statements for PRAGMA changes only"
+        check_changesql.Hide()
 
         stc = self.stc_pragma = controls.SQLiteTextCtrl(panel_sql, style=wx.BORDER_STATIC)
         stc.LineNumbers = conf.TextLineNumbers.get("pragma")
@@ -3214,11 +3227,11 @@ class DatabasePage(wx.Panel):
         button_cancel.ToolTip = "Cancel PRAGMA changes"
         button_cancel.Enabled = False
 
-        self.Bind(wx.EVT_BUTTON,     self.on_pragma_edit,    button_edit)
-        self.Bind(wx.EVT_BUTTON,     self.on_pragma_refresh, button_refresh)
-        self.Bind(wx.EVT_BUTTON,     self.on_pragma_cancel,  button_cancel)
-        self.Bind(wx.EVT_CHECKBOX,   self.on_pragma_sql,     check_sql)
-        self.Bind(wx.EVT_CHECKBOX,   self.on_pragma_fullsql, check_fullsql)
+        self.Bind(wx.EVT_BUTTON,     self.on_pragma_edit,      button_edit)
+        self.Bind(wx.EVT_BUTTON,     self.on_pragma_refresh,   button_refresh)
+        self.Bind(wx.EVT_BUTTON,     self.on_pragma_cancel,    button_cancel)
+        self.Bind(wx.EVT_CHECKBOX,   self.on_pragma_sql,       check_sql)
+        self.Bind(wx.EVT_CHECKBOX,   self.on_pragma_changesql, check_changesql)
         page.Bind(wx.EVT_CHAR_HOOK,  self.on_pragma_key)
         edit_filter.Bind(wx.EVT_TEXT_ENTER, self.on_pragma_filter)
 
@@ -3232,7 +3245,7 @@ class DatabasePage(wx.Panel):
 
         sizer_sql_header.Add(check_sql, border=5, flag=wx.TOP | wx.ALIGN_CENTER_VERTICAL)
         sizer_sql_header.AddStretchSpacer()
-        sizer_sql_header.Add(check_fullsql, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
+        sizer_sql_header.Add(check_changesql, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_sql_header.Add(tb)
 
         sizer_sql.Add(sizer_sql_header, flag=wx.GROW)
@@ -3251,8 +3264,9 @@ class DatabasePage(wx.Panel):
         sizer.Add(sizer_footer, border=10, flag=wx.BOTTOM | wx.TOP | wx.GROW)
 
         splitter.SplitHorizontally(panel_wrapper, panel_sql, page.Size[1] - 150)
-        splitter.Unsplit()
+        splitter._sashPosition = splitter.SashPosition
         ColourManager.Manage(panel_wrapper, "BackgroundColour", "BgColour")
+        self.populate_pragma_sql()
 
 
     def create_page_info(self, notebook):
@@ -3753,7 +3767,7 @@ class DatabasePage(wx.Panel):
         elif "rename" == cmd:
             category, name, name2 = (list(args) + [None])[:3]
             if name not in self.db.schema.get(category) or {}: return
-            if not name2:
+            if name2 is None:
                 dlg = wx.TextEntryDialog(self, 
                     'Rename %s %s to:' % (category, fmt_entity(name)),
                     conf.Title, value=name, style=wx.OK | wx.CANCEL
@@ -3825,7 +3839,7 @@ class DatabasePage(wx.Panel):
             table, name, name2 = (list(args) + [None])[:3]
             item = self.db.get_category("table", table)
             if not item: return
-            if not name2:
+            if name2 is None:
                 dlg = wx.TextEntryDialog(self, 
                     "Rename column %s.%s to:"
                     % (fmt_entity(table, force=False), fmt_entity(name, force=False)),
@@ -4030,7 +4044,7 @@ class DatabasePage(wx.Panel):
                 for name in names:
                     category = next(c for c, xx in self.db.schema.items() if name in xx)
                     items[category][name] = self.db.get_category(category, name)
-                    for category2, items2 in self.db.get_full_related(category, name)[0].items():
+                    for category2, items2 in self.db.get_full_related(category, name).items():
                         for name2, item2 in items2.items():
                             items[category2][name2] = item2
                 clipboard_copy("\n\n".join(grammar.terminate(x["sql"], x.get("meta")) for c in self.db.CATEGORIES
@@ -4073,21 +4087,21 @@ class DatabasePage(wx.Panel):
 
         elif "export" == cmd:
             arg = args[0]
-            if arg in ("tables", "multiitem", "data", "structure") \
+            if arg in ("tables", "combined", "data", "structure") \
             and not self.db.schema["table"]: return wx.MessageBox(
                 "No tables to save.", conf.Title, wx.ICON_NONE
             )
-            if arg in ("tables", "multiitem", "dump") \
+            if arg in ("tables", "combined", "dump") \
             and self.panel_data_export.IsRunning(): return wx.MessageBox(
                 "A global export is already underway.", conf.Title, wx.ICON_NONE
             )
 
             if "tables" == arg:
-                self.on_export_data_file(None, args[1:] or list(self.db.schema["table"]))
-            elif "multiitem" == arg:
-                self.on_export_multiitem("table", names=args[1:])
+                self.on_export_data_file(category=None, item=args[1:] or list(self.db.schema["table"]))
+            elif "combined" == arg:
+                self.on_export_data_combined(category=None, names=args[1:])
             elif "data" == arg:
-                self.on_export_to_db(category="table", names=args[1:] or list(self.db.schema["table"]))
+                self.on_export_to_db(names=args[1:] or list(self.db.schema["table"]))
             elif "sql" == arg:
                 [category], names = args[1:2] or [None], args[2:]
                 sql = self.db.get_sql(category, names)
@@ -4095,10 +4109,10 @@ class DatabasePage(wx.Panel):
                         util.plural(category) if category else None
                 self.save_sql(sql, title)
             elif "structure" == arg:
-                self.on_export_to_db(category="table", names=args[1:] or list(self.db.schema["table"]), data=False)
+                self.on_export_to_db(names=args[1:] or list(self.db.schema["table"]), data=False)
             elif "pragma" == arg:
                 template = step.Template(templates.PRAGMA_SQL, strip=False)
-                sql = template.expand(pragma=self.pragma)
+                sql = template.expand(pragma=self.pragma, db=self.db)
                 self.save_sql(sql, "PRAGMA")
             elif "schema" == arg:
                 if any(self.db.schema.values()): return self.save_sql(self.stc_schema.Text)
@@ -4156,9 +4170,6 @@ class DatabasePage(wx.Panel):
                     wx.lib.agw.flatnotebook.FNB_NO_X_BUTTON |
                     wx.lib.agw.flatnotebook.FNB_X_ON_TAB |
                     wx.lib.agw.flatnotebook.FNB_VC8)
-        if "linux" in sys.platform and wx.VERSION[:3] == (4, 1, 1):
-            # wxPython 4.1.1 on Linux crashes with FNB_VC8
-            agwStyle ^= wx.lib.agw.flatnotebook.FNB_VC8
         return wx.lib.agw.flatnotebook.FlatNotebook(parent, size=(-1, 27), agwStyle=agwStyle)
 
 
@@ -4278,7 +4289,7 @@ class DatabasePage(wx.Panel):
                 layout.Redraw(wx.Rect(0, 0, *conf.Defaults["WindowSize"]), layout.LAYOUT_GRID)
                 diagrams = {"bmp": layout.MakeBitmap(),
                             "svg": layout.MakeTemplate("SVG", embed=True)}
-            importexport.export_stats(filename, extname, self.db, data, diagrams)
+            importexport.export_stats(self.db, filename, extname, data, diagrams)
             guibase.status('Exported to "%s".', filename, log=True)
             util.start_file(filename)
         except Exception as e:
@@ -4439,7 +4450,7 @@ class DatabasePage(wx.Panel):
             if event.Selection: self.diagram.ShowLines = True
         elif wx.ID_FILE6 == event.Id:
             self.diagram.ShowStatistics = event.Selection
-        
+
 
     def on_diagram_export(self, event):
         """Handler for exporting diagram, opens file dialog."""
@@ -4448,7 +4459,6 @@ class DatabasePage(wx.Panel):
 
     def on_diagram_action(self, event):
         """Handler for other diagram actions, opens popup menu."""
-        menu = wx.Menu()
 
         def on_export_zoom(event=None):
             CHOICES, LEVELS, index, level = [], [], -1, self.diagram.ZOOM_MAX
@@ -4471,10 +4481,10 @@ class DatabasePage(wx.Panel):
         menu = wx.Menu()
         item_export   = wx.MenuItem(menu, -1, "Export &zoomed bitmap")
         item_selected = wx.MenuItem(menu, -1, "Export diagram with &selected entities")
-        item_export.Enable(bool(self.diagram.Items))
-        item_selected.Enable(bool(self.diagram.Selection))
         menu.Append(item_export)
         menu.Append(item_selected)
+        item_export.Enable(bool(self.diagram.Items))
+        item_selected.Enable(bool(self.diagram.Selection))
         menu.Bind(wx.EVT_MENU, on_export_zoom, item_export)
         menu.Bind(wx.EVT_MENU, on_export_sels, item_selected)
 
@@ -4627,12 +4637,15 @@ class DatabasePage(wx.Panel):
         """Handler for copying from diagram, opens popup menu.."""
         menu = wx.Menu()
 
-        label = util.plural("name", self.diagram.Selection or self.diagram.Items, numbers=False)
-        item_names = wx.MenuItem(menu, -1, "Copy &%s" % label)
-        item_sql   = wx.MenuItem(menu, -1, "Copy CREATE S&QL")
+        label = "selected " if self.diagram.Selection else ""
+        namelabel = util.plural("name", self.diagram.Selection or self.diagram.Items, numbers=False)
+
+        copy_hotkey = "\t(%s-C)" % controls.KEYS.NAME_CTRL
+        item_names = wx.MenuItem(menu, -1, "Copy %s &%s" % (label, namelabel))
+        item_sql   = wx.MenuItem(menu, -1, "Copy %sCREATE S&QL%s" % (label, copy_hotkey))
         item_all   = wx.MenuItem(menu, -1, "Copy all &related SQL")
-        item_bmp   = wx.MenuItem(menu, -1, "Copy as &bitmap")
-        item_svg   = wx.MenuItem(menu, -1, "Copy as &SVG")
+        item_bmp   = wx.MenuItem(menu, -1, "Copy %sas &bitmap%s" % (label, copy_hotkey))
+        item_svg   = wx.MenuItem(menu, -1, "Copy %sas &SVG" % label)
 
         menu.Append(item_bmp)
         menu.Append(item_svg)
@@ -4649,7 +4662,7 @@ class DatabasePage(wx.Panel):
             if event.Id in (item_bmp.Id, item_sql.Id):
                 self.handle_command("copy", "sql+bmp", None, *names)
             elif event.Id == item_all.Id:
-                  self.handle_command("copy", "related", None, *names)
+                self.handle_command("copy", "related", None, *names)
             elif event.Id == item_svg.Id:
                 text, label = self.diagram.MakeTemplate("SVG", items=names), "diagram SVG"
             elif event.Id == item_names.Id:
@@ -4699,7 +4712,7 @@ class DatabasePage(wx.Panel):
             if self.pragma_fullsql: values = dict(self.pragma, **values)
 
             template = step.Template(templates.PRAGMA_SQL, strip=False)
-            sql = template.expand(pragma=values)
+            sql = template.expand(pragma=values, db=self.db)
             self.stc_pragma.SetReadOnly(False)
             self.stc_pragma.Text = sql
             self.stc_pragma.SetReadOnly(True)
@@ -4709,19 +4722,23 @@ class DatabasePage(wx.Panel):
 
 
     def on_pragma_sql(self, event=None):
-        """Handler for toggling PRAGMA change SQL visible."""
+        """Handler for toggling PRAGMA SQL visible."""
+        self.check_pragma_changesql.Shown = self.check_pragma_sql.Value and self.pragma_edit
         self.stc_pragma.Shown = self.check_pragma_sql.Value
-        self.check_pragma_fullsql.Shown = self.check_pragma_sql.Value
         self.tb_pragma.Shown = self.check_pragma_sql.Value
-        self.splitter_pragma.SashPosition = self.page_pragma.Size[1] - (200 if self.stc_pragma.Shown else 20)
+        if self.stc_pragma.Shown:
+            self.splitter_pragma.SashPosition = self.splitter_pragma._sashPosition
+        else:
+            self.splitter_pragma._sashPosition = self.splitter_pragma.SashPosition
+            self.splitter_pragma.SashPosition = self.page_pragma.Size[1] - 20
         self.splitter_pragma.SashInvisible = not self.stc_pragma.Shown
         self.panel_pragma_sql.Layout()
         self.page_pragma.Layout()
 
 
-    def on_pragma_fullsql(self, event=None):
-        """Handler for toggling full PRAGMA SQL."""
-        self.pragma_fullsql = self.check_pragma_fullsql.Value
+    def on_pragma_changesql(self, event=None):
+        """Handler for toggling PRAGMA change SQL."""
+        self.pragma_fullsql = not self.check_pragma_changesql.Value
         self.panel_pragma_sql.Layout()
         self.populate_pragma_sql()
 
@@ -4768,7 +4785,7 @@ class DatabasePage(wx.Panel):
         result = True
 
         template = step.Template(templates.PRAGMA_SQL, strip=False)
-        sql = template.expand(pragma=self.pragma_changes)
+        sql = template.expand(pragma=self.pragma_changes, db=self.db)
         if sql and wx.YES != controls.YesNoMessageBox(
             "Save PRAGMA changes?\n\n%s" % sql, conf.Title,
             wx.ICON_INFORMATION, default=wx.NO
@@ -4798,22 +4815,16 @@ class DatabasePage(wx.Panel):
         self.pragma_edit = True
         self.button_pragma_edit.Label = "Save"
         self.button_pragma_cancel.Enable()
-        self.splitter_pragma.SplitHorizontally(*list(self.splitter_pragma.Children) + [self.page_pragma.Size[1] - 200])
         if self.check_pragma_sql.Value:
-            self.stc_pragma.Shown = True
-            self.check_pragma_fullsql.Shown = True
-            self.tb_pragma.Shown = True
-        else:
-            self.splitter_pragma.SashPosition = self.page_pragma.Size[1] - 20
-            self.splitter_pragma.SashInvisible = False
+            self.check_pragma_changesql.Shown = True
+        self.pragma_fullsql = not self.check_pragma_changesql.Value
         for name, opts in database.Database.PRAGMA.items():
             ctrl = self.pragma_ctrls[name]
-            writable = opts.get("write")
-            if callable(writable): writable = writable(self.db)
-            if writable is not False and "table" != opts["type"]:
-                ctrl.Enable()
+            writable = opts["write"](self.db) if callable(opts.get("write")) else opts.get("write")
+            ctrl.Enable(writable is not False and "table" != opts["type"])
         self.panel_pragma_sql.Layout()
         self.page_pragma.Layout()
+        self.populate_pragma_sql()
 
 
     def on_pragma_refresh(self, event=None, reload=False):
@@ -4842,6 +4853,8 @@ class DatabasePage(wx.Panel):
                 ctrl.Value = value
             else:
                 ctrl.Value = "" if value is None else value
+            writable = opts["write"](self.db) if callable(opts.get("write")) else opts.get("write")
+            ctrl.Enable(writable is not False and "table" != opts["type"])
         self.populate_pragma_sql()
         self.pragma_edit = editmode
         self.update_page_header()
@@ -4855,11 +4868,12 @@ class DatabasePage(wx.Panel):
         ): return
 
         self.pragma_edit = False
+        self.pragma_fullsql = True
         self.button_pragma_edit.Label = "Edit"
         self.button_pragma_cancel.Disable()
+        self.check_pragma_changesql.Hide()
         self.pragma_changes.clear()
         self.on_pragma_refresh()
-        self.splitter_pragma.Unsplit()
         for name, opts in database.Database.PRAGMA.items():
             if "table" != opts["type"]: self.pragma_ctrls[name].Disable()
         self.page_pragma.Layout()
@@ -4896,7 +4910,7 @@ class DatabasePage(wx.Panel):
                 for fkid, rowids in data[table][parent].items():
                     fk, _, pk = fks[table][fkid]
                     line = "%s.%s REFERENCING " % tuple(map(grammar.quote, (table, fk)))
-                    line += ".".join(map(grammar.quote, filter(bool, (parent, pk))))
+                    line += ".".join(grammar.quote(x) for x in (parent, pk) if x is not None)
                     line += ": " + util.plural("row", rowids)
                     if any(rowids): # NULL values: table WITHOUT ROWID
                         vals = [x[fk] for x in self.db.execute(
@@ -5028,11 +5042,11 @@ class DatabasePage(wx.Panel):
         Stops worker threads, saves page last configuration
         like search text and results.
         """
-
         for worker in self.workers_search.values(): worker.stop()
         self.worker_analyzer.stop()
         self.worker_checksum.stop()
         self.panel_data_export.Stop()
+
         for p in (p for x in self.data_pages.values() for p in x.values()):
             p.Close(force=True)
         for p in (p for x in self.schema_pages.values() for p in x.values()):
@@ -5041,6 +5055,9 @@ class DatabasePage(wx.Panel):
                      for i in range(self.notebook_sql.GetPageCount() - 1)]
         for p in self.sql_pages.values():
             p.Close(force=True)
+        self.TopLevelParent.run_console(
+            "sqlpage = None")
+
         try: self.db.connection.interrupt()
         except Exception: pass
         self.db.clear_locks()
@@ -5077,8 +5094,7 @@ class DatabasePage(wx.Panel):
             else: conf.SQLWindowTexts.pop(self.db.filename, None)
 
         # Save schema diagram state
-        if not self.db.temporary:
-            conf.SchemaDiagrams[self.db.filename] = self.diagram.GetOptions()
+        conf.SchemaDiagrams[self.db.filename] = self.diagram.GetOptions()
         self.diagram.Disable() # Stop diagram workers
 
 
@@ -5174,10 +5190,10 @@ class DatabasePage(wx.Panel):
                     menu_types = wx.Menu()
                     item_choices = menu.AppendSubMenu(menu_types, label)
                     item_choices.Enable(schemaflags[category])
-                    for i, typelabel in enumerate(["To &file", "To a &single file"]):
+                    for i, typelabel in enumerate(["To &individual files", "To a single &file"]):
                         item = wx.MenuItem(menu_types, -1, typelabel)
                         if i:
-                            handler = functools.partial(self.on_export_multiitem, category)
+                            handler = functools.partial(self.on_export_data_combined, category)
                         else:
                             handler = functools.partial(self.on_export_data_file, category, names)
                         menu_types.Append(item)
@@ -5247,13 +5263,7 @@ class DatabasePage(wx.Panel):
 
             menutitle = "C&opy link location"
             if href.startswith("file://"):
-                href = urllib.request.url2pathname(href[5:])
-                if any(href.startswith(x) for x in ["\\\\\\", "///"]):
-                    href = href[3:] # Strip redundant filelink slashes
-                if isinstance(href, six.text_type):
-                    # Workaround for wx.html.HtmlWindow double encoding
-                    href = href.encode("latin1", errors="xmlcharrefreplace"
-                           ).decode("utf-8")
+                href = util.url_to_path(href, double_decode=True)
                 menutitle = "C&opy file location"
             elif href.startswith("mailto:"):
                 href = href[7:]
@@ -5278,15 +5288,12 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, on_selectall,     item_selectall)
             self.notebook_search.PopupMenu(menu)
         elif href.startswith("file://"):
-            # Open the link, or file, or program internal link to table
-            filename = path = urllib.request.url2pathname(href[5:])
-            if any(path.startswith(x) for x in ["\\\\\\", "///"]):
-                filename = href = path[3:]
+            # Open file
+            path = util.url_to_path(href, double_decode=True)
             if path and os.path.exists(path):
                 util.start_file(path)
             else:
-                e = 'The file "%s" cannot be found on this computer.' % \
-                    filename
+                e = 'The file "%s" cannot be found on this computer.' % path
                 wx.MessageBox(e, conf.Title, wx.OK | wx.ICON_WARNING)
         elif link_data:
             # Go to specific data/schema page object
@@ -5325,7 +5332,7 @@ class DatabasePage(wx.Panel):
                     self.notebook.SetSelection(self.pageorder[thepage])
         elif href.startswith("#"): # In-page link
             event.Skip()
-        elif not href.startswith("file:"):
+        elif not href.startswith("file://"):
             webbrowser.open(href)
 
 
@@ -5526,7 +5533,7 @@ class DatabasePage(wx.Panel):
         try:
             title = "PRAGMA settings." if "PRAGMA" == title else \
                     "Database %s." % (title or "schema")
-            importexport.export_sql(filename, self.db, sql, title)
+            importexport.export_sql(self.db, filename, sql, title)
             guibase.status('Exported to "%s".', filename, log=True)
             util.start_file(filename)
         except Exception as e:
@@ -5580,6 +5587,17 @@ class DatabasePage(wx.Panel):
             else: t = "%s %s" % (vv[0], fmt_entity(vv[1])) if all(vv) else vv[-1]
             return util.cap(t) if cap else t
 
+        def on_rename(event=None):
+            name = nb.GetPageText(nb.GetPageIndex(page))
+            dlg = wx.TextEntryDialog(self, "Enter new name for tab:", conf.Title, name)
+            if wx.ID_OK != dlg.ShowModal(): return
+            name2 = dlg.GetValue().strip()
+            if not name2 or name2 == name: return
+            self.sql_pages.pop(name)
+            name2 = util.make_unique(name2, self.sql_pages, " (%s)")
+            self.sql_pages[name2] = page
+            nb.SetPageText(nb.GetPageIndex(page), name2)
+
         def on_take(event=None):
             text, source, case = (page["info"].get(x) for x in ["text", "source", "case"])
             myid = wx.ID_INDEX if "meta" == source else wx.ID_STATIC
@@ -5594,7 +5612,7 @@ class DatabasePage(wx.Panel):
             self.edit_searchall.SelectAll()
 
         menu, hmenu = wx.Menu(), wx.Menu()
-        item_close = item_save = item_last = item_take = None
+        item_close = item_save = item_rename = item_last = item_take = None
 
         pp = self.pages_closed.get(nb, [])
         if nb in (self.notebook_data, self.notebook_schema): # Remove stale items
@@ -5605,6 +5623,8 @@ class DatabasePage(wx.Panel):
             item_close = wx.MenuItem(menu, -1, "&Close\t%s-W" % controls.KEYS.NAME_CTRL)
             if isinstance(page, (components.DataObjectPage, components.SchemaObjectPage)):
                 item_save = wx.MenuItem(menu, -1, "&Save")
+            if isinstance(page, components.SQLPage):
+                item_rename = wx.MenuItem(menu, -1, "Rena&me")
 
         if nb is self.notebook_search and page and page.get("info"):
             item_take = wx.MenuItem(menu, -1, "&Take search query")
@@ -5616,9 +5636,10 @@ class DatabasePage(wx.Panel):
                 hmenu.Append(item_open)
                 menu.Bind(wx.EVT_MENU, functools.partial(self.reopen_page, nb, i), item_open)
 
-        if item_close: menu.Append(item_close)
-        if item_save:  menu.Append(item_save)
-        if item_take:  menu.Append(item_take)
+        if item_close:  menu.Append(item_close)
+        if item_save:   menu.Append(item_save)
+        if item_rename: menu.Append(item_rename)
+        if item_take:   menu.Append(item_take)
 
         if hmenu.MenuItemCount:
             if menu.MenuItemCount: menu.AppendSeparator()
@@ -5631,6 +5652,8 @@ class DatabasePage(wx.Panel):
                 if not page.IsChanged() if isinstance(page, components.DataObjectPage) \
                 else page.ReadOnly: item_save.Enable(False)
                 menu.Bind(wx.EVT_MENU, lambda e: page.Save(), item_save)
+            if isinstance(page, components.SQLPage):
+                menu.Bind(wx.EVT_MENU, on_rename, item_rename)
 
         if nb is self.notebook_search and page and page.get("info"):
             menu.Bind(wx.EVT_MENU, on_take, item_take)
@@ -5685,7 +5708,7 @@ class DatabasePage(wx.Panel):
         finally: self.Thaw()
 
 
-    def on_export_multiitem(self, category, event=None, names=None):
+    def on_export_data_combined(self, category, event=None, names=None):
         """
         Handler for saving database category data from multiple items to a single file,
         opens file dialog, saves content.
@@ -5721,7 +5744,7 @@ class DatabasePage(wx.Panel):
                 "category": category, "names": names}
         opts = {"filename": filename, "multi": True,
                 "name": "%s%s to single file" % ("" if names else "all ", categorylabel),
-                "callable": functools.partial(importexport.export_data_multiple, **args)}
+                "callable": functools.partial(importexport.export_data_combined, **args)}
         if "table" in categories:
             opts["subtotals"] = {t: {
                     "total": topts.get("count"),
@@ -6051,6 +6074,8 @@ class DatabasePage(wx.Panel):
                     self.pages_closed[self.notebook_schema].append({"name": p.Name, "type": c})
                 self.schema_pages[c].pop(k)
                 break # for c, k, p
+        self.TopLevelParent.run_console(
+            "schemapage = page.notebook_schema.GetPage(0) # Schema object subtab")
         self.update_page_header()
 
 
@@ -6078,7 +6103,7 @@ class DatabasePage(wx.Panel):
         if reload_grids:
             self.toggle_cursors(category, name)
         if (modified is not None or updated is not None) and event.source:
-            if name:
+            if name is not None:
                 title = "%s %s" % (category.capitalize(), fmt_entity(name, force=False))
                 title = make_unique_page_title(title, self.notebook_schema, skip=idx)
                 if event.source.IsChanged(): title += "*"
@@ -6107,7 +6132,7 @@ class DatabasePage(wx.Panel):
             self.on_pragma_refresh(reload=True)
             self.update_autocomp()
             self.load_tree_data()
-            datapage = self.data_pages.get(category, {}).get(name0 or name)
+            datapage = self.data_pages.get(category, {}).get(name0 if name0 is not None else name)
             if datapage:
                 if name in self.db.schema[category]:
                     if not datapage.IsChanged():
@@ -6182,6 +6207,8 @@ class DatabasePage(wx.Panel):
                     self.sql_pages.pop(k)
                     break # for k, p
         finally: wx.CallAfter(lambda: self and self.notebook_sql.Thaw())
+        self.TopLevelParent.run_console(
+            "sqlpage = page.notebook_sql.GetPage(0) # SQL window subtab")
 
 
     def on_close_data_page(self, event):
@@ -6195,6 +6222,8 @@ class DatabasePage(wx.Panel):
                 self.data_pages[c].pop(k)
                 break # for c, k, p
         self.update_page_header()
+        self.TopLevelParent.run_console(
+            "datapage = page.notebook_data.GetPage(0) # Data object subtab")
 
 
     def on_data_page_event(self, event):
@@ -6215,7 +6244,7 @@ class DatabasePage(wx.Panel):
         if reindex:
             self.handle_command("reindex", category, name)
         if (modified is not None or updated is not None) and event.source:
-            if name:
+            if name is not None:
                 title = "%s %s" % (category.capitalize(), fmt_entity(name, force=False))
                 title = make_unique_page_title(title, self.notebook_data, skip=idx)
                 if event.source.IsChanged(): title += "*"
@@ -6223,7 +6252,7 @@ class DatabasePage(wx.Panel):
                     self.notebook_data.SetPageText(idx, title)
             if not self.flags.get("save_underway"): self.update_page_header()
         if updated and not self.flags.get("save_underway"):
-            self.db.populate_schema(count=True, category=category, name=table or name)
+            self.db.populate_schema(count=True, category=category, name=table if table is not None else name)
             self.load_tree_data()
         if open:
             page = self.data_pages["table"].get(table) or \
@@ -6376,21 +6405,17 @@ class DatabasePage(wx.Panel):
         is_samefile = util.lceq(self.db.filename, filename2)
         file_exists = is_samefile or os.path.isfile(filename2)
 
-        renames = defaultdict(util.CaselessDict) # {category: {name1: name2}}
-        eschema = defaultdict(util.CaselessDict) # {category: {name: True}}
-        schema2 = {}
-        mynames, requireds = names[:], defaultdict(dict) # {name: {name2: category}}
-        names1_all = util.CaselessDict({x: True for xx in self.db.schema.values() for x in xx})
-        names2_all = util.CaselessDict()
-        if not file_exists:
-            for name in names:
-                category = "table" if name in self.db.schema.get("table", ()) else "view"
-                eschema[category][name] = True
-        else:
+        if is_samefile and wx.YES != controls.YesNoMessageBox(
+            "Target database is the same file as source database.\n\n"
+            "Are you sure you want to continue?", conf.Title, wx.ICON_WARNING, default=wx.NO
+        ): return
+
+        schema2 = defaultdict(util.CaselessDict) # {category: {name: True}}
+        if file_exists:
             if is_samefile:
-                schema2 = {c: {k: True} for c, kk in self.db.schema.items() for k in kk}
+                schema2 = {c: {k: True for k in kk} for c, kk in self.db.schema.items()}
             else:
-                # Check for name conflicts with existing items and ask user choice
+                # Populate target schema and names, for resolving name conflicts
                 schemaname2 = None
                 try:
                     schemas = [x["name"] for x in
@@ -6403,7 +6428,6 @@ class DatabasePage(wx.Panel):
                         "SELECT type, name FROM %s.sqlite_master WHERE sql != '' "
                         "AND name NOT LIKE 'sqlite_%%'" % schemaname2
                     ).fetchall(): schema2[x["type"]][x["name"]] = True
-                    names2_all.update({x: True for xx in schema2.values() for x in xx})
                 except Exception as e:
                     msg = "Failed to read database %s." % filename2
                     logger.exception(msg); guibase.status(msg)
@@ -6413,116 +6437,126 @@ class DatabasePage(wx.Panel):
                     try: self.db.execute("DETACH DATABASE %s" % schemaname2)
                     except Exception: pass
 
-        def add_requireds(name):
-            """Adds entities that the specified item owns or depends on, recursively."""
-            category = next((c for c in self.db.schema if name in self.db.schema[c]), None)
-            if not category:
-                guibase.status("Warning: no item named %s in database to export.",
-                               grammar.quote(name, force=True), log=True)
-                return
-            for category2, items2 in self.db.get_full_related(category, name)[0].items():
-                for name2, item2 in items2.items():
-                    if util.lceq(name, name2): continue # for name2
-                    if name.lower() in util.getval(item2, "meta", "__tables__", default=[]):
-                        requireds[name][name2] = category2
-                    if name2 not in mynames and name2 not in eschema.get(category2, {}) \
-                    and self.db.is_valid_name(name2): # Skip sqlite_* specials
-                        mynames.append(name2)
-
-        def fmt_schema_items(dct):
-            """Returns schema information string as "tables A, B and views C, D"."""
-            return " and ".join(
-                "%s %s" % (util.plural(c, vv, numbers=False),
-                           ", ".join(map(fmt_entity, sorted(vv, key=lambda x: x.lower()))))
-                for c, vv in sorted(dct.items())
-            )
+        names1_all = util.CaselessDict({x: c for c, xx in self.db.schema.items() for x in xx})
+        names2_all = util.CaselessDict({x: c for c, xx in schema2.items() for x in xx})
+        names = sorted(names, key=lambda x: (names1_all[x], x.lower()))
 
 
-        def fmt_dependents(name):
-            """Returns information string with items that require name."""
-            rels = {} # {category: [name, ]}
-            for name0, kv in requireds.items():
-                if name in kv: rels.setdefault(kv[name], []).append(name0)
-            return fmt_schema_items(rels)
+        # Assemble minimum and total relations (minimum: owned items plus tables that views query)
+        min_items, max_items = defaultdict(util.CaselessDict), defaultdict(util.CaselessDict)
+        for name in names:
+            category = names1_all[name]
+            min_items[category][name] = max_items[category][name] = True
+            for foreign, items in enumerate([min_items, max_items]):
+                rels2 = self.db.get_full_related(category, name, foreign=foreign)
+                for category2, name2 in ((c, n) for c, vv in rels2.items() for n in vv):
+                    items[category2][name2] = True
+
+        export_items = defaultdict(util.CaselessDict) # {category: {name: True}}
+        renames = defaultdict(util.CaselessDict) # {category: {name1: name2}}
+        parents = {n: self.db.schema[c][n]["tbl_name"] for c in ("index", "trigger")
+                   for n in max_items.get(c, {}) }
+        display_order = []
+
+        # Allow user to include or exclude individual items, with minimum set pre-selected
+        choices, selections, seen = [], [], util.CaselessDict()
+        listings = [((names1_all[n], n) for n in names),
+                    ((c, n) for c, nn in min_items.items() for n in nn),
+                    ((c, n) for c, nn in max_items.items() for n in nn), ]
+        for i, listing in enumerate(listings):
+            for category, name in ((c, n) for c, n in listing if c in ("table", "view")):
+                if name in seen: continue # for category, name
+                if i < 2: selections.append(len(display_order)) # Select minimum set by default
+                display_order.append((category, name)), seen.update({name: True})
+                choices.append(" %s %s" % (category, fmt_entity(name)))
+                for name2 in (n for c in ("index", "trigger") for n in max_items.get(c, {})
+                              if util.lceq(name, parents[n])):
+                    if name2 in seen: continue # for category2, name2
+                    category2 = names1_all[name2]
+                    if i < 2: selections.append(len(display_order)) # Select minimum set by default
+                    display_order.append((category2, name2)), seen.update({name2: True})
+                    choices.append("     %s %s" % (category2, fmt_entity(name2)))
+        msg = "Select %sitems to export:" % \
+              ("primary and related " if len(display_order) != len(names) else "")
+        dlg = wx.MultiChoiceDialog(self, msg, conf.Title, choices)
+        dlg.Selections = selections
+        if wx.ID_CANCEL == dlg.ShowModal() or not dlg.Selections: return
+        for category, name in (display_order[i] for i in dlg.Selections):
+            export_items[category][name] = True
 
 
-        entrymsg = ("Name conflict on exporting %(category)s %(name)s as %(name2)s%(depend)s.\n"
-                    "Database %(filename2)s %(entryheader)s "
-                    "%(category2)s named %(name2)s.\n\nYou can:\n"
-                    "- keep same name to overwrite %(category2)s %(name2)s,\n"
-                    "- enter another name to export %(category)s %(name2)s as,\n"
-                    "- or set blank to skip %(category)s %(name)s.")
-        while mynames:
-            name = mynames.pop(0)
-            category = next(c for c in self.db.schema if name in self.db.schema[c])
-            if name not in names2_all:
-                add_requireds(name)
-                names2_all[name] = True
-                eschema[category][name] = True
-                continue # while mynames
+        # Resolve name conflicts when exporting to existing database
+        entrymsg = "Name conflict on exporting %(category)s %(name)s.\n\n" \
+                   "Target database %(entryheader)s %(category2)s named %(name2)s.\n" \
+                   "Enter new name for %(name)s in target database.\n\n" \
+                   "NB! Leaving name %(samefooter)sblank will skip exporting this %(category)s."
+        samefooter = "" if is_samefile else \
+                   "unchanged will overwrite the existing %(category2)s,\nand setting it "
+        for category, name in ((c, n) for c, n in display_order if n in export_items.get(c, {})) \
+                              if file_exists else ():
+            if not any(name in xx for xx in schema2.values()):
+                schema2[category][name] = True
+                continue # for category, name
 
-            name2 = name2_prev = name
+            name2 = name2_prev = value = name
             entryheader = "already contains a"
-            depend = "" if name in names else " (required by %s)" % fmt_dependents(name)
-            while name2:
+            while name2 is not None:
                 category2 = next(c for c, xx in schema2.items() if name2 in xx)
-                entrydialog = wx.TextEntryDialog(self, entrymsg % {
-                    "category":  category, "category2": category2,
-                    "depend": depend,
-                    "name":      fmt_entity(name),
-                    "name2":     fmt_entity(name2),
-                    "filename2": filename2, "entryheader": entryheader
-                }, conf.Title, name2)
-                if wx.ID_OK != entrydialog.ShowModal(): return
+                msg = entrymsg % {"category": category, "category2": category2,
+                                  "name": fmt_entity(name), "name2": fmt_entity(name2),
+                                  "entryheader": entryheader, "samefooter": samefooter}
+                dlg = wx.TextEntryDialog(self, msg, conf.Title, value=value)
+                if wx.ID_OK != dlg.ShowModal(): return
+                value = dlg.GetValue().strip()
 
-                value = entrydialog.GetValue().strip()
-                if value and not self.db.is_valid_name(table=value):
-                    msg = "%s is not a valid %s name." % (grammar.quote(value, force=True), category)
+                if not value:
+                    export_items[category].pop(name)
+                    name2 = None
+                    break # while name2
+                elif not self.db.is_valid_name(table=value):
+                    msg = "%s is not a valid %s name." % (fmt_entity(value), category)
                     wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
                     continue # while name2
 
-                name2 = name2_prev = value
-                if not name2 \
-                or util.lceq(name, name2) and util.lceq(name, name2_prev): break # while name2
-
-                if not util.lceq(name2, name2_prev) and name2 in names2_all:
-                    # User entered another table existing in db2
+                name2 = value
+                if util.lceq(name, name2): # User chose to overwrite existing item
+                    if is_samefile: # Cannot overwrite if same file: continue asking user
+                        continue # while name2
+                    break # while name2
+                elif name2 in names2_all:
+                    # User entered another item existing in db2
                     entryheader = "already contains a"
                     continue # while name2
-                if not util.lceq(name2, name2_prev) \
-                and (any(name2 in xx for xx in eschema.values())
-                or any(util.lceq(name2, x) for xx in renames.values() for x in xx.values())):
-                    # User entered a duplicate rename
+                elif any(util.lceq(name2, x) for c, xx in export_items.items() for x in xx.values()
+                         if x not in renames.get(c, {})) \
+                or   any(util.lceq(name2, x) for xx in renames.values() for x in xx.values()):
+                    # User entered a duplicate export name or rename
                     entryheader = "will contain another"
                     continue # while name2
-                break # while name2
+                else: # User entered new name for item
+                    break # while name2
 
-            if is_samefile and name2 in names1_all: # Needs rename if same file
-                continue # while mynames
-            if name2:
-                eschema[category][name] = True
+            if name2 is not None:
+                schema2[category][name2] = True
                 if name != name2: renames[category][name] = name2
-                add_requireds(name)
 
-        deps, reqs = {}, {} # {category: set(name, )}
-        for c, name in ((c, n) for c, nn in eschema.items() for n in nn):
-            for name0, kv in requireds.items():
-                if name in kv and not util.getval(eschema, kv[name], name):
-                    deps.setdefault(c, set()).add(name0)
-                    reqs.setdefault(kv[name], set()).add(name)
-        if deps:
-            return wx.MessageBox("Export cancelled: %s %s required for %s.", 
-                fmt_schema_items(reqs),
-                "are" if len(reqs) > 1 or any(len(x) > 1 for x in reqs.values()) else "is",
-                fmt_schema_items(deps),
-                conf.Title, wx.OK | wx.ICON_WARNING
-            )
+        schema = {c: list(xx) for c, xx in export_items.items() if xx}
+        if not schema: return
 
-        if not eschema: return
-        schema = {c: list(xx) for c, xx in eschema.items()}
-
-        args = {"db": self.db, "filename": filename2, "schema": schema,
-                "renames": renames, "data": data, "selects": selects}
+        msg = "Exporting %s items to %s:\n\n" % (sum(map(len, schema.values())), filename2)
+        for i, (category, name) in enumerate(display_order):
+            if name not in schema.get(category, []):
+                if category in ("table", "view") and any(util.lceq(name, parents.get(n))
+                    for c in ("index", "trigger") for n in schema.get(c, [])
+                ):
+                    msg += "\n%s %s  (SKIPPED IN EXPORT)\n" % (category, fmt_entity(name))
+                continue # for i
+            msg += "%s%s %s%s\n" % ("\n" if category in ("table", "view") else "    ",
+                                    category, fmt_entity(name),
+                                    "  AS %s" % fmt_entity(renames[category][name])
+                                    if name in renames.get(category, {}) else "")
+        if wx.OK != wx.MessageBox(msg, conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION):
+            return
 
 
         def on_complete(result):
@@ -6552,7 +6586,7 @@ class DatabasePage(wx.Panel):
                                                            for x in next(iter(successes.values())))))
                 guibase.status('Exported %s to "%s".', status, filename2, log=True)
             else:
-                guibase.status("Failed to export to %s.", filename2)
+                guibase.status("Failed to export to %s.", filename2, log=True)
 
             if is_samefile:
                 self.reload_schema(count=True)
@@ -6561,6 +6595,9 @@ class DatabasePage(wx.Panel):
                 wx.PostEvent(self, OpenDatabaseEvent(self.Id, file=filename2))
 
 
+        args = {"db": self.db, "filename": filename2, "schema": schema,
+                "renames": renames, "data": data, "selects": selects}
+
         if not data:
             # Purely structure export: do not open export panel
             busy = controls.BusyPanel(self, 'Exporting structure to "%s".' % filename2)
@@ -6568,21 +6605,21 @@ class DatabasePage(wx.Panel):
             def progress(result=None, name=None, error=None, **_):
                 """Callback function for worker and ExportProgressPanel."""
                 if error:
-                    if name: subtasks.setdefault(name, {})["error"] = error
+                    if name is not None: subtasks.setdefault(name, {})["error"] = error
                     else: errors.append(error)
-                elif name: subtasks.setdefault(name, {})["result"] = True
+                elif name is not None: subtasks.setdefault(name, {})["result"] = True
                 def after(result, name, error):
                     if not self: return
                     if error:
                         t = error
-                        if name: t = "%s: %s" % (grammar.quote(name, force=True), t)
-                        guibase.status("Failed to export %s.", t)
+                        if name is not None: t = "%s: %s" % (grammar.quote(name, force=True), t)
+                        guibase.status("Failed to export %s.", t, log=True)
                     if result:
                         busy.Close()
                         result = dict(result, subtasks=subtasks, error=result.get("error", "\n".join(errors)))
                         on_complete(result)
 
-                if result or name or error: wx.CallAfter(after, result, name, error)
+                if result or name is not None or error: wx.CallAfter(after, result, name, error)
                 return True
 
             func = functools.partial(importexport.export_to_db, progress=progress, **args)
@@ -6612,10 +6649,10 @@ class DatabasePage(wx.Panel):
         Handler for import dialog event, refreshes schema,
         opens table if specified.
         """
-        VARS = "table", "open", "count", "parse"
-        table, open, count, parse = (getattr(event, x, None) for x in VARS)
-        if table and (count or parse):
-            self.db.populate_schema(category="table", name=table, count=count, parse=parse)
+        VARS = "table", "open", "count"
+        table, open, count = (getattr(event, x, None) for x in VARS)
+        if table and count:
+            self.db.populate_schema(category="table", name=table, count=count)
         if table:
             self.reload_schema()
             self.update_page_header(updated=True)
@@ -6800,7 +6837,7 @@ class DatabasePage(wx.Panel):
             self.on_update_stc_schema()
 
         func = functools.partial(self.db.populate_schema, parse=True, progress=progress)
-        wx.CallLater(100, workers.WorkerThread(progress).work, func)
+        wx.CallLater(100, workers.WorkerThread(progress, oneshot=True).work, func)
         self.on_update_statistics()
 
 
@@ -7033,7 +7070,7 @@ class DatabasePage(wx.Panel):
                                                 or item.get("columns") or [])
                         table = self.db.schema.get("table", {}).get(item["tbl_name"])
                         for col in columns if table else ():
-                            if table.get("columns") and col.get("name"):
+                            if table.get("columns") and col.get("name") is not None:
                                 tcol = next((x for x in table["columns"]
                                              if x["name"] == col["name"]), None)
                                 if tcol: col["type"] = tcol.get("type", "")
@@ -7061,7 +7098,7 @@ class DatabasePage(wx.Panel):
                         tree.SetItemImage(colchild, imgs["columns"], wx.TreeItemIcon_Normal)
                         lks, fks = self.db.get_keys(item["name"]) if "table" == category else [(), ()]
                         for col in columns:
-                            subchild = tree.AppendItem(colchild, util.unprint(col.get("name") or col.get("expr")))
+                            subchild = tree.AppendItem(colchild, util.unprint(col.get("name") or col.get("expr") or ""))
                             mytype = util.unprint(col.get("type", ""))
                             if any(col["name"] in x["name"] for x in lks):
                                 mytype = u"\u1d18\u1d0b  " + mytype # Unicode small caps "PK"
@@ -7264,13 +7301,16 @@ class DatabasePage(wx.Panel):
         boldfont = self.Font.Bold()
 
         if data["type"] in ("data", "schema"): # Root
+            names = list(self.db.schema.get("table", [])) + list(self.db.schema.get("view", []))
             exportmenu, newmenu, keys = wx.Menu(), wx.Menu(), []
-            item_copy         = wx.MenuItem(menu, -1, "&Copy schema SQL")
-            item_schema       = wx.MenuItem(exportmenu, -1, "Export &schema as SQL")
-            item_dump         = wx.MenuItem(exportmenu, -1, "Export full d&ump as SQL")
-            item_database     = wx.MenuItem(exportmenu, -1, "Export all to another &database")
-            item_database_sql = wx.MenuItem(exportmenu, -1, "Export all structures to another data&base")
-            item_drop_schema  = wx.MenuItem(menu, -1, "Drop everything")
+            item_copy          = wx.MenuItem(menu, -1, "&Copy schema SQL")
+            item_schema        = wx.MenuItem(exportmenu, -1, "Export &schema as SQL")
+            item_dump          = wx.MenuItem(exportmenu, -1, "Export full d&ump as SQL")
+            item_database      = wx.MenuItem(exportmenu, -1, "Export all to another &database")
+            item_file          = wx.MenuItem(exportmenu, -1, "Export all to &individual files")
+            item_file_combined = wx.MenuItem(exportmenu, -1, "Export all to a single &file")
+            item_database_sql  = wx.MenuItem(exportmenu, -1, "Export all structures to another data&base")
+            item_drop_schema   = wx.MenuItem(menu, -1, "Drop everything")
             for category in self.db.CATEGORIES:
                 key = next((x for x in category if x not in keys), category[0])
                 it = wx.MenuItem(newmenu, -1, "New " + category.replace(key, "&" + key, 1))
@@ -7279,6 +7319,8 @@ class DatabasePage(wx.Panel):
             exportmenu.Append(item_schema)
             exportmenu.Append(item_dump)
             exportmenu.Append(item_database)
+            exportmenu.Append(item_file)
+            exportmenu.Append(item_file_combined)
             exportmenu.Append(item_database_sql)
             menu.Append(item_copy)
             menu.AppendSubMenu(exportmenu, text="&Export ..")
@@ -7291,6 +7333,8 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, cmd("export", "schema"), item_schema)
             menu.Bind(wx.EVT_MENU, cmd("export", "dump"), item_dump)
             menu.Bind(wx.EVT_MENU, cmd("export", "data"), item_database)
+            menu.Bind(wx.EVT_MENU, cmd("export", "tables", *names), item_file)
+            menu.Bind(wx.EVT_MENU, cmd("export", "combined", None, *names), item_file_combined)
             menu.Bind(wx.EVT_MENU, cmd("export", "structure"), item_database_sql)
             menu.Bind(wx.EVT_MENU, cmd("drop schema"), item_drop_schema)
             for c, it in zip(self.db.CATEGORIES, newmenu.MenuItems):
@@ -7302,26 +7346,26 @@ class DatabasePage(wx.Panel):
             names0 = names if data.get("parent") else []
             relcategory, relname = (data["parent"]["type"], data["parent"]["name"]) if data.get("parent") else (None, None)
             item_import = item_reindex_all = item_truncate_all = item_database_sql = None
-            item_file, item_file_multi, item_database = None, None, None
+            item_file, item_file_combined, item_database = None, None, None
 
             copymenu, exportmenu = wx.Menu(), wx.Menu()
             item_copy     = wx.MenuItem(copymenu, -1, "Copy &names")
             item_copy_sql = wx.MenuItem(copymenu, -1, "Copy CREATE &SQL")
             item_copy_own = wx.MenuItem(copymenu, -1, "Copy &owned SQL" if category in ("table", "view") else "Copy CREATE SQL with &parents")
             item_copy_rel = wx.MenuItem(copymenu, -1, "Copy all &related SQL")
-            item_save_sql = wx.MenuItem(exportmenu, -1, "Save %s S&QL to file" % util.plural(category))
+            item_save_sql = wx.MenuItem(exportmenu, -1, "Save %s &SQL to file" % util.plural(category))
             if "table" == category:
-                item_database_sql = wx.MenuItem(exportmenu, -1, "Export all %s structures to another data&base" % category)
+                item_database_sql = wx.MenuItem(exportmenu, -1, "Export %s structures to another data&base" % category)
                 item_import       = wx.MenuItem(menu, -1, "&Import into table from file")
                 item_truncate_all = wx.MenuItem(menu, -1, "Truncate all")
             if category in ("table", "view"):
-                item_file       = wx.MenuItem(exportmenu, -1, "Export all %s to &file" % util.plural(category))
-                item_file_multi = wx.MenuItem(exportmenu, -1, "Export all %s to &single file" % util.plural(category))
-                item_database   = wx.MenuItem(exportmenu, -1, "Export all %s to another &database" % util.plural(category))
+                item_file          = wx.MenuItem(exportmenu, -1, "Export %s to &individual files" % util.plural(category))
+                item_file_combined = wx.MenuItem(exportmenu, -1, "Export %s to a single &file"    % util.plural(category))
+                item_database      = wx.MenuItem(exportmenu, -1, "Export %s to another &database" % util.plural(category))
             if category in ("table", "index"):
                 item_reindex_all = wx.MenuItem(menu, -1, "Reindex all")
             item_create   = wx.MenuItem(menu, -1, "Create &new %s" % category)
-            item_drop_all = wx.MenuItem(menu, -1, "Drop all %s" % util.plural(category))
+            item_drop_all = wx.MenuItem(menu, -1, "Drop %s" % util.plural(category))
 
             copymenu.Append(item_copy)
             copymenu.Append(item_copy_sql)
@@ -7329,7 +7373,7 @@ class DatabasePage(wx.Panel):
             copymenu.Append(item_copy_rel)
             exportmenu.Append(item_save_sql)
             exportmenu.Append(item_file) if item_file else None
-            exportmenu.Append(item_file_multi) if item_file_multi else None
+            exportmenu.Append(item_file_combined) if item_file_combined else None
             exportmenu.Append(item_database) if item_database else None
             exportmenu.Append(item_database_sql) if item_database_sql else None
 
@@ -7356,7 +7400,7 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, cmd("copy", "related", category, *names0), item_copy_rel)
             menu.Bind(wx.EVT_MENU, cmd("export", "sql", category, *names0), item_save_sql)
             menu.Bind(wx.EVT_MENU, cmd("export", "tables", *names), item_file) if item_file else None
-            menu.Bind(wx.EVT_MENU, cmd("export", "multiitem", category, *names), item_file_multi) if item_file_multi else None
+            menu.Bind(wx.EVT_MENU, cmd("export", "combined", category, *names), item_file_combined) if item_file_combined else None
             menu.Bind(wx.EVT_MENU, cmd("export", "data", *names), item_database) if item_database else None
             menu.Bind(wx.EVT_MENU, cmd("export", "structure", *names), item_database_sql) if item_database_sql else None
             menu.Bind(wx.EVT_MENU, import_data, item_import) if item_import else None
@@ -7370,16 +7414,17 @@ class DatabasePage(wx.Panel):
             parentname = data["parent"]["name"]
             ownername  = data["parent"]["tbl_name" if "index" == category else "name"]
             subcategories = {"table": ["index", "trigger", "view"], "view": ["trigger"]}.get(category, [])
-            fullname = "Column expression" if not name else \
+            fullname = "Column expression" if name is None else \
                        'Column "%s.%s"' % (fmt_entity(ownername, force=False), fmt_entity(name, force=False))
-            sqltext = functools.partial(self.db.get_sql, category, parentname, name or data["expr"])
+            sqltext = functools.partial(self.db.get_sql, category, parentname,
+                                        name if name is not None else data.get("expr") or "")
 
             newmenu = wx.Menu() if subcategories else None
             item_name      = wx.MenuItem(menu, -1, fullname)
             item_open      = wx.MenuItem(menu, -1, "&Open %s data" % category) if "index" != category else None
             item_open_meta = wx.MenuItem(menu, -1, "Open %s &schema" % category) if "index" != category else None
-            item_copy      = wx.MenuItem(menu, -1, "&Copy name") if name else None
-            item_copy_sql  = wx.MenuItem(menu, -1, "Copy %s S&QL" % ("column" if name else "expression"))
+            item_copy      = wx.MenuItem(menu, -1, "&Copy name") if name is not None else None
+            item_copy_sql  = wx.MenuItem(menu, -1, "Copy %s S&QL" % ("expression" if name is None else "column"))
             item_renamecol = wx.MenuItem(menu, -1, "Rena&me column\t(F2)") if "table" == category else None
             item_drop_col  = wx.MenuItem(menu, -1, "Drop column") if "table" == category else None
             for c in subcategories: newmenu.Append(-1, "New &%s" % c)
@@ -7549,8 +7594,7 @@ class AboutDialog(wx.Dialog):
 
         html.SetPage(content() if callable(content) else content)
         html.BackgroundColour = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
-        html.Bind(wx.html.EVT_HTML_LINK_CLICKED,
-                  lambda e: webbrowser.open(e.GetLinkInfo().Href))
+        html.Bind(wx.html.EVT_HTML_LINK_CLICKED, self.OnLink)
         button_update.Bind(wx.EVT_BUTTON, parent.on_check_update)
 
         self.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -7566,6 +7610,13 @@ class AboutDialog(wx.Dialog):
         if "win32" != sys.platform: self.MinSize = (550, -1)
         self.Size = (self.Size[0], html.VirtualSize[1] + (10 if "win32" != sys.platform else 70))
         self.CenterOnParent()
+
+
+    def OnLink(self, event):
+        """Handler for clicking link, opens URLs in browser and files in registered application."""
+        href = event.GetLinkInfo().Href
+        if not href.startswith("file://"): webbrowser.open(href)
+        else: util.start_file(util.url_to_path(href, double_decode=True))
 
 
     def OnSysColourChange(self, event):

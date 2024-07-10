@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    03.10.2023
+@modified    09.06.2024
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -144,20 +144,22 @@ def transform(sql, flags=None, renames=None, indent="  "):
 
 
 @util.memoize
-def quote(val, force=False, allow=""):
+def quote(val, force=False, allow="", embed=False):
     """
     Returns value in quotes and proper-escaped for queries,
     if name needs quoting (has non-alphanumerics or starts with number)
-    or if force set. Always returns unicode.
+    or if force set. Always returns a string.
 
     @param   allow  extra characters to allow without quoting
+    @param   embed  quote only if empty string or contains quotes or starts/ends with spaces
     """
     pattern = r"(^[^\w\d%s])|(?=[^\w%s])" % ((re.escape(allow) ,) * 2) \
               if allow else r"(^[\W\d])|(?=\W)"
-    result = uni(val)
-    if force or result.upper() in RESERVED_KEYWORDS \
+    result = uni(val) or ""
+    if "" == val or force or result.upper() in RESERVED_KEYWORDS \
     or re.search(pattern, result, re.U):
-        result = u'"%s"' % result.replace('"', '""')
+        if not embed or '"' in result or re.search("^$|^ | $", result):
+            result = u'"%s"' % result.replace('"', '""')
     return result
 
 
@@ -165,9 +167,9 @@ def quote(val, force=False, allow=""):
 def unquote(val):
     """
     Returns unquoted string, if string within '' or "" or `` or [].
-    Always returns unicode.
+    Convers value to string if not already.
     """
-    result = uni(val)
+    result = uni(val) or ""
     if re.match(r"^([\"].*[\"])|([\'].*[\'])|([\`].*[\`])|([\[].*[\]])$", result, re.DOTALL):
         result, sep = result[1:-1], result[0]
         if sep != "[": result = result.replace(sep * 2, sep)
@@ -200,6 +202,37 @@ def format(value, coldata=None):
                 value = value.encode("utf-8").decode("latin1")
             result = "'%s'" % value.replace("'", "''")
     return result
+
+
+def strip_and_collapse(sql, literals=True, upper=True):
+    """
+    Returns SQL with comments stripped and string/identifier literals reduced to empty placeholders,
+    surrounding whitespace and semicolons removed and inner whitespace collapsed.
+
+    @param   literals  do collapse string/identifier literals, or retain as is
+    @param   upper     return in uppercase
+    """
+    placeholders = {}
+    def repl(match): # Store match and return placeholder key
+        key = ("<%s>" % (uuid.uuid4())).upper()
+        placeholders[key] = match.group(0)
+        return key
+
+    # Strip single-line comments
+    sql = re.sub("%s.*$" % re.escape("--"), "", sql, flags=re.MULTILINE)
+    # Strip multi-line comments
+    sql = re.sub(r"/\*.*?\*/", " ", sql, flags=re.DOTALL) # Leave space if e.g. "SELECT/**/COL"
+    # Reduce string literals to empty strings or placeholders
+    sql = re.sub('"([^"]|"")*"',  '""' if literals else repl, sql)
+    sql = re.sub("'([^']|'')*'",  "''" if literals else repl, sql)
+    # Reduce identifiers to empty strings or placeholders
+    sql = re.sub("`([^`]|``)*`",  "``" if literals else repl, sql)
+    sql = re.sub(r"\[([^\]])*\]", "[]" if literals else repl, sql)
+    # Collapse all whitespace to single space and strip surrounding whitespace and semicolons
+    sql = re.sub(r"\s+", " ", re.sub(r"^[\s;]+|[\s;]*$", "", sql.upper() if upper else sql))
+    # Replace temporary placeholders with original literals if any
+    for k, v in placeholders.items(): sql = sql.replace(k, v, 1)
+    return sql
 
 
 def terminate(sql, data=None):
@@ -622,9 +655,9 @@ class Parser(object):
           ?schema:       table schema name
           ?temporary:    True if TEMPORARY | TEMP
           ?exists:       True if IF NOT EXISTS
-          ?without:      True if WITHOUT ROWID
           columns:       [{name, ..}]
           ?constraints:  [{type, ..}]
+          ?options:      [{"without" if WITHOUT ROWID or "strict" if STRICT: True}, ]
         }.
         """
         result = {}
@@ -632,8 +665,7 @@ class Parser(object):
         result["name"] = self.u(ctx.table_name)
         if ctx.database_name(): result["schema"]  = self.u(ctx.database_name)
         if ctx.K_TEMP() or ctx.K_TEMPORARY(): result["temporary"] = True
-        if ctx.K_EXISTS():      result["exists"]  = True
-        if ctx.K_WITHOUT():     result["without"] = True
+        if ctx.K_EXISTS(): result["exists"]  = True
 
         result["columns"] = [self.build_table_column(x) for x in ctx.column_def()]
         if self._repls:
@@ -647,6 +679,11 @@ class Parser(object):
         if ctx.table_constraint():
             result["constraints"] = [self.build_table_constraint(x)
                                      for x in ctx.table_constraint()]
+
+        for optctx in ctx.table_option():
+            for flag, key in ((optctx.K_WITHOUT, "without"), (optctx.C_STRICT, "strict")):
+                if flag() and not any(key in x for x in result.get("options", [])):
+                    result.setdefault("options", []).append({key: True})
 
         return result
 
@@ -1146,7 +1183,8 @@ class Generator(object):
             for (tokentype, _), token in self._tokens.items():
                 if "PAD" != tokentype: continue # for (tokentype, _), token
                 data = self._tokendata[token]
-                widths[data["key"]] = max(len(data["value"]), widths[data["key"]])
+                datalines = data["value"].splitlines() or [""]
+                widths[data["key"]] = max(len(datalines[-1]), widths[data["key"]])
 
             for (tokentype, val), token in sorted(
                 self._tokens.items(), key=lambda x: REPLACE_ORDER.index(x[0][0])
@@ -1156,7 +1194,9 @@ class Generator(object):
                     result = re.sub(r"\s*%s\s*" % re.escape(token), val, result, count=count)
                 elif "PAD" == tokentype: # Insert spaces per padding type/value
                     data = self._tokendata[token]
-                    ws = " " * (widths[data["key"]] - len(data["value"]))
+                    datalines = data["value"].splitlines() or [""]
+                    ws = " " * (widths[data["key"]] - len(datalines[-1]))
+                    if len(datalines) > 1: ws += self._indent
                     result = result.replace(token, ws, count)
                 elif "CM" == tokentype:
                     # Strip leading whitespace and multiple trailing spaces from commas
@@ -1223,7 +1263,7 @@ class Generator(object):
         """
         if not self._indent: return ""
         val = data[key] if key in data else ""
-        val = quote(val, **quotekw or {}) if val and quoted else val
+        val = quote(val, **quotekw or {}) if quoted and val is not None else val
         return self.token("%s-%s" % (key, val), "PAD", key=key, value=val)
 
 
@@ -1380,6 +1420,13 @@ def test():
             print("\n%s\nTRANSFORMED:\n" % ("-" * 70))
             sql3, err3 = transform(sql2, renames=renames, indent=indent)
             print(sql3.encode("utf-8") if sql3 else sql3)
+
+
+
+__all__ = [
+    "CTX", "Generator", "ParseError", "Parser", "SQL", "format", "generate", "get_type",
+    "parse", "quote", "strip_and_collapse", "terminate", "transform", "unquote",
+]
 
 
 

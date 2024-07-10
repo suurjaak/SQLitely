@@ -96,7 +96,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    07.10.2023
+@modified    15.06.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -131,8 +131,8 @@ import wx.lib.wordwrap
 import wx.stc
 
 
-try: import collections.abc as collections_abc             # Py2
-except ImportError: import collections as collections_abc  # Py3
+try: import collections.abc as collections_abc    # Py2
+except ImportError: collections_abc = collections # Py3
 try:
     integer_types, string_types, text_type = (int, long), (basestring, ), unicode  # Py2
 except NameError:
@@ -157,21 +157,21 @@ NewId = (lambda: wx.NewIdRef().Id) if hasattr(wx, "NewIdRef") else wx.NewId
 
 class KEYS(object):
     """Keycode groupings, includes numpad keys."""
-    UP         = wx.WXK_UP,       wx.WXK_NUMPAD_UP
-    DOWN       = wx.WXK_DOWN,     wx.WXK_NUMPAD_DOWN
-    LEFT       = wx.WXK_LEFT,     wx.WXK_NUMPAD_LEFT
-    RIGHT      = wx.WXK_RIGHT,    wx.WXK_NUMPAD_RIGHT
-    PAGEUP     = wx.WXK_PAGEUP,   wx.WXK_NUMPAD_PAGEUP
-    PAGEDOWN   = wx.WXK_PAGEDOWN, wx.WXK_NUMPAD_PAGEDOWN
-    ENTER      = wx.WXK_RETURN,   wx.WXK_NUMPAD_ENTER
-    INSERT     = wx.WXK_INSERT,   wx.WXK_NUMPAD_INSERT
-    DELETE     = wx.WXK_DELETE,   wx.WXK_NUMPAD_DELETE
-    HOME       = wx.WXK_HOME,     wx.WXK_NUMPAD_HOME
-    END        = wx.WXK_END,      wx.WXK_NUMPAD_END
-    SPACE      = wx.WXK_SPACE,    wx.WXK_NUMPAD_SPACE
-    BACKSPACE  = wx.WXK_BACK,
-    TAB        = wx.WXK_TAB,      wx.WXK_NUMPAD_TAB
-    ESCAPE     = wx.WXK_ESCAPE,
+    UP         = (wx.WXK_UP,       wx.WXK_NUMPAD_UP)
+    DOWN       = (wx.WXK_DOWN,     wx.WXK_NUMPAD_DOWN)
+    LEFT       = (wx.WXK_LEFT,     wx.WXK_NUMPAD_LEFT)
+    RIGHT      = (wx.WXK_RIGHT,    wx.WXK_NUMPAD_RIGHT)
+    PAGEUP     = (wx.WXK_PAGEUP,   wx.WXK_NUMPAD_PAGEUP)
+    PAGEDOWN   = (wx.WXK_PAGEDOWN, wx.WXK_NUMPAD_PAGEDOWN)
+    ENTER      = (wx.WXK_RETURN,   wx.WXK_NUMPAD_ENTER)
+    INSERT     = (wx.WXK_INSERT,   wx.WXK_NUMPAD_INSERT)
+    DELETE     = (wx.WXK_DELETE,   wx.WXK_NUMPAD_DELETE)
+    HOME       = (wx.WXK_HOME,     wx.WXK_NUMPAD_HOME)
+    END        = (wx.WXK_END,      wx.WXK_NUMPAD_END)
+    SPACE      = (wx.WXK_SPACE,    wx.WXK_NUMPAD_SPACE)
+    BACKSPACE  = (wx.WXK_BACK, )
+    TAB        = (wx.WXK_TAB,      wx.WXK_NUMPAD_TAB)
+    ESCAPE     = (wx.WXK_ESCAPE, )
 
     ARROW      = UP + DOWN + LEFT + RIGHT
     PAGING     = PAGEUP + PAGEDOWN
@@ -982,6 +982,7 @@ class FormDialog(wx.Dialog):
        ?tb:           [{type, ?help, ?toggle, ?on}] for SQLiteTextCtrl component,
                       adds toolbar, supported toolbar buttons "numbers", "wrap",
                       "copy", "paste", "open" and "save", plus "sep" for separator
+       ?format:       function(value) for formatting ComboBox/ListBox items
     }]
     @param   autocomp  list of words to add to SQLiteTextCtrl autocomplete,
                        or a dict for words and subwords
@@ -992,13 +993,15 @@ class FormDialog(wx.Dialog):
                        supported toolbar buttons "copy", "paste", plus "sep" for separator
        populate:       function(dialog, ctrl) invoked on startup and each change
     }
+    @param   format    function(value) for formatting ComboBox/ListBox items
     """
 
     WIDTH = 640 if "linux" in sys.platform else 440
     HEIGHT_FOOTER = 100 if "linux" in sys.platform else 65
 
 
-    def __init__(self, parent, title, props=None, data=None, edit=None, autocomp=None, onclose=None, footer=None):
+    def __init__(self, parent, title, props=None, data=None, edit=None, autocomp=None,
+                 onclose=None, footer=None, format=None):
         wx.Dialog.__init__(self, parent, title=title,
                           style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER)
         self._ignore_change = False
@@ -1007,6 +1010,7 @@ class FormDialog(wx.Dialog):
         self._autocomp = autocomp
         self._onclose  = onclose
         self._footer   = dict(footer) if footer and footer.get("populate") else None
+        self._format   = format if callable(format) else lambda x: x
         self._toggles  = {} # {(path): wx.CheckBox, }
         self._props    = []
         self._data     = {}
@@ -1168,10 +1172,11 @@ class FormDialog(wx.Dialog):
         return result
 
 
-    def _Unprint(self, s, escape=True):
-        """Returns string with unprintable characters escaped or stripped."""
-        repl = (lambda m: m.group(0).encode("unicode-escape").decode("latin1")) if escape else ""
-        return re.sub(r"[\x00-\x1f]", repl, s)
+    def _GetFormat(self, field):
+        """Returns function for formatting field values."""
+        if "format" in field:
+            return field["format"] if field["format"] else lambda x: x
+        return self._format
 
 
     def _AddField(self, field, path=()):
@@ -1238,7 +1243,7 @@ class FormDialog(wx.Dialog):
                 colspan = 1 if isinstance(c, wx.StaticText) or i < len(ctrls) - 2 else \
                           MAXCOL - col - bool(col)
                 brd, BRD = (5, wx.BOTTOM) if isinstance(c, wx.CheckBox) else (0, 0)
-                GRW = 0 if isinstance(c, (wx.CheckBox, wx.TextCtrl)) else wx.GROW
+                GRW = 0 if isinstance(c, (wx.CheckBox, wx.ComboBox)) else wx.GROW
                 sizer.Add(c, border=brd, pos=(self._rows, col), span=(1, colspan), flag=BRD | GRW)
                 col += colspan
 
@@ -1322,7 +1327,7 @@ class FormDialog(wx.Dialog):
                 choices = [x for x in choices if x not in value]
             listbox1, listbox2 = (x for x in ctrls if isinstance(x, wx.ListBox))
             for listbox, vv in zip((listbox1, listbox2), (choices, value)):
-                listbox.SetItems(list(map(self._Unprint, vv)))
+                listbox.SetItems(list(map(self._GetFormat(field), vv)))
                 for j, x in enumerate(vv): listbox.SetClientData(j, x)
                 listbox.Enable(self._editmode)
             for c in ctrls:
@@ -1369,9 +1374,9 @@ class FormDialog(wx.Dialog):
                 else:
                     if isinstance(value, (list, tuple)): value = "".join(value)
                     if isinstance(c, wx.ComboBox):
-                        c.SetItems(list(map(self._Unprint, choices)))
+                        c.SetItems(list(map(self._GetFormat(field), choices)))
                         for j, x in enumerate(choices): c.SetClientData(j, x)
-                        value = self._Unprint(value) if value else value
+                        value = self._GetFormat(field)(value) if value else value
                     c.Value = "" if value is None else value
 
                 if isinstance(c, wx.TextCtrl): c.SetEditable(self._editmode)
@@ -1501,7 +1506,9 @@ class FormDialog(wx.Dialog):
                 style = wx.CB_DROPDOWN | (0 if field.get("choicesedit") else wx.CB_READONLY)
                 ctrl = wx.ComboBox(parent, size=(200, -1), style=style)
             else:
-                ctrl = wx.TextCtrl(parent)
+                v = self._GetValue(field, path)
+                tstyle = wx.TE_MULTILINE if v and "\n" in v else 0
+                ctrl = wx.TextCtrl(parent, style=tstyle)
 
             result.append(ctrl)
             if isinstance(ctrl, wx.Control):
@@ -1524,7 +1531,7 @@ class FormDialog(wx.Dialog):
         elif isinstance(ctrl, wx.Button):   events = [wx.EVT_BUTTON]
         elif isinstance(ctrl, wx.CheckBox): events = [wx.EVT_CHECKBOX]
         elif isinstance(ctrl, wx.ComboBox): events = [wx.EVT_TEXT, wx.EVT_COMBOBOX]
-        elif isinstance(ctrl, wx.ListBox): events = [wx.EVT_LISTBOX_DCLICK]
+        elif isinstance(ctrl, wx.ListBox):  events = [wx.EVT_LISTBOX_DCLICK]
         else: events = [wx.EVT_TEXT]
         for e in events: self.Bind(e, functools.partial(handler, *args), ctrl)
 
@@ -1540,7 +1547,7 @@ class FormDialog(wx.Dialog):
         if isinstance(value, string_types) \
         and (not isinstance(src, wx.stc.StyledTextCtrl)
         or not value.strip()): value = value.strip()
-        if isinstance(src, wx.ComboBox) and src.HasClientData():
+        if isinstance(src, wx.ComboBox) and not field.get("choicesedit") and src.HasClientData():
             value = src.GetClientData(src.Selection)
         if value in (None, "") and field.get("dropempty"): self._DelValue(field, path)
         else: self._SetValue(field, value, path)
@@ -1563,14 +1570,14 @@ class FormDialog(wx.Dialog):
                               if isinstance(x, wx.ListBox))
         if isinstance(event.EventObject, wx.ListBox):
             indexes.append(event.GetSelection())
-        else:
+        else: # Helper button
             indexes.extend(listbox1.GetSelections())
             if not indexes and listbox1.GetCount(): indexes.append(0)
         selecteds = list(map(listbox1.GetClientData, indexes))
 
         if field.get("exclusive"):
             for i in indexes[::-1]: listbox1.Delete(i)
-        listbox2.AppendItems(list(map(self._Unprint, selecteds)))
+        listbox2.AppendItems(list(map(self._GetFormat(field), selecteds)))
         for j, x in enumerate(selecteds, listbox2.Count - len(selecteds)):
             listbox2.SetClientData(j, x)
         items2 = list(map(listbox2.GetClientData, range(listbox2.Count)))
@@ -1584,16 +1591,17 @@ class FormDialog(wx.Dialog):
                               if isinstance(x, wx.ListBox))
         if isinstance(event.EventObject, wx.ListBox):
             indexes.append(event.GetSelection())
-        else:
+        else: # Helper button
             indexes.extend(listbox2.GetSelections())
             if not indexes and listbox2.GetCount(): indexes.append(0)
 
         for i in indexes[::-1]: listbox2.Delete(i)
         items2 = list(map(listbox2.GetClientData, range(listbox2.Count)))
-        allchoices = self._GetChoices(field, path)
-        listbox1.SetItems([self._Unprint(x) for x in allchoices if x not in items2])
-        for j, x in enumerate(x for x in allchoices if x not in items2):
-            listbox1.SetClientData(j, x)
+        if field.get("exclusive"):
+            allchoices, format = self._GetChoices(field, path), self._GetFormat(field)
+            listbox1.SetItems([format(x) for x in allchoices if x not in items2])
+            for j, x in enumerate(x for x in allchoices if x not in items2):
+                listbox1.SetClientData(j, x)
         self._SetValue(field, items2, path)
 
 
@@ -1612,7 +1620,7 @@ class FormDialog(wx.Dialog):
             i2 = i + direction
             items[i], items[i2] = items[i2], items[i]
 
-        listbox2.SetItems(list(map(self._Unprint, items)))
+        listbox2.SetItems(list(map(self._GetFormat(field), items)))
         for j, x in enumerate(items): listbox2.SetClientData(j, x)
         for i in indexes: listbox2.Select(i + direction)
         self._SetValue(field, items, path)
@@ -2432,12 +2440,14 @@ class Patch(object):
     _PATCHED = False
 
     @staticmethod
-    def patch_wx():
+    def patch_wx(art=None):
         """
         Patches wx object methods to smooth over version and setup differences.
 
         In wheel-built wxPython in Ubuntu22, floats are no longer auto-converted to ints
         in core wx object method calls like wx.Colour().
+
+        @param   art  image overrides for wx.ArtProvider, as {image ID: wx.Bitmap}
         """
         if Patch._PATCHED: return
 
@@ -2485,6 +2495,24 @@ class Patch(object):
                 return functools.update_wrapper(inner, func)
             wx.ToolBar.SetToolNormalBitmap   = resize_bitmaps(wx.ToolBar.SetToolNormalBitmap)
             wx.ToolBar.SetToolDisabledBitmap = resize_bitmaps(wx.ToolBar.SetToolDisabledBitmap)
+
+        if wx.VERSION[:3] == (4, 1, 1) and "linux" in sys.platform:
+            # wxPython 4.1.1 on Linux crashes with FlatNotebook agwStyle FNB_VC8
+            FlatNotebook__init = wx.lib.agw.flatnotebook.FlatNotebook.__init__
+            def FlatNotebook__Patched(self, parent, id=wx.ID_ANY, pos=wx.DefaultPosition,
+                                      size=wx.DefaultSize, style=0, agwStyle=0, name="FlatNotebook"):
+                agwStyle ^= wx.lib.agw.flatnotebook.FNB_VC8
+                FlatNotebook__init(self, parent, id, pos, size, style, agwStyle, name)
+            wx.lib.agw.flatnotebook.FlatNotebook.__init__ = FlatNotebook__Patched
+
+        if wx.VERSION >= (4, 2) and art:
+            # Patch wx.ArtProvider.GetBitmap to return given bitmaps for overridden images instead
+            ArtProvider__GetBitmap = wx.ArtProvider.GetBitmap
+            def GetBitmap__Patched(id, client=wx.ART_OTHER, size=wx.DefaultSize):
+                if id in art and size == art[id].Size:
+                    return art[id]
+                return ArtProvider__GetBitmap(id, client, size)
+            wx.ArtProvider.GetBitmap = GetBitmap__Patched
 
         Patch._PATCHED = True
 
@@ -2805,15 +2833,15 @@ class ResizeWidget(wx.lib.resizewidget.ResizeWidget):
             w, dc = self.ManagedChild.Size[0], wx.ClientDC(self.ManagedChild)
             t = wx.lib.wordwrap.wordwrap(self.ManagedChild.Value, w, dc)
             linesmax = t.count("\n")
-            # DoGetBorderSize() appears not implemented under Gtk
-            borderw, borderh = (x / 2. for x in self.ManagedChild.GetWindowBorderSize())
         else:
             truelinesmax = self.ManagedChild.GetNumberOfLines()
             while self.ManagedChild.GetLineLength(linesmax + 1) >= 0 and linesmax < truelinesmax - 1:
                 linesmax += 1
                 t = self.ManagedChild.GetLineText(linesmax)
                 widthmax = max(widthmax, self.ManagedChild.GetTextExtent(t)[0])
+        if hasattr(self.ManagedChild, "DoGetBorderSize"): # Depends on wx version and OS
             borderw, borderh = self.ManagedChild.DoGetBorderSize()
+        else: borderw, borderh = (x / 2. for x in self.ManagedChild.GetWindowBorderSize())
         _, charh = self.ManagedChild.GetTextExtent("X")
         size = self.Size
         size[0] -= wx.lib.resizewidget.RW_THICKNESS
@@ -3584,28 +3612,29 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
     to parent.
     """
 
-    """SQLite reserved keywords."""
+    """SQLite keywords, reserved or context-specific."""
     KEYWORDS = list(map(text_type, sorted([
-        "ABORT", "ACTION", "ADD", "AFTER", "ALL", "ALTER", "ANALYZE",
-        "AND", "AS", "ASC", "ATTACH", "AUTOINCREMENT", "BEFORE",
-        "BEGIN", "BETWEEN", "BINARY", "BY", "CASCADE", "CASE", "CAST",
-        "CHECK", "COLLATE", "COLUMN", "COMMIT", "CONFLICT", "CONSTRAINT",
-        "CREATE", "CROSS", "CURRENT_DATE", "CURRENT_TIME",
-        "CURRENT_TIMESTAMP", "DATABASE", "DEFAULT", "DEFERRABLE",
-        "DEFERRED", "DELETE", "DESC", "DETACH", "DISTINCT", "DROP",
-        "EACH", "ELSE", "END", "ESCAPE", "EXCEPT", "EXCLUSIVE",
-        "EXISTS", "EXPLAIN", "FAIL", "FOR", "FOREIGN", "FROM", "FULL",
-        "GLOB", "GROUP", "HAVING", "IF", "IGNORE", "IMMEDIATE", "IN",
-        "INDEX", "INDEXED", "INITIALLY", "INNER", "INSERT", "INSTEAD",
-        "INTERSECT", "INTO", "IS", "ISNULL", "JOIN", "KEY", "LEFT", "LIKE",
-        "LIMIT", "MATCH", "NATURAL", "NO", "NOCASE", "NOT", "NOTNULL",
-        "NULL", "OF", "OFFSET", "ON", "OR", "ORDER", "OUTER", "PLAN",
-        "PRAGMA", "PRIMARY", "QUERY", "RAISE", "REFERENCES", "REGEXP",
-        "REINDEX", "RELEASE", "RENAME", "REPLACE", "RESTRICT", "RIGHT",
-        "ROLLBACK", "ROW", "ROWID", "RTRIM", "SAVEPOINT", "SELECT", "SET",
-        "TABLE", "TEMP", "TEMPORARY", "THEN", "TO", "TRANSACTION", "TRIGGER",
-        "UNION", "UNIQUE", "UPDATE", "USING", "VACUUM", "VALUES", "VIEW",
-        "VIRTUAL", "WHEN", "WHERE", "WITHOUT",
+        "ABORT", "ACTION", "ADD", "AFTER", "ALL", "ALTER", "ALWAYS", "ANALYZE",
+        "AND", "AS", "ASC", "ATTACH", "AUTOINCREMENT", "BEFORE", "BEGIN", "BETWEEN",
+        "BY", "CASCADE", "CASE", "CAST", "CHECK", "COLLATE", "COLUMN", "COMMIT",
+        "CONFLICT", "CONSTRAINT", "CREATE", "CROSS", "CURRENT", "CURRENT_DATE",
+        "CURRENT_TIME", "CURRENT_TIMESTAMP", "DATABASE", "DEFAULT", "DEFERRABLE",
+        "DEFERRED", "DELETE", "DESC", "DETACH", "DISTINCT", "DO", "DROP", "EACH",
+        "ELSE", "END", "ESCAPE", "EXCEPT", "EXCLUDE", "EXCLUSIVE", "EXISTS",
+        "EXPLAIN", "FAIL", "FILTER", "FIRST", "FOLLOWING", "FOR", "FOREIGN", "FROM",
+        "FULL", "GENERATED", "GLOB", "GROUP", "GROUPS", "HAVING", "IF", "IGNORE",
+        "IMMEDIATE", "IN", "INDEX", "INDEXED", "INITIALLY", "INNER", "INSERT",
+        "INSTEAD", "INTERSECT", "INTO", "IS", "ISNULL", "JOIN", "KEY", "LAST",
+        "LEFT", "LIKE", "LIMIT", "MATCH", "MATERIALIZED", "NATURAL", "NO", "NOT",
+        "NOTHING", "NOTNULL", "NULL", "NULLS", "OF", "OFFSET", "ON", "OR", "ORDER",
+        "OTHERS", "OUTER", "OVER", "PARTITION", "PLAN", "PRAGMA", "PRECEDING",
+        "PRIMARY", "QUERY", "RAISE", "RANGE", "RECURSIVE", "REFERENCES", "REGEXP",
+        "REINDEX", "RELEASE", "RENAME", "REPLACE", "RESTRICT", "RETURNING", "RIGHT",
+        "ROLLBACK", "ROW", "ROWS", "SAVEPOINT", "SELECT", "SET", "TABLE", "TEMP",
+        "TEMPORARY", "THEN", "TIES", "TO", "TRANSACTION", "TRIGGER", "UNBOUNDED",
+        "UNION", "UNIQUE", "UPDATE", "USING", "VACUUM", "VALUES", "VIEW", "VIRTUAL",
+        "WHEN", "WHERE", "WINDOW", "WITH", "WITHOUT",
+        "BINARY", "NOCASE", "ROWID", "RTRIM", "STRICT", # Keywords only in some context
     ])))
     """SQLite data types."""
     TYPEWORDS = list(map(text_type, sorted([
@@ -3762,7 +3791,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
     def Enable(self, enable=True):
         """Enables or disables the control, updating display."""
         if self.Enabled == enable: return False
-        result = super(self.__class__, self).Enable(enable)
+        result = super(SQLiteTextCtrl, self).Enable(enable)
         self.SetStyleSpecs()
         return result
 
@@ -4091,7 +4120,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
     NUMPAD_NUMS = {wx.WXK_NUMPAD0: 0, wx.WXK_NUMPAD1: 1, wx.WXK_NUMPAD2: 2,
                    wx.WXK_NUMPAD3: 3, wx.WXK_NUMPAD4: 4, wx.WXK_NUMPAD5: 5,
                    wx.WXK_NUMPAD6: 6, wx.WXK_NUMPAD7: 7, wx.WXK_NUMPAD8: 8,
-                   wx.WXK_NUMPAD7: 9}
+                   wx.WXK_NUMPAD9: 9}
 
     FONT_FACE = "Courier New" if os.name == "nt" else "Courier"
     """Acceptable input characters."""
@@ -4170,7 +4199,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
     def Enable(self, enable=True):
         """Enables or disables the control, updating display."""
         if self.Enabled == enable: return False
-        result = super(self.__class__, self).Enable(enable)
+        result = super(HexTextCtrl, self).Enable(enable)
         self.SetStyleSpecs()
         return result
 
@@ -4697,7 +4726,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
     def Enable(self, enable=True):
         """Enables or disables the control, updating display."""
         if self.Enabled == enable: return False
-        result = super(self.__class__, self).Enable(enable)
+        result = super(ByteTextCtrl, self).Enable(enable)
         self.SetStyleSpecs()
         return result
 
@@ -5179,7 +5208,7 @@ class JSONTextCtrl(wx.stc.StyledTextCtrl):
     def Enable(self, enable=True):
         """Enables or disables the control, updating display."""
         if self.Enabled == enable: return False
-        result = super(self.__class__, self).Enable(enable)
+        result = super(JSONTextCtrl, self).Enable(enable)
         self.SetStyleSpecs()
         return result
 
@@ -5393,9 +5422,6 @@ class TabbedHtmlWindow(wx.Panel):
                     wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
                     wx.lib.agw.flatnotebook.FNB_NO_TAB_FOCUS |
                     wx.lib.agw.flatnotebook.FNB_VC8)
-        if "linux" in sys.platform and wx.VERSION[:3] == (4, 1, 1):
-            # wxPython 4.1.1 on Linux crashes with FNB_VC8
-            agwStyle ^= wx.lib.agw.flatnotebook.FNB_VC8
         notebook = self._notebook = wx.lib.agw.flatnotebook.FlatNotebook(
             parent=self, size=(-1, 27), style=wx.NB_TOP,
             agwStyle=agwStyle)
@@ -5741,9 +5767,19 @@ class TextCtrlAutoComplete(wx.TextCtrl):
             self._listbox.Bind(wx.EVT_MOUSE_EVENTS, self.OnMouse)
             self._listwindow.Bind(wx.EVT_LISTBOX,   self.OnListItemSelected,
                                   self._listbox)
+            self.Bind(wx.EVT_WINDOW_DESTROY,        self.OnDestroy, self)
         self.Bind(wx.EVT_SET_FOCUS,                 self.OnFocus, self)
         self.Bind(wx.EVT_KILL_FOCUS,                self.OnFocus, self)
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED,        self.OnSysColourChange)
+
+
+    def OnDestroy(self, event):
+        """Handler for window destruction, unbinds handlers from parents."""
+        gp = self
+        while gp is not None:
+            gp.Unbind(wx.EVT_MOVE, gp, handler=self.OnSizedOrMoved)
+            gp.Unbind(wx.EVT_SIZE, gp, handler=self.OnSizedOrMoved)
+            gp = gp.GetParent()
 
 
     def OnSysColourChange(self, event):
@@ -5961,7 +5997,7 @@ class TextCtrlAutoComplete(wx.TextCtrl):
             for i, text in enumerate(choices):
                 self._listbox.InsertItem(i, text)
             if choices: # Colour "Clear" item
-                self._listbox.SetItemTextColour(i, self._clear_colour)
+                self._listbox.SetItemTextColour(len(choices) - 1, self._clear_colour)
 
             itemheight = self._listbox.GetItemRect(0)[-1] if choices else 0
             itemcount = min(len(choices), self.DROPDOWN_COUNT_PER_PAGE)
@@ -6236,7 +6272,7 @@ class YAMLTextCtrl(wx.stc.StyledTextCtrl):
     def Enable(self, enable=True):
         """Enables or disables the control, updating display."""
         if self.Enabled == enable: return False
-        result = super(self.__class__, self).Enable(enable)
+        result = super(YAMLTextCtrl, self).Enable(enable)
         self.SetStyleSpecs()
         return result
 

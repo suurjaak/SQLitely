@@ -25,6 +25,6 @@ Add `sudo` before docker commands if current user does not have rights for Docke
 
 Add `--mount source="path to host directory",target=/etc/sqlitely` after `docker run`
 to retain SQLitely configuration in a host directory between runs,
-e.g. `--mount source=~/.config/sqlitely,target=/etc/sqlitely`.
+e.g. `--mount source=~/.config/sqlitely,target=/etc/sqlitely,type=bind`.
 
 Host filesystem is made available under `/mnt/host`.
