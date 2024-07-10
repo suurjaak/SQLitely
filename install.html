@@ -153,7 +153,7 @@ docker run -it --rm --mount src=/,target=/mnt/host,type=bind -e \
 
         <p>Add <code class="language-plaintext highlighter-rouge">sudo</code> before docker commands if current user does not have rights for Docker.</p>
 
-        <p>Add <code class="language-plaintext highlighter-rouge">--mount src="path to host directory",target=/etc/sqlitely</code> after <code>docker run</code>
+        <p>Add <code class="language-plaintext highlighter-rouge">--mount src="path to host directory",target=/etc/sqlitely,type=bind</code> after <code>docker run</code>
         to retain SQLitely configuration in a host directory between runs.</p>
 
         <p>Host filesystem is made available under <code class="language-plaintext highlighter-rouge">/mnt/host</code>.</p>
