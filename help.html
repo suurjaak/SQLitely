@@ -274,7 +274,7 @@ optional arguments:
 <pre id="execute">
 <code>$ sqlitely -h execute</code>
 
-usage: sqlitely execute [-h] [-p PARAM [PARAM ...]] [-o [FILE]]
+usage: sqlitely execute [-h] [-p PARAM [PARAM ...]] [--create] [-o [FILE]]
                         [-f {csv,db,html,json,sql,txt,xlsx,yaml}] [--overwrite]
                         [--allow-empty] [--progress] [--verbose] [--config-file FILE]
                         DATABASE SQL
@@ -293,6 +293,7 @@ optional arguments:
   -p PARAM [PARAM ...], --param PARAM [PARAM ...]
                         positional or keyword parameters for SQL,
                         keywords as name=value
+  --create              create DATABASE if file does not exist yet
   -o [FILE], --output [FILE]
                         write query output to file instead of printing to console;
                         filename will be auto-generated if not given;
@@ -320,11 +321,11 @@ optional arguments:
 <pre id="export">
 <code>$ sqlitely -h export</code>
 
-usage: sqlitely export [-h] [-o [FILE]] [-f {csv,db,html,json,sql,txt,xlsx,yaml}] [-p DIR]
-                       [--combine] [--overwrite] [--no-empty] [--include-related]
-                       [--filter FILTER [FILTER ...]] [--limit NUM] [--offset NUM]
-                       [--reverse] [--max-count NUM] [--progress] [--verbose]
-                       [--config-file FILE]
+usage: sqlitely export [-h] [-o [FILE]] [-f {csv,db,html,json,sql,txt,xlsx,yaml}]
+                       [-p DIR] [--combine] [--overwrite] [--no-empty]
+                       [--include-related] [--select SELECT [SELECT ...]] [--limit NUM]
+                       [--offset NUM] [--reverse] [--max-count NUM] [--progress]
+                       [--verbose] [--config-file FILE]
                        DATABASE
 
 Export data or schema from an SQLite database,
@@ -340,7 +341,8 @@ optional arguments:
                         filename will be auto-generated if not given;
                         used as prefix if not --combine;
                         automatic for non-printable formats (db,html,xlsx)
-  -f {csv,db,html,json,sql,txt,xlsx,yaml}, --format {csv,db,html,json,sql,txt,xlsx,yaml}
+  -f {csv,db,html,json,sql,txt,xlsx,yaml},
+  --format {csv,db,html,json,sql,txt,xlsx,yaml}
                         export format:
                           csv:   CSV spreadsheet
                           db:    SQLite database
@@ -360,9 +362,9 @@ optional arguments:
   --no-empty            skip empty tables and views from output altogether
                         (affected by offset and limit)
   --include-related     include related entities:
-                        foreign tables and view dependencies if using filter,
+                        foreign tables and view dependencies if using --select,
                         and indexes and triggers if exporting to database or SQL
-  --filter FILTER [FILTER ...]
+  --select SELECT [SELECT ...]
                         names of specific entities to export or skip
                         (supports * wildcards; initial ~ skips)
   --limit NUM           maximum number of rows to export per table or view
@@ -396,10 +398,10 @@ optional arguments:
 <pre id="import">
 <code>$ sqlitely -h import</code>
 
-usage: sqlitely import [-h] [--filter FILTER [FILTER ...]] [--row-header] [--no-empty]
-                       [--columns COLUMNS] [--table-name NAME] [--create-always] [--add-pk]
-                       [--assume-yes] [--limit NUM] [--offset NUM] [--max-count NUM]
-                       [--progress] [--verbose] [--config-file FILE]
+usage: sqlitely import [-h] [--select SELECT [SELECT ...]] [--row-header] [--no-empty]
+                       [--columns COLUMNS] [--table-name NAME] [--create-always]
+                       [--add-pk [NAME]] [--assume-yes] [--limit NUM] [--offset NUM]
+                       [--max-count NUM] [--progress] [--verbose] [--config-file FILE]
                        INFILE DB
 
 Import data from files to a new or existing SQLite database.
@@ -412,23 +414,24 @@ positional arguments:
 
 optional arguments:
   -h, --help            show this help message and exit
-  --filter FILTER [FILTER ...]
+  --select SELECT [SELECT ...]
                         names of specific Excel worksheets to import or skip
                         (supports * wildcards; initial ~ skips)
   --row-header          use first row of input spreadsheet for column names
   --no-empty            skip spreadsheets with no content rows
                         (affected by offset and limit)
   --columns COLUMNS     columns to import if not all,
-                        as a comma-separated list of indexes or index ranges,
+                        as a comma-separated list of columns or column ranges,
                         range as START..END or START.. or ..END
                         (no START: from first, no END: until last).
-                        Indexes can be numbers starting from 1
+                        Columns can be indexes starting from 1
                         or spreadsheet column labels like AB,
                         must be column names if import from JSON/YAML.
   --table-name NAME     name of table to import into, defaults to file base name
                         or worksheet name if Excel spreadsheet
   --create-always       create new table even if a matching table already exists
-  --add-pk              add auto-increment primary key column to created tables
+  --add-pk [NAME]       add auto-increment primary key column to created tables;
+                        defaults to "id" if name not specified
   --assume-yes          skip confirmation prompt for starting import
   --limit NUM           maximum number of rows to import, per table
   --offset NUM          number of initial rows to skip from each table
@@ -444,13 +447,13 @@ optional arguments:
 
 usage: sqlitely parse [-h] [--case] [-o [FILE]] [--overwrite] [--limit NUM] [--offset NUM]
                       [--reverse] [--verbose] [--config-file FILE]
-                      DATABASE [SEARCH]
+                      DATABASE [FILTER [FILTER ...]]
 
 Parse and search database schema CREATE SQL.
 
 positional arguments:
   DATABASE              SQLite database file to parse
-  SEARCH                search text if any, with simple query syntax, for example:
+  FILTER                search text if any, with simple query syntax, for example:
                         "each word present" or "fk_* trigger:on_insert_*".
                         More at <a href="#search-syntax">search syntax</a>.
 
@@ -475,16 +478,16 @@ optional arguments:
 
 usage: sqlitely search [-h] [--case] [-o [FILE]] [-f {csv,db,html,json,sql,txt,xlsx,yaml}]
                        [-p DIR] [--combine] [--overwrite] [--limit NUM] [--offset NUM]
-                       [--reverse] [--max-count NUM] [--progress] [--verbose]
+                       [--reverse] [--max-count NUM] [--no-empty] [--progress] [--verbose]
                        [--config-file FILE]
-                       DATABASE SEARCH
+                       DATABASE FILTER [FILTER ...]
 
 Search over all columns of all rows in an SQLite database,
 matches printed to console or written to file.
 
 positional arguments:
   DATABASE              SQLite database file to search
-  SEARCH                search text, with simple query syntax, for example:
+  FILTER                search text, with simple query syntax, for example:
                         "each word in some col" or "this OR that column:foo*".
                         More at <a href="#search-syntax">search syntax</a>.
 
@@ -518,6 +521,8 @@ optional arguments:
   --reverse             query table matches in reverse ROWID/PK order,
                         view matches in reverse row_number() order
   --max-count NUM       maximum total number of rows to export over all tables and views
+  --no-empty            skip empty tables and views from output altogether
+                        (affected by offset and limit and search text)
   --progress            display progress bar
   --verbose             print detailed logging messages to stderr
   --config-file FILE    path of program configuration file to use
@@ -527,8 +532,8 @@ optional arguments:
 <pre id="stats">
 <code>$ sqlitely -h stats</code>
 
-usage: sqlitely stats [-h] [-o [FILE]] [-f {html,sql,txt}] [--overwrite] [--start-file]
-                      [--disk-usage] [--progress] [--verbose] [--config-file FILE]
+usage: sqlitely stats [-h] [-o [FILE]] [-f {html,sql,txt}] [--disk-usage] [--overwrite]
+                      [--start-file] [--progress] [--verbose] [--config-file FILE]
                       DATABASE
 
 Analyze an SQLite database and produce statistics as HTML, SQL or text.
@@ -548,11 +553,11 @@ optional arguments:
                           sql:   SQL statements
                           txt:   text document (default)
                         (auto-detected from output filename if not specified)
+  --disk-usage          count bytes of disk usage per table and index
+                        (enabled by default in SQL output)
   --overwrite           overwrite output file if already exists
                         (by default appends unique counter to filename)
   --start-file          open output file with registered program
-  --disk-usage          count bytes of disk usage per table and index
-                        (enabled by default in SQL output)
   --progress            display progress bar
   --verbose             print detailed logging messages to stderr
   --config-file FILE    path of program configuration file to use
