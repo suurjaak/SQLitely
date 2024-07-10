@@ -1,6 +1,11 @@
 CHANGELOG
 =========
 
+2.4, 2024-07-10
+---------------
+- fix opening third-party license link in snaps
+
+
 2.3, 2024-07-08
 ---------------
 - add command-line interface, with execute, export, import, parse, pragma, search, and stats
