@@ -38,9 +38,9 @@
           <a href="https://github.com/suurjaak/SQLitely">View the Project on GitHub <small>suurjaak/SQLitely</small></a>
 
           <ul>
-            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_2.2_setup.exe">Download <strong>Setup</strong></a></li>
-            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_2.2_x64_setup.exe">Download <strong>64bit Setup</strong></a></li>
-            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_2.2-src.zip">Download <strong>Source</strong></a></li>
+            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_2.3_setup.exe">Download <strong>Setup</strong></a></li>
+            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_2.3_x64_setup.exe">Download <strong>64bit Setup</strong></a></li>
+            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_2.3-src.zip">Download <strong>Source</strong></a></li>
           </ul>
         </p>
         
@@ -49,6 +49,51 @@
       <section>
 
         <h2>Changelog</h2>
+
+        <h4>v2.3, 2024-07-10:</h4>
+        <ul>
+          <li>add command-line interface, with execute, export, import, parse, pragma, search, and stats</li>
+          <li>add option to rename SQL window pages</li>
+          <li>add support for CREATE TABLE .. STRICT (Python 3.9+)</li>
+          <li>add support for empty or whitespacey table and column and constraint names</li>
+          <li>add support for column keyword in meta search</li>
+          <li>add dark mode toggle to HTML export</li>
+          <li>streamline choosing related items when exporting to another database</li>
+          <li>include read-only pragmas in PRAGMA SQL</li>
+          <li>include original encoding pragma in database recovery</li>
+          <li>include current filter/sort/hidden settings in data grid export</li>
+          <li>tweak spreadsheet properties content in Excel export, include SQL query</li>
+          <li>show pragma SQL in view mode as well</li>
+          <li>skip initial blank rows in spreadsheet imports</li>
+          <li>change default item action on diagram from opening schema to opening data</li>
+          <li>update SQLite keywords from 126 to the latest 147-element list</li>
+          <li>use a custom lockfile implementation for single instance check in Linux</li>
+          <li>show descriptive error when trying to save view with blank column names</li>
+          <li>skip hidden columns in data grid exports</li>
+          <li>fix saving nested structures in JSON/YAML data import</li>
+          <li>fix auto_vacuum and encoding pragmas not being editable in new databases</li>
+          <li>fix updating main page upon removing databases when home-row is also selected</li>
+          <li>fix foreign key constraint editor not allowing to add a column in duplicate</li>
+          <li>fix entering new value in column/constraint editor editable comboboxes like column type</li>
+          <li>fix rows-toggle not toggling data table in single item HTML export</li>
+          <li>fix working with exotic characters in value editor</li>
+          <li>change strip alphanumeric/non-alphanumeric strip functions to text/non-text</li>
+          <li>make "Toggle all" toggle item CREATE SQL statements in combined HTML export</li>
+          <li>add program version number and date to HTML export metadata</li>
+          <li>fix intermittent mouse event error on diagram</li>
+          <li>fix diagram selection rectangle font issues in Linux</li>
+          <li>fix data leaks from orphaned background threads and dangling references</li>
+          <li>improve handling tables WITHOUT ROWID</li>
+          <li>restore program window on unminimizing from tray if window iconized</li>
+          <li>ensure dialog windows get destroyed when closed</li>
+          <li>tweak export panel buttons and layout</li>
+          <li>tweak column/constraint editor layout</li>
+          <li>disable automatic update checks and downloads in snaps</li>
+          <li>include third-party license texts in snaps and stand-alone exes</li>
+          <li>use latest custom-built PyInstaller 6.7 for producing binaries</li>
+          <li>use _x86 suffix for 32-bit binaries, drop _x64 suffix from 64-bit binaries</li>
+        </ul>
+        <br />
 
         <h4>v2.2, 2023-10-09:</h4>
         <ul>
