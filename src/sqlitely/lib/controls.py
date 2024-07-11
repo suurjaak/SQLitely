@@ -2502,7 +2502,8 @@ class Patch(object):
             FlatNotebook__init = wx.lib.agw.flatnotebook.FlatNotebook.__init__
             def FlatNotebook__Patched(self, parent, id=wx.ID_ANY, pos=wx.DefaultPosition,
                                       size=wx.DefaultSize, style=0, agwStyle=0, name="FlatNotebook"):
-                agwStyle ^= wx.lib.agw.flatnotebook.FNB_VC8
+                if agwStyle & wx.lib.agw.flatnotebook.FNB_VC8:
+                    agwStyle ^= wx.lib.agw.flatnotebook.FNB_VC8
                 FlatNotebook__init(self, parent, id, pos, size, style, agwStyle, name)
             wx.lib.agw.flatnotebook.FlatNotebook.__init__ = FlatNotebook__Patched
 
