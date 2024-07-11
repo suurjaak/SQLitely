@@ -13,7 +13,6 @@ Released under the MIT License.
 """
 import base64
 import calendar
-import collections
 from collections import defaultdict, Counter, OrderedDict
 import copy
 import datetime
@@ -39,7 +38,7 @@ except ImportError:                              # Py2
 import PIL
 import pytz
 import six
-from six.moves import queue, range, urllib
+from six.moves import collections_abc, queue, range, urllib
 import step
 import wx
 import wx.adv
@@ -10877,7 +10876,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         """
         if not self._enabled: return
 
-        PTYPES = collections.Iterable, wx.Point, wx.Position, wx.Size
+        PTYPES = collections_abc.Iterable, wx.Point, wx.Position, wx.Size
         pt = args[0] if isinstance(args[0], PTYPES) else args
         delta = self.GetScrollPixelsPerUnit()
         self.Scroll([v // d for v, d in zip(pt, delta)])
