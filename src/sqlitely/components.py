@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.07.2024
+@modified    11.07.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -31,8 +31,8 @@ import time
 import types
 import warnings
 
-try: import html.unescape as html_unescape  # Py3
-except ImportError:                         # Py2
+try: from html import unescape as html_unescape  # Py3
+except ImportError:                              # Py2
     from six.moves import html_parser
     html_unescape = html_parser.HTMLParser().unescape
 
