@@ -1,5 +1,5 @@
-antlr4-python2-runtime==4.9; python_version<"3"
-antlr4-python3-runtime==4.9; python_version>"3"
+antlr4-python2-runtime==4.13.0; python_version<"3"
+antlr4-python3-runtime==4.13.0; python_version>"3"
 appdirs
 chardet
 openpyxl

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.10.2023
+@modified    11.07.2024
 ------------------------------------------------------------------------------
 """
 import os
@@ -63,8 +63,8 @@ setuptools.setup(
     install_requires     = ["appdirs", "chardet", "openpyxl", "Pillow", "pyparsing", "pytz",
                             "six", "step-template>=0.0.4", "wxPython>=4.0", "xlrd", "XlsxWriter"],
     extras_require       = {
-        ':python_version < "3"': ["antlr4-python2-runtime==4.9"],
-        ':python_version > "3"': ["antlr4-python3-runtime==4.9"],
+        ':python_version < "3"': ["antlr4-python2-runtime==4.13.0"],
+        ':python_version > "3"': ["antlr4-python3-runtime==4.13.0"],
     },
     entry_points         = {"gui_scripts": ["{0} = {0}.main:run".format(PACKAGE)]},
 

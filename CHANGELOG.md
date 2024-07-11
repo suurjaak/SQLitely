@@ -1,8 +1,9 @@
 CHANGELOG
 =========
 
-2.4, 2024-07-10
+2.4, 2024-07-11
 ---------------
+- upgrade ANTLR version from 4.9 to 4.13
 - fix opening third-party license link in snaps
 
 
