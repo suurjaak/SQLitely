@@ -96,7 +96,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    15.06.2024
+@modified    11.07.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -114,6 +114,7 @@ import sys
 import time
 
 import wx
+import wx.adv
 import wx.html
 import wx.lib.agw.flatnotebook
 import wx.lib.agw.labelbook
@@ -2530,15 +2531,22 @@ class Patch(object):
             return functools.update_wrapper(inner, func)
 
         wx.Colour.__init__              = defloatify(wx.Colour.__init__)
+        wx.Font.__init__                = defloatify(wx.Font.__init__)
         wx.Point.__init__               = defloatify(wx.Point.__init__)
         wx.Rect.__init__                = defloatify(wx.Rect.__init__)
+        wx.Size.__init__                = defloatify(wx.Size.__init__)
+        wx.adv.PseudoDC.TranslateId     = defloatify(wx.adv.PseudoDC.TranslateId)
+        wx.adv.PseudoDC.SetIdBounds     = defloatify(wx.adv.PseudoDC.SetIdBounds)
         wx.ImageList.Draw               = defloatify(wx.ImageList.Draw)
         wx.BufferedPaintDC.DrawText     = defloatify(wx.BufferedPaintDC.DrawText)
         wx.BufferedPaintDC.DrawBitmap   = defloatify(wx.BufferedPaintDC.DrawBitmap)
-        wx.PaintDC.DrawText             = defloatify(wx.PaintDC.DrawText)
-        wx.PaintDC.DrawBitmap           = defloatify(wx.PaintDC.DrawBitmap)
         wx.MemoryDC.DrawText            = defloatify(wx.MemoryDC.DrawText)
         wx.MemoryDC.DrawBitmap          = defloatify(wx.MemoryDC.DrawBitmap)
+        wx.PaintDC.DrawText             = defloatify(wx.PaintDC.DrawText)
+        wx.PaintDC.DrawBitmap           = defloatify(wx.PaintDC.DrawBitmap)
+        wx.Rect.Contains                = defloatify(wx.Rect.Contains)
+        wx.Rect.Offset                  = defloatify(wx.Rect.Offset)
+        wx.ScrolledWindow.Scroll        = defloatify(wx.ScrolledWindow.Scroll)
         wx.ScrolledWindow.SetScrollbars = defloatify(wx.ScrolledWindow.SetScrollbars)
 
 

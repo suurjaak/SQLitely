@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.07.2024
+@modified    11.07.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -808,7 +808,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             except (TypeError, ValueError):
                 pass
         # Schedule a check for due date, should the program run that long.
-        millis = max(1, min(sys.maxsize, util.timedelta_seconds(interval) * 1000))
+        millis = max(1, min(sys.maxsize, int(util.timedelta_seconds(interval) * 1000)))
         wx.CallLater(millis, self.update_check)
 
 
