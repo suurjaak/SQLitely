@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    07.07.2024
+@modified    11.07.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -1717,7 +1717,8 @@ class SchemaPlacement(object):
                 if name.lower() not in [x.lower() for x in wx.FontEnumerator().GetFacenames()]:
                     for path in filter(bool, (normpath, boldpath)):
                         try: normpath and wx.Font.AddPrivateFont(normpath)
-                        except Exception: logger.exception("Error adding font %r (%s).", name, path)
+                        except Exception:
+                            if six.PY3: logger.exception("Error adding font %r (%s).", name, path)
                 ok = name.lower() in [x.lower() for x in wx.FontEnumerator().GetFacenames()]
             else:
                 ok = bool(normpath and boldpath)
