@@ -3630,7 +3630,7 @@ class DatabasePage(wx.Panel):
                         "\n- ".join("%s %s: %s" % (c, fmt_entity(n), v)
                                     for c, d in notdeleteds.items() for n, v in d.items())
                     ), conf.Title, wx.ICON_WARNING | wx.OK)
-                    
+
                 if notdeleteds: wx.CallAfter(after_err) if deleteds else after_err()
                 if deleteds:
                     guibase.status("Dropped %s." % util.join(", ", (
