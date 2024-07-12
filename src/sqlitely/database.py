@@ -57,8 +57,9 @@ class Database(object):
     DATA_CATEGORIES = ["table", "view"]
 
     """SQLite features and the runtime library version they appeared in."""
-    FEATURE_SUPPORT = {"full_rename_table": (3, 25), "rename_column": (3, 25),
-                       "strict":            (3, 37), "view_columns":  (3,  9)}
+    FEATURE_SUPPORT = {"full_rename_table": (3, 25), "generated_column": (3, 31),
+                       "rename_column":     (3, 25), "strict":           (3, 37),
+                       "view_columns":      (3,  9)}
 
     """
     SQLite PRAGMA settings, as {
@@ -465,10 +466,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
     }
     """Additional PRAGMA directives not usable as settings."""
     EXTRA_PRAGMAS = [
-        "database_list", "foreign_key_check", "foreign_key_list",
-        "incremental_vacuum", "index_info", "index_list", "index_xinfo",
-        "integrity_check", "optimize", "quick_check", "read_uncommitted",
-        "shrink_memory", "soft_heap_limit", "table_info", "wal_checkpoint"
+        "database_list", "foreign_key_check", "foreign_key_list", "incremental_vacuum",
+        "index_info", "index_list", "index_xinfo", "integrity_check", "optimize",
+        "quick_check", "read_uncommitted", "shrink_memory", "soft_heap_limit",
+        "table_info", "table_xinfo", "wal_checkpoint",
     ]
 
     """Temporary file name counter."""
@@ -1026,7 +1027,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 if mycategory in ("table", "view") and opts0 and opts["sqlraw"] == opts0["sqlraw"]:
                     opts["columns"] = opts0.get("columns") or []
                 elif mycategory in ("table", "index", "view"):
-                    pragma = "index_info" if "index" == mycategory else "table_info"
+                    pragma = "index_info" if "index" == mycategory else "table_xinfo"
                     sql = "PRAGMA %s(%s)" % (pragma, grammar.quote(myname))
                     try:
                         rows = self.execute(sql, log=False).fetchall()
@@ -1041,8 +1042,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
                             if row.get("type"): col["type"] = row["type"].upper()
                             if row.get("dflt_value") is not None:
                                 col["default"] = {"expr": row["dflt_value"]}
-                            if row.get("notnull"): col["notnull"] = {}
-                            if row.get("pk"):      col["pk"]      = {}
+                            if row.get("notnull"):          col["notnull"]   = {}
+                            if row.get("pk"):               col["pk"]        = {}
+                            if row.get("hidden") in (2, 3): col["generated"] = {}
                             opts["columns"].append(col)
 
                 # Use previous metainfo if unchanged
@@ -2041,7 +2043,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             name2:     table new name if renamed else old name
             tempname:  table temporary name
             sql:       table CREATE statement with tempname
-            columns:   [(column name in old, column name in new)]
+            columns:   [(column name in old, column name in new)] for INSERTs
             fks        whether foreign key constraints are currently enabled
             ?table:    [{related table {name, tempname, sql, sql0, ?index, ?trigger}, using new names}, ]
             ?index:    [{related index {name, sql}, using new names}, ]
@@ -2121,6 +2123,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 if err: raise Exception(err)
             return result
 
+        def get_col2(c1): # Returns new column props if old exist else None
+            name2 = util.getval(myrenames, "column", tempname, c1["name"], default=c1["name"])
+            return next((c2 for c2 in item2["meta"]["columns"] if util.lceq(c2["name"], name2)), None)
+
         if drops:
             drops = [x.lower() for x in drops]
             sql = drop_from_sql(item2)
@@ -2139,12 +2145,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
         fks_on = next(iter(self.execute("PRAGMA foreign_keys", log=False).fetchone().values()))
         args = {"name": name1, "name2": name2, "tempname": tempname,
                 "sql": sql, "__type__": "COMPLEX ALTER TABLE", "fks": fks_on,
-                "columns": [(c1["name"],
-                             util.getval(myrenames, "column", tempname, c1["name"]) or c1["name"])
-                            for c1 in item1["meta"]["columns"] 
-                            if util.getval(myrenames, "column", tempname, c1["name"])
-                            or any(util.lceq(c1["name"], c2["name"])
-                                   for c2 in item2["meta"]["columns"])]}
+                "columns": [(c1["name"], c2["name"]) for c1 in item1["meta"]["columns"]
+                            for c2 in [get_col2(c1)] if c2 and c2.get("generated") is None]}
 
 
         mycols = [x["name"] for x in item1.get("columns", [])]

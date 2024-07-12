@@ -3041,6 +3041,7 @@ class SchemaObjectPage(wx.Panel):
     ON_ACTION  = ["SET NULL", "SET DEFAULT", "CASCADE", "RESTRICT", "NO ACTION"]
     CONFLICT   = ["", "ROLLBACK", "ABORT", "FAIL", "IGNORE", "REPLACE"]
     DEFERRABLE = ["", "DEFERRED", "IMMEDIATE"]
+    GENERATED  = ["", "STORED", "VIRTUAL"]
     TABLECONSTRAINT = ["PRIMARY KEY", "FOREIGN KEY", "UNIQUE", "CHECK"]
     TABLECONSTRAINT_DEFAULTS = {
         "PRIMARY KEY": {"type": "PRIMARY KEY", "key": [{}]},
@@ -4839,6 +4840,11 @@ class SchemaObjectPage(wx.Panel):
                 dlg._data.setdefault("notnull", {})
                 return "notnull"
 
+        def toggle_generated(dlg):
+            if "generated" in dlg.GetData():
+                dlg._data["generated"].setdefault("always", True)
+                return ("generated", "always")
+
         def populate_footer(category, dlg, ctrl, immediate=False):
 
             if not immediate:
@@ -4931,6 +4937,19 @@ class SchemaObjectPage(wx.Panel):
              "children": [
                 {"name": "expr", "label": "Expression", "component": controls.SQLiteTextCtrl,
                  "help": "Expression yielding a NUMERIC 0 on constraint violation,\ncannot contain a subquery."},
+            ]},
+            {"name": "generated", "label": "GENERATED", "toggle": True, "link": toggle_generated,
+             "help": "Generated column, computed from constants or other columns of the same row.",
+             "togglename": {"toggle": True, "name": "name", "label": "Constraint name"},
+             "children": [
+                {"name": "expr", "label": "Expression", "component": controls.SQLiteTextCtrl,
+                 "help": "Expression yielding the computed value, cannot contain a subquery,\n"
+                         "must be deterministic."},
+                {"name": "type", "label": "Type", "choices": self.GENERATED,
+                 "help": "STORED is computed upon writing row, VIRTUAL upon reading column\n"
+                         "(defaults to STORED if not specified)"},
+                {"name": "always", "label": "Verbose", "type": bool,
+                 "help": "GENERATED ALWAYS added to SQL statement (implicit, has no extra effect)"},
             ]},
             {"name": "collate", "label": "COLLATE", "toggle": True,
              "help": "Ordering sequence to use for text values (defaults to BINARY).",

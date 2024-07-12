@@ -24,7 +24,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    20.11.2023
+@modified    12.07.2024
 ------------------------------------------------------------------------------
 """
 
@@ -383,7 +383,7 @@ COLUMN_DEFINITION = """<%
 from collections import OrderedDict
 
 get_constraints = lambda: ( # Yield column constraints in fixed order
-    (k, data[k]) for k in ("pk", "notnull", "unique", "default", "collate", "check", "fk")
+    (k, data[k]) for k in ("pk", "notnull", "unique", "default", "collate", "check", "fk", "generated")
     if data.get(k) is not None and (k != "collate" or data[k].get("value") not in (None, ""))
     and (k not in ("default", "check") or data[k].get("expr") not in (None, ""))
 )
@@ -523,6 +523,24 @@ for i, (ctype, cnstr) in enumerate(get_constraints()):
             %if data["fk"]["defer"].get("initial"):
     INITIALLY {{ data["fk"]["defer"]["initial"] }}
             %endif
+        %endif
+    %endif
+
+
+    %if data.get("generated") and any(v if k in ("expr", "type") else v or "" == v for k, v in data["generated"].items()):
+        %if cnstr_breaks["generated"]:
+  {{ LF() }}
+  {{ PAD("name", {"name": ""}) }}
+        %endif
+        %if data["generated"].get("name") is not None:
+  CONSTRAINT {{ Q(data["generated"]["name"]) }}
+        %endif
+        %if data["generated"].get("always"):
+  GENERATED ALWAYS
+        %endif
+  AS ({{ WS(data["generated"].get("expr") or "") }})
+        %if data["generated"].get("type"):
+  {{ data["generated"]["type"] }}
         %endif
     %endif
 """

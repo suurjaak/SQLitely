@@ -46,10 +46,11 @@
  *                ensure statement list is delimited;
  *                fix ambiguity in parsing INDEX expressions with COLLATE,
  *                update keywords;
- *                add support for CREATE TABLE .. STRICT.
+ *                add support for CREATE TABLE .. STRICT;
+ *                add support for generated columns.
  *                
  * Updated for  : SQLitely, an SQLite database tool.
- * Updated by   : Erki Suurjaak, 2019-2023
+ * Updated by   : Erki Suurjaak, 2019-2024
  */
 grammar SQLite;
 
@@ -315,6 +316,7 @@ column_constraint
      | K_DEFAULT (signed_number | literal_value | '(' expr ')')
      | K_COLLATE collation_name
      | foreign_key_clause
+     | generated_clause
    )
  ;
 
@@ -388,6 +390,10 @@ foreign_key_clause
      ) 
    )*
    ( K_NOT? K_DEFERRABLE ( K_INITIALLY K_DEFERRED | K_INITIALLY K_IMMEDIATE )? )?
+ ;
+
+generated_clause
+ : ( K_GENERATED K_ALWAYS )? K_AS '(' expr ')' ( C_STORED | K_VIRTUAL )?
  ;
 
 raise_function
@@ -909,6 +915,7 @@ K_WITH : W I T H;
 K_WITHOUT : W I T H O U T;
 
 C_ROWID : R O W I D;
+C_STORED : S T O R E D;
 C_STRICT : S T R I C T;
 C_TRUE : T R U E;
 C_FALSE : F A L S E;

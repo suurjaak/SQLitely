@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    09.06.2024
+@modified    12.07.2024
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -829,6 +829,12 @@ class Parser(object):
               }
               ?match:          MATCH-clause value
           ?
+          ?generated:
+              ?name            constraint name
+              expr:            value or expression
+              ?type:           STORED | VIRTUAL
+              ?always:         True if GENERATED ALWAYS
+          ?
         }.
         """
         result = {}
@@ -885,6 +891,14 @@ class Parser(object):
                 result[key] = self.build_fk_extra(fkctx)
                 result[key]["table"] = self.u(fkctx.foreign_table)
                 result[key]["key"] = self.u(fkctx.column_name(0) or "")
+
+            elif c.generated_clause():
+                key = "generated"
+                gctx = c.generated_clause()
+                result[key] = {"expr": self.r(gctx.expr())}
+                if gctx.K_GENERATED(): result[key]["always"] = True
+                if   gctx.C_STORED():  result[key]["type"] = "STORED"
+                elif gctx.K_VIRTUAL(): result[key]["type"] = "VIRTUAL"
 
             if key and c.constraint_name(): result[key]["name"] = self.u(c.constraint_name)
 
