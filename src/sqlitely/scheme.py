@@ -801,7 +801,7 @@ class SchemaPlacement(object):
                 pos = [a + b - 2 * self._zoom
                        for a, b in zip(self._dc.GetIdBounds(o["id"])[:2], shift)]
                 _, obmp = self.GetItemBitmaps(o)
-                dc.DrawBitmap(obmp, pos, useMask=True)
+                dc.DrawBitmap(obmp, Point(pos), useMask=True)
             dc.SelectObject(wx.NullBitmap)
             del dc
 
@@ -1125,8 +1125,8 @@ class SchemaPlacement(object):
 
         @param   viewport  area to fit grid into, on need expanded down if horizontal else right
         """
-        MAXW = max(500 * self._zoom, viewport.Width)
-        MAXH = max(500 * self._zoom, viewport.Height)
+        MAXW = max(int(500 * self._zoom), viewport.Width)
+        MAXH = max(int(500 * self._zoom), viewport.Height)
 
         def get_dx(rects, idx):
             """Returns starting X for column or row."""
@@ -1282,7 +1282,7 @@ class SchemaPlacement(object):
         if not bounds:  # wx.Rect(0, 0, 0, 0): item not in DC yet
             bounds = wx.Rect(0, 0, *bmp.Size)
         pos = [a - (o["name"] in self._sels) * 2 * self._zoom for a in bounds.TopLeft]
-        self._dc.DrawBitmap(bmp, pos, useMask=True)
+        self._dc.DrawBitmap(bmp, Point(pos), useMask=True)
         self._dc.SetIdBounds(o["id"], wx.Rect(bounds.TopLeft, bounds.BottomRight))
         self._dc.SetId(-1)
 
@@ -1343,7 +1343,7 @@ class SchemaPlacement(object):
         cornerpen = controls.PEN(controls.ColourManager.Adjust(self.LineColour,  self.BackgroundColour))
         cornerfadedpen = controls.PEN(controls.ColourManager.Adjust(fadedcolour, self.BackgroundColour))
 
-        adjust = (lambda *a: [a + b for a, b in zip(a, shift)]) if shift else lambda *a: a
+        adjust = (lambda *a: [int(a + b) for a, b in zip(a, shift)]) if shift else lambda *a: [int(x) for x in a]
 
         dc = dc or self._dc
         dc.SetFont(self._font)
