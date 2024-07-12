@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.07.2024
+@modified    12.07.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -3433,7 +3433,8 @@ class SchemaObjectPage(wx.Panel):
 
         check_rowid = self._ctrls["without"] = wx.CheckBox(panel, label="WITHOUT &ROWID")
         check_strict = None
-        if self._db.has_feature("strict"):
+        if self._db.has_feature("strict") \
+        or any(x.get("strict") for x in util.getval(self._item, "meta", "options") or []):
             check_strict = self._ctrls["strict"]  = wx.CheckBox(panel, label="STRICT")
         check_exists = self._ctrls["exists"]  = wx.CheckBox(panel, label="IF N&OT EXISTS")
         check_rowid.ToolTip  = "Omit the default internal ROWID column. " \
@@ -3451,6 +3452,9 @@ class SchemaObjectPage(wx.Panel):
         check_exists.ToolTip = "Add 'IF NOT EXISTS' to CREATE SQL statement.\n\n" \
                                "Does not affect creation within this database,\n" \
                                "merely becomes part of schema SQL."
+        if check_strict and not self._db.has_feature("strict"):
+            check_strict.Disable()
+            check_strict._toggle = "skip"
 
         nb = self._notebook_table = wx.Notebook(panel)
         panel_columnwrapper     = self._MakeColumnsGrid(nb)
