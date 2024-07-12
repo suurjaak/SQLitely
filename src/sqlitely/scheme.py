@@ -1506,7 +1506,7 @@ class SchemaPlacement(object):
         if key2 not in mycache:
             for cc in self._cache.values(): # Nuke any outdated bitmaps: SQL meta changed
                 for k in list(cc.get(key1) or {}):
-                    if k[:2] != key2[:2]: cc[key1].pop(k)
+                    if k[:2] != key2[:2]: cc[key1].pop(k, None)
 
             mycache[key2] = self.MakeItemBitmaps(opts, statistics, dragrect)
         return mycache[key2]
