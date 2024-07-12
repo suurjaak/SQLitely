@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.06.2024
+@modified    12.07.2024
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -42,6 +42,7 @@ class Database(object):
 
     """Column type affinity map."""
     AFFINITY = {
+        "ANY":     ["ANY"],  # Removed if SQLite version does not support "strict"
         "INTEGER": ["INT", "INTEGER", "TINYINT", "SMALLINT", "MEDIUMINT", "BIGINT", "UNSIGNED BIG INT", "INT2", "INT8"],
         "TEXT":    ["CHARACTER", "VARCHAR", "VARYING CHARACTER", "NCHAR", "NATIVE CHARACTER", "NVARCHAR", "TEXT", "CLOB", "JSON"],
         "BLOB":    ["BLOB"],
@@ -2240,6 +2241,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
             logger.warning("Error syncing sqlite_master contents.", exc_info=True)
             try: self.execute("ROLLBACK")
             except Exception: pass
+if not Database.has_feature("strict"):
+    Database.AFFINITY.pop("ANY", None)
 
 
 

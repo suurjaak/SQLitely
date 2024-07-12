@@ -5,6 +5,7 @@ CHANGELOG
 ---------------
 - upgrade ANTLR version from 4.9 to 4.13
 - show STRICT checkbox for STRICT table in schema editor even if current SQLite does not support it
+- add ANY as possible column type if SQLite version supports STRICT
 - fix compatibility issues with Python 3.10+
 - fix opening third-party license link in snaps
 
