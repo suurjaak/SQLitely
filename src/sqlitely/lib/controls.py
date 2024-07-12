@@ -96,7 +96,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    11.07.2024
+@modified    12.07.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -979,7 +979,8 @@ class FormDialog(wx.Dialog):
        }
        ?children:     [{field}, ]
        ?link:         "name" of linked field, cleared and repopulated on change,
-                      or callable(data) doing required change and returning field name
+                      or callable(dialog) doing required change and returning field name;
+                      name may be a sequence of names as subpath
        ?tb:           [{type, ?help, ?toggle, ?on}] for SQLiteTextCtrl component,
                       adds toolbar, supported toolbar buttons "numbers", "wrap",
                       "copy", "paste", "open" and "save", plus "sep" for separator
@@ -1150,8 +1151,9 @@ class FormDialog(wx.Dialog):
 
 
     def _GetField(self, name, path=()):
-        """Returns field from props."""
-        fields, path = self._props, list(path) + [name]
+        """Returns field from props; name can be a sequence of names as subpath."""
+        names = list(name) if isinstance(name, (list, tuple)) else [name]
+        fields, path = self._props, list(path) + names
         while fields:
             stepped = False
             for f in fields:
@@ -1561,7 +1563,8 @@ class FormDialog(wx.Dialog):
             else:
                 linkfield = self._GetField(name, path)
                 if linkfield: self._DelValue(linkfield, path)
-            if linkfield: self._PopulateField(linkfield, path)
+            linkpath = (path + tuple(name[:-1])) if isinstance(name, (list, tuple)) else path
+            if linkfield: self._PopulateField(linkfield, linkpath)
 
 
     def _OnAddToList(self, field, path, event):
@@ -1629,9 +1632,7 @@ class FormDialog(wx.Dialog):
 
 
     def _OnToggleField(self, field, path, ctrl, event=None):
-        """
-        Handler for toggling a field (and subfields) on/off, updates display.
-        """
+        """Handler for toggling a field (and subfields) on/off, updates display."""
         fpath = path + (field["name"], )
         ctrls = [] # [(field, path, ctrl)]
         for c in self._comps.get(fpath, []):
@@ -1670,9 +1671,9 @@ class FormDialog(wx.Dialog):
 
         if on and self._GetValue(field, path) is None:
             self._SetValue(field, {} if field.get("children") else "", path)
-        if on and self._editmode and (path and
-        field == self._GetField(path[-1], path[:-1]).get("togglename")
-        or "text" == field.get("type")):
+        if on and self._editmode and ("text" == field.get("type")
+             or path and field == self._GetField(path[-1], path[:-1]).get("togglename")
+        ):
             edit = next((c for _, _, c in ctrls if isinstance(c, wx.TextCtrl)), None)
             if edit: edit.SetFocus(), edit.SelectAll() # Focus toggle's name-box
         if field.get("link"):
@@ -1683,7 +1684,8 @@ class FormDialog(wx.Dialog):
             else:
                 linkfield = self._GetField(name, path)
                 if linkfield: self._DelValue(linkfield, path)
-            if linkfield: self._PopulateField(linkfield, path)
+            linkpath = (path + tuple(name[:-1])) if isinstance(name, (list, tuple)) else path
+            if linkfield: self._PopulateField(linkfield, linkpath)
         if self._footer: self._footer["populate"](self, self._footer["ctrl"])
         self._panel.Parent.SendSizeEvent()
 
