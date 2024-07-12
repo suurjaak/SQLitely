@@ -4,6 +4,7 @@ CHANGELOG
 2.4, 2024-07-12
 ---------------
 - add support for generated columns
+- upgrade embedded sqlite3_analyzer Windows binary from 3.29 to 3.43
 - upgrade ANTLR version from 4.9 to 4.13
 - show STRICT checkbox for STRICT table in schema editor even if current SQLite does not support it
 - add ANY as possible column type if SQLite version supports STRICT
