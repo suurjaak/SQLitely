@@ -1075,8 +1075,9 @@ class FormDialog(wx.Dialog):
                     walk(v, callback)
 
         if props is not None:
-            memo = {} # copy-module produces invalid result for wx.Bitmap
-            walk(props, lambda v: memo.update({id(v): v}) if isinstance(v, wx.Bitmap) else None)
+            memo = {} # copy-module produces invalid result for wx.Bitmap, and errors for wx.Window
+            walk(props, lambda v: memo.update({id(v): v})
+                                               if callable(v) or isinstance(v, wx.Object) else None)
             self._props = copy.deepcopy(props, memo=memo)
         if data  is not None: self._data = copy.deepcopy(data)
         if edit  is not None: self._editmode = bool(edit)
