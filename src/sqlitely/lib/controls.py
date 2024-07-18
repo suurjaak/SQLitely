@@ -96,7 +96,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    12.07.2024
+@modified    17.07.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -5992,6 +5992,9 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         self._skip_autocomplete = False
 
 
+    def GetChoices(self):
+        """Returns the choices available in the dropdown list."""
+        return self._choices[:]
     def SetChoices(self, choices):
         """Sets the choices available in the dropdown list."""
         if choices:
@@ -6019,6 +6022,7 @@ class TextCtrlAutoComplete(wx.TextCtrl):
             # Leave room for vertical scrollbar
             self._listbox.SetColumnWidth(0, size.width - 16)
             self._listbox.SetScrollbar(wx.HORIZONTAL, 0, 0, 0)
+    Choices = property(GetChoices, SetChoices)
 
 
     def SetValueFromSelected(self):
