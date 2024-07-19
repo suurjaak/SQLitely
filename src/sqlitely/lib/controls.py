@@ -96,7 +96,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    17.07.2024
+@modified    19.07.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -4148,36 +4148,50 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
 
     def __init__(self, *args, **kwargs):
+        """
+        @param   addressed  content in lines of 16 bytes with address margin (default True)
+        """
+        addressed = bool(kwargs.pop("addressed", True))
         wx.stc.StyledTextCtrl.__init__(self, *args, **kwargs)
 
-        self._fixed    = False # Fixed-length value
-        self._type     = str   # Value type: str, unicode, int, float, long
-        self._bytes0   = []    # [byte or None, ]
-        self._bytes    = bytearray()
-        self._mirror   = None # Linked control
-        self._undoredo = HexByteCommandProcessor(self)
+        self._addressed = addressed # Whether margin and fixed line width
+        self._fixed     = False     # Fixed-length value
+        self._type      = str       # Value type: str, unicode, int, float, long
+        self._bytes0    = []        # [byte or None, ]
+        self._bytes     = bytearray()
+        self._mirror    = None # Linked control
+        self._undoredo  = HexByteCommandProcessor(self)
 
         self.SetStyleSpecs()
         cw = self.TextWidth(0, "X")
 
-        self.SetEOLMode(wx.stc.STC_EOL_LF)
-        self.SetWrapMode(wx.stc.STC_WRAP_CHAR)
+        self.SetEOLMode(wx.stc.STC_EOL_LF) if addressed else None
+        self.SetWrapMode(wx.stc.STC_WRAP_CHAR if addressed else wx.stc.STC_WRAP_NONE)
         self.SetCaretLineBackAlpha(20)
         self.SetCaretLineVisible(False)
 
-        self.SetMarginCount(2)
-        self.SetMarginType(0, wx.stc.STC_MARGIN_TEXT)
-        self.SetMarginWidth(0, cw * 9 + 5)
-        self.SetMarginWidth(1, 2)
-        self.SetMarginCursor(0, wx.stc.STC_CURSORARROW)
-        self.SetMargins(3, 0)
+        if addressed:
+            self.SetMarginCount(2)
+            self.SetMarginType(0, wx.stc.STC_MARGIN_TEXT)
+            self.SetMarginWidth(0, cw * 9 + 5)
+            self.SetMarginWidth(1, 2)
+            self.SetMarginCursor(0, wx.stc.STC_CURSORARROW)
+            self.SetMargins(3, 0)
+        else:
+            self.SetMarginCount(0)
+            self.SetMarginLeft(0)
+            self.SetUseHorizontalScrollBar(False)
+            self.SetUseVerticalScrollBar(False)
 
         self.SetOvertype(True)
-        self.SetUseTabs(False)
-        w = cw * self.WIDTH * 3 + self.GetMarginWidth(0) + \
-            sum(max(x, 0) for x in self.GetMargins()) + \
-            wx.SystemSettings.GetMetric(wx.SYS_VSCROLL_X)
-        self.MinSize = self.MaxSize = w, -1
+        if addressed:
+            self.SetUseTabs(False)
+            w = cw * self.WIDTH * 3 + self.GetMarginWidth(0) + \
+                sum(max(x, 0) for x in self.GetMargins()) + \
+                wx.SystemSettings.GetMetric(wx.SYS_VSCROLL_X)
+            self.MinSize = self.MaxSize = w, -1
+        else:
+            self.MinSize = self.MaxSize = -1, 20
 
         self.Bind(wx.EVT_KEY_DOWN,                self.OnKeyDown)
         self.Bind(wx.EVT_CHAR_HOOK,               self.OnChar)
@@ -4367,9 +4381,11 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
 
     def _PosIn(self, pos):
+        if not self._addressed: return pos
         line, linebpos = divmod(pos, self.WIDTH)
         return line * self.WIDTH * 3 + linebpos * 3
     def _PosOut(self, pos):
+        if not self._addressed: return pos
         line = self.LineFromPosition(pos)
         linepos = pos - self.PositionFromLine(self.LineFromPosition(pos))
         return line * self.WIDTH + linepos // 3
@@ -4378,10 +4394,13 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
     def _Populate(self):
         """Sets current content to widget."""
         lines, hexlify = [], binascii.hexlify
-        if sys.version_info < (3, 8):
+        if sys.version_info < (3, 8): # Support sep-parameter
             hexlify = lambda data, sep: sep.join("%02X" % c for c in data)
-        for i in range(0, len(self._bytes), self.WIDTH):
-            lines.append(hexlify(self._bytes[i:i + self.WIDTH], " ").decode("latin1").upper())
+        if self._addressed:
+            for i in range(0, len(self._bytes), self.WIDTH):
+                lines.append(hexlify(self._bytes[i:i + self.WIDTH], " ").decode("latin1").upper())
+        else:
+            lines.append(hexlify(self._bytes, " ").decode("latin1").upper())
         super(HexTextCtrl, self).ChangeValue("\n".join(lines))
         self._Restyle()
         self._Remargin()
@@ -4406,6 +4425,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
     def _Remargin(self):
         """Rebuilds hex address margin."""
+        if not self._addressed: return
         eventmask0, _ = self.GetModEventMask(), self.SetModEventMask(0)
         try:
             sself = super(HexTextCtrl, self)
@@ -4504,10 +4524,12 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
                 func = self.WordLeft if direction < 0 else self.WordRight
             func()
             pos = sself.CurrentPos
-            linepos = pos - self.PositionFromLine(self.LineFromPosition(pos))
-            if not event.ShiftDown() and linepos >= self.WIDTH * 3 - 1 \
-            or event.ShiftDown() and (not linepos and not linepos0 or not linepos0 and linepos >= self.WIDTH * 3 - 1):
-                func()
+            if self._addressed:
+                linepos = pos - self.PositionFromLine(self.LineFromPosition(pos))
+                if not event.ShiftDown() and linepos >= self.WIDTH * 3 - 1 \
+                or event.ShiftDown() and (not linepos and not linepos0
+                                          or not linepos0 and linepos >= self.WIDTH * 3 - 1):
+                    func()
             if direction < 0 and not self.GetSelectionEmpty() and pos > sself.GetSelection()[0]:
                 self.CharLeftExtend()
 
