@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.07.2024
+@modified    28.07.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3378,6 +3378,7 @@ class DatabasePage(wx.Panel):
         bmp4 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE_AS, wx.ART_TOOLBAR, (16, 16))
         bmp5 = images.ToolbarNumbered.Bitmap
         bmp6 = images.ToolbarWordWrap.Bitmap
+        bmp7 = wx.ArtProvider.GetBitmap(wx.ART_FIND,         wx.ART_TOOLBAR, (16, 16))
 
         tb_stats = self.tb_stats = wx.ToolBar(panel_stats,
                                       style=wx.TB_FLAT | wx.TB_NODIVIDER | wx.TB_HORZ_TEXT)
@@ -3402,6 +3403,8 @@ class DatabasePage(wx.Panel):
         tb_sql.AddTool(wx.ID_INDENT,  "", bmp5, shortHelp="Show line numbers", kind=wx.ITEM_CHECK)
         tb_sql.AddTool(wx.ID_STATIC,  "", bmp6, shortHelp="Word-wrap",         kind=wx.ITEM_CHECK)
         tb_sql.AddSeparator()
+        tb_sql.AddTool(wx.ID_FIND,    "", bmp7, shortHelp="Find in schema SQL  (%s-F)" % controls.KEYS.NAME_CTRL)
+        tb_sql.AddSeparator()
         tb_sql.AddTool(wx.ID_COPY,    "", bmp3, shortHelp="Copy schema SQL to clipboard")
         tb_sql.AddTool(wx.ID_SAVE,    "", bmp4, shortHelp="Save schema SQL to file")
         tb_sql.Realize()
@@ -3412,14 +3415,22 @@ class DatabasePage(wx.Panel):
         tb_sql.Bind(wx.EVT_TOOL, self.on_update_stc_schema,      id=wx.ID_REFRESH)
         tb_sql.Bind(wx.EVT_TOOL, self.on_toggle_stc_linenumbers, id=wx.ID_INDENT)
         tb_sql.Bind(wx.EVT_TOOL, self.on_toggle_stc_wordwrap,    id=wx.ID_STATIC)
+        tb_sql.Bind(wx.EVT_TOOL, self.on_search_stc_schema,      id=wx.ID_FIND)
         tb_sql.Bind(wx.EVT_TOOL, lambda e: self.on_copy_sql(self.stc_schema),   id=wx.ID_COPY)
         tb_sql.Bind(wx.EVT_TOOL, lambda e: self.save_sql(self.stc_schema.Text), id=wx.ID_SAVE)
+
+        accelerators = [(wx.ACCEL_CMD, ord('F'), wx.ID_FIND)]
+        panel_schema.SetAcceleratorTable(wx.AcceleratorTable(accelerators))
+        panel_schema.Bind(wx.EVT_TOOL, self.on_search_stc_schema, id=wx.ID_FIND)
 
         stc = self.stc_schema = controls.SQLiteTextCtrl(panel_schema, style=wx.BORDER_STATIC)
         stc.LineNumbers = conf.TextLineNumbers.get("schema")
         stc.WordWrap    = conf.TextWordWraps  .get("schema")
         stc.SetText("Parsing..")
         stc.SetReadOnly(True)
+
+        self.dialog_search_schema = controls.FindReplaceDialog(panel_schema, stc, title="Find in schema", findonly=True)
+        self.dialog_search_schema.SetSharedHistory()
 
         panel_stats.Sizer.Add(tb_stats, border=5, flag=wx.ALL)
         panel_stats.Sizer.Add(html_stats, proportion=1, flag=wx.GROW)
@@ -4213,6 +4224,11 @@ class DatabasePage(wx.Panel):
         stc = self.stc_schema if name is None else self.stc_pragma
         conf.TextWordWraps[name or "schema"] = stc.WordWrap = event.IsChecked()
         util.run_once(conf.save)
+
+
+    def on_search_stc_schema(self, event=None):
+        """Handler for toggling find dialog in schema STC."""
+        self.dialog_search_schema.Show(not self.dialog_search_schema.Shown)
 
 
     def on_update_stc_schema(self, event=None):

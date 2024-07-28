@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.07.2024
+@modified    28.07.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -1777,6 +1777,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT |
                   wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
+        self._dialog_find_sql  = controls.FindReplaceDialog(self, title="Find in SQL")
+        self._dialog_find_grid = controls.FindReplaceDialog(self, title="Find in data", findonly=True)
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
 
@@ -1791,21 +1793,26 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         tb = self._tb = wx.ToolBar(panel1, style=wx.TB_FLAT | wx.TB_NODIVIDER)
         bmp1 = images.ToolbarNumbered.Bitmap
         bmp2 = images.ToolbarWordWrap.Bitmap
-        bmp3 = wx.ArtProvider.GetBitmap(wx.ART_COPY,      wx.ART_TOOLBAR, (16, 16))
-        bmp4 = wx.ArtProvider.GetBitmap(wx.ART_FILE_OPEN, wx.ART_TOOLBAR, (16, 16))
-        bmp5 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR, (16, 16))
+        bmp3 = wx.ArtProvider.GetBitmap(wx.ART_FIND,      wx.ART_TOOLBAR, (16, 16))
+        bmp4 = wx.ArtProvider.GetBitmap(wx.ART_COPY,      wx.ART_TOOLBAR, (16, 16))
+        bmp5 = wx.ArtProvider.GetBitmap(wx.ART_FILE_OPEN, wx.ART_TOOLBAR, (16, 16))
+        bmp6 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR, (16, 16))
         tb.SetToolBitmapSize(bmp1.Size)
-        tb.AddTool(wx.ID_INDENT, "", bmp1, shortHelp="Show line numbers", kind=wx.ITEM_CHECK)
-        tb.AddTool(wx.ID_STATIC, "", bmp2, shortHelp="Word-wrap",         kind=wx.ITEM_CHECK)
+        tb.AddTool(wx.ID_INDENT,  "", bmp1, shortHelp="Show line numbers", kind=wx.ITEM_CHECK)
+        tb.AddTool(wx.ID_STATIC,  "", bmp2, shortHelp="Word-wrap",         kind=wx.ITEM_CHECK)
         tb.AddSeparator()
-        tb.AddTool(wx.ID_COPY,   "", bmp3, shortHelp="Copy SQL to clipboard")
-        tb.AddTool(wx.ID_OPEN,   "", bmp4, shortHelp="Load SQL from file")
-        tb.AddTool(wx.ID_SAVE,   "", bmp5, shortHelp="Save SQL to file")
+        tb.AddTool(wx.ID_REPLACE, "",   bmp3, shortHelp="Find in SQL  (%s-F)" % controls.KEYS.NAME_CTRL)
+        tb.AddSeparator()
+        tb.AddTool(wx.ID_COPY,    "", bmp4, shortHelp="Copy SQL to clipboard")
+        tb.AddTool(wx.ID_OPEN,    "", bmp5, shortHelp="Load SQL from file")
+        tb.AddTool(wx.ID_SAVE,    "", bmp6, shortHelp="Save SQL to file")
         tb.Realize()
 
         stc = self._stc = controls.SQLiteTextCtrl(panel1, traversable=True,
                                                   style=wx.BORDER_STATIC)
-        self._stc.SetScrollWidthTracking(False)
+        stc.SetScrollWidthTracking(False)
+        self._dialog_find_sql.SetTarget(stc)
+
 
         panel2 = self._panel2 = wx.Panel(splitter)
         sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -1823,17 +1830,19 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         bmp1 = wx.ArtProvider.GetBitmap(wx.ART_COPY, wx.ART_TOOLBAR, (16, 16))
         bmp2 = images.ToolbarRefresh.Bitmap
         bmp3 = images.ToolbarClear.Bitmap
-        bmp4 = images.ToolbarGoto.Bitmap
-        bmp5 = images.ToolbarForm.Bitmap
-        bmp6 = images.ToolbarColumnForm.Bitmap
+        bmp4 = wx.ArtProvider.GetBitmap(wx.ART_FIND, wx.ART_TOOLBAR, (16, 16))
+        bmp5 = images.ToolbarGoto.Bitmap
+        bmp6 = images.ToolbarForm.Bitmap
+        bmp7 = images.ToolbarColumnForm.Bitmap
         tbgrid.SetToolBitmapSize(bmp1.Size)
         tbgrid.AddTool(wx.ID_INFO,    "", bmp1, shortHelp="Copy executed SQL statement to clipboard")
         tbgrid.AddTool(wx.ID_REFRESH, "", bmp2, shortHelp="Re-execute query  (F5)")
         tbgrid.AddTool(wx.ID_RESET,   "", bmp3, shortHelp="Reset all applied sorting and filtering")
         tbgrid.AddSeparator()
-        tbgrid.AddTool(wx.ID_INDEX,   "", bmp4, shortHelp="Go to row ..  (%s-G)" % controls.KEYS.NAME_CTRL)
-        tbgrid.AddTool(wx.ID_EDIT,    "", bmp5, shortHelp="Open row in data form  (F4)")
-        tbgrid.AddTool(wx.ID_MORE,    "", bmp6, shortHelp="Open row cell in column form  (Ctrl-F2)")
+        tbgrid.AddTool(wx.ID_FIND,    "", bmp4, shortHelp="Find in data  (%s-F)" % controls.KEYS.NAME_CTRL)
+        tbgrid.AddTool(wx.ID_INDEX,   "", bmp5, shortHelp="Go to row ..  (%s-G)" % controls.KEYS.NAME_CTRL)
+        tbgrid.AddTool(wx.ID_EDIT,    "", bmp6, shortHelp="Open row in data form  (F4)")
+        tbgrid.AddTool(wx.ID_MORE,    "", bmp7, shortHelp="Open row cell in column form  (Ctrl-F2)")
         tbgrid.Realize()
         tbgrid.Disable()
 
@@ -1849,6 +1858,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
         grid = self._grid = wx.grid.Grid(panel2)
         SQLiteGridBaseMixin.__init__(self)
+        self._dialog_find_grid.SetTarget(grid)
+        grid.Enabled = False
 
         label_help = self._label_help = wx.StaticText(panel2,
             label="Double-click on column header to sort, right click to filter.")
@@ -1861,12 +1872,14 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
         self.Bind(wx.EVT_TOOL,     self._OnToggleLineNumbers,  id=wx.ID_INDENT)
         self.Bind(wx.EVT_TOOL,     self._OnToggleWordWrap,     id=wx.ID_STATIC)
+        self.Bind(wx.EVT_TOOL,     self._OnFindSQL,            id=wx.ID_REPLACE)
         self.Bind(wx.EVT_TOOL,     self._OnCopySQL,            id=wx.ID_COPY)
         self.Bind(wx.EVT_TOOL,     self._OnLoadSQL,            id=wx.ID_OPEN)
         self.Bind(wx.EVT_TOOL,     self._OnSaveSQL,            id=wx.ID_SAVE)
         self.Bind(wx.EVT_TOOL,     self._OnCopyGridSQL,        id=wx.ID_INFO)
         self.Bind(wx.EVT_TOOL,     self._OnRequery,            id=wx.ID_REFRESH)
         self.Bind(wx.EVT_TOOL,     self._OnResetView,          id=wx.ID_RESET)
+        self.Bind(wx.EVT_TOOL,     self._OnFindGrid,           id=wx.ID_FIND)
         self.Bind(wx.EVT_TOOL,     self._OnGotoRow,            id=wx.ID_INDEX)
         self.Bind(wx.EVT_TOOL,     self._OnOpenForm,           id=wx.ID_EDIT)
         self.Bind(wx.EVT_TOOL,     self._OnOpenColumnForm,     id=wx.ID_MORE)
@@ -1907,8 +1920,10 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         accelerators = [(wx.ACCEL_NORMAL, wx.WXK_F4,  wx.ID_EDIT),
                         (wx.ACCEL_NORMAL, wx.WXK_F5,  wx.ID_REFRESH),
                         (wx.ACCEL_CMD,    wx.WXK_F2,  wx.ID_MORE),
+                        (wx.ACCEL_CMD,    ord('F'),   wx.ID_FIND),
                         (wx.ACCEL_CMD,    ord('G'),   wx.ID_INDEX)]
         wx_accel.accelerate(self, accelerators=accelerators)
+        wx_accel.accelerate(stc, accelerators=[(wx.ACCEL_CMD, ord('F'), wx.ID_REPLACE)])
         wx.CallAfter(lambda: self and splitter.SplitHorizontally(
                      panel1, panel2, sashPosition=self.Size[1] * 2 // 5))
         wx.CallAfter(lambda: self and stc.SetFocus())
@@ -2286,7 +2301,9 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         self.Refresh()
         self._button_export.Enabled = False
         self._tbgrid.Disable()
+        self._grid.Disable()
         self._button_close.Enabled = False
+        self._dialog_find_grid.Hide()
         self._label_help.Hide()
         self._label_rows.Hide()
         self._label_help.Parent.Layout()
@@ -2306,6 +2323,23 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             d = wx.TextDataObject(self._stc.Text)
             wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
             guibase.status("Copied SQL to clipboard.")
+
+
+    def _OnFindSQL(self, event):
+        """Handler for toggling find dialog for SQL text."""
+        if not self._dialog_find_sql.Shown and not self._dialog_find_sql.ShownOnce:
+            controls.center_in_window(self._dialog_find_sql, self._dialog_find_sql.Target)
+        self._dialog_find_sql.Show(not self._dialog_find_sql.Shown)
+
+
+    def _OnFindGrid(self, event):
+        """Handler for toggling find dialog for data grid."""
+        if not self._grid.Enabled:
+            self._OnFindSQL(event)
+            return
+        if not self._dialog_find_grid.Shown and not self._dialog_find_grid.ShownOnce:
+            controls.center_in_window(self._dialog_find_grid, self._dialog_find_grid.Target)
+        self._dialog_find_grid.Show(not self._dialog_find_grid.Shown)
 
 
     def _OnGotoRow(self, event=None):
@@ -2434,11 +2468,12 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         bmp2 = images.ToolbarDelete.Bitmap
         bmp3 = images.ToolbarRefresh.Bitmap
         bmp4 = images.ToolbarClear.Bitmap
-        bmp5 = images.ToolbarGoto.Bitmap
-        bmp6 = images.ToolbarForm.Bitmap
-        bmp7 = images.ToolbarColumnForm.Bitmap
-        bmp8 = images.ToolbarCommit.Bitmap
-        bmp9 = images.ToolbarRollback.Bitmap
+        bmp5 = wx.ArtProvider.GetBitmap(wx.ART_FIND, wx.ART_TOOLBAR, (16, 16))
+        bmp6 = images.ToolbarGoto.Bitmap
+        bmp7 = images.ToolbarForm.Bitmap
+        bmp8 = images.ToolbarColumnForm.Bitmap
+        bmp9 = images.ToolbarCommit.Bitmap
+        bmpA = images.ToolbarRollback.Bitmap
         tb.SetToolBitmapSize(bmp1.Size)
         tb.AddTool(wx.ID_ADD,     "", bmp1, shortHelp="Add new row")
         tb.AddTool(wx.ID_DELETE,  "", bmp2, shortHelp="Delete current row")
@@ -2446,12 +2481,13 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         tb.AddTool(wx.ID_REFRESH, "", bmp3, shortHelp="Reload data  (F5)")
         tb.AddTool(wx.ID_RESET,   "", bmp4, shortHelp="Reset all applied sorting and filtering")
         tb.AddSeparator()
-        tb.AddTool(wx.ID_INDEX,   "", bmp5, shortHelp="Go to row ..  (%s-G)" % controls.KEYS.NAME_CTRL)
-        tb.AddTool(wx.ID_EDIT,    "", bmp6, shortHelp="Open row in data form  (F4)")
-        tb.AddTool(wx.ID_MORE,    "", bmp7, shortHelp="Open row cell in column form  (Ctrl-F2)")
+        tb.AddTool(wx.ID_FIND,    "", bmp5, shortHelp="Find in data  (%s-F)" % controls.KEYS.NAME_CTRL)
+        tb.AddTool(wx.ID_INDEX,   "", bmp6, shortHelp="Go to row ..  (%s-G)" % controls.KEYS.NAME_CTRL)
+        tb.AddTool(wx.ID_EDIT,    "", bmp7, shortHelp="Open row in data form  (F4)")
+        tb.AddTool(wx.ID_MORE,    "", bmp8, shortHelp="Open row cell in column form  (Ctrl-F2)")
         tb.AddSeparator()
-        tb.AddTool(wx.ID_SAVE,    "", bmp8, shortHelp="Commit changes to database  (F10)")
-        tb.AddTool(wx.ID_UNDO,    "", bmp9, shortHelp="Rollback changes and restore original values  (F9)")
+        tb.AddTool(wx.ID_SAVE,    "", bmp9, shortHelp="Commit changes to database  (F10)")
+        tb.AddTool(wx.ID_UNDO,    "", bmpA, shortHelp="Rollback changes and restore original values  (F9)")
         tb.EnableTool(wx.ID_INDEX, False)
         tb.EnableTool(wx.ID_EDIT,  False)
         tb.EnableTool(wx.ID_MORE,  False)
@@ -2469,6 +2505,10 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         grid = self._grid = wx.grid.Grid(self)
         SQLiteGridBaseMixin.__init__(self)
 
+        dialog_find = controls.FindReplaceDialog(self, grid, title="Find in data", findonly="view" == self._category)
+        dialog_find.SetSharedHistory()
+        self._dialog_find = dialog_find
+
         label_help = wx.StaticText(self, label="Double-click on column header to sort, right click to filter.")
         label_rows = self._label_rows = wx.StaticText(self)
         ColourManager.Manage(label_help, "ForegroundColour", "DisabledColour")
@@ -2480,6 +2520,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
 
         self.Bind(wx.EVT_TOOL,       self._OnInsert,         id=wx.ID_ADD)
         self.Bind(wx.EVT_TOOL,       self._OnDelete,         id=wx.ID_DELETE)
+        self.Bind(wx.EVT_TOOL,       self._OnFind,           id=wx.ID_FIND)
         self.Bind(wx.EVT_TOOL,       self._OnGotoRow,        id=wx.ID_INDEX)
         self.Bind(wx.EVT_TOOL,       self._OnOpenForm,       id=wx.ID_EDIT)
         self.Bind(wx.EVT_TOOL,       self._OnOpenColumnForm, id=wx.ID_MORE)
@@ -2518,6 +2559,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
                         (wx.ACCEL_NORMAL, wx.WXK_F10, wx.ID_SAVE),
                         (wx.ACCEL_NORMAL, wx.WXK_F9,  wx.ID_UNDO),
                         (wx.ACCEL_CMD,    wx.WXK_F2,  wx.ID_MORE),
+                        (wx.ACCEL_CMD,    ord('F'),   wx.ID_FIND),
                         (wx.ACCEL_CMD,    ord('G'),   wx.ID_INDEX)]
         wx_accel.accelerate(self, accelerators=accelerators)
         self._grid.SetFocus()
@@ -2884,6 +2926,11 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
 
         self.Layout() # Refresh scrollbars
         self._OnChange()
+
+
+    def _OnFind(self, event):
+        """Handler for toggling find dialog in data grid."""
+        self._dialog_find.Show(not self._dialog_find.Shown)
 
 
     def _OnGotoRow(self, event=None):
