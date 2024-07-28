@@ -22,6 +22,10 @@ Stand-alone GUI components for wx:
 - FileDrop(wx.FileDropTarget):
   A simple file drag-and-drop handler.
 
+- FindReplaceDialog(wx.Dialog):
+  Dialog allowing to search and replace in wx controls.
+  Supported controls: wx.TextCtrl, wx.stc.StyledTextCtrl, wx.grid.Grid.
+
 - FormDialog(wx.Dialog):
   Dialog for displaying a complex editable form.
 
@@ -96,7 +100,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    19.07.2024
+@modified    28.07.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -949,6 +953,792 @@ class FileDrop(wx.FileDropTarget):
         filenames = list(filter(os.path.isfile, paths))
         if folders   and self.on_folders: self.on_folders(folders)
         if filenames and self.on_files:   self.on_files(filenames)
+
+
+
+class FindReplaceDialog(wx.Dialog):
+    """
+    Dialog allowing to search and replace in wx controls.
+
+    Supported controls: wx.TextCtrl, wx.stc.StyledTextCtrl, wx.grid.Grid.
+    """
+
+    """Search text autocomplete history shared across dialog instances."""
+    FIND_TEXTS = []
+
+    """Replace text autocomplete history shared across dialog instances."""
+    REPLACE_TEXTS = []
+
+    """Colour set to find control background if search text not found."""
+    COLOUR_NOTFOUND = "pink"
+
+
+    def __init__(self, parent=None, target=None, title="Find and replace", findonly=False,
+                 style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER | wx.FRAME_FLOAT_ON_PARENT):
+        """
+        @param   target    wx control being searched
+        @param   title     dialog title, defaults to "Find" if findonly
+        @param   findonly  whether dialog has no replace functionality
+        """
+        if findonly and title == "Find and replace": title = "Find"
+        wx.Dialog.__init__(self, parent, title=title, style=style)
+
+        self._flags = {
+            "case"     : False,  # Search is case-sensitive
+            "findonly" : False,  # Search controls only, no replace (static flag)
+            "hex"      : False,  # Hex editor controls for search and replace texts
+            "multiline": False,  # Multi-line controls for searcn and replace texts
+            "regex"    : False,  # Search text interpreted as regex expression
+            "reverse"  : False,  # Search performed backward from current position
+            "shared"   : False,  # Search and replace text autocomplete history shared globally
+            "word"     : False,  # Search matches whole words only
+        }
+        self._ctrls      = {}     # {name: wx.Control}
+        self._sizers     = {}     # {name: wx.Sizer}
+        self._status     = {}     # {action, found, wrapped, replaced, searching}
+        self._target     = None   # wx control being searched
+        self._synchidden = False  # Whether dialog was hidden when parent was hidden
+        self._shownonce  = False  # Whether dialog has been shown at least once
+        self._pattern    = None   # re.Pattern from last search
+        self._match      = None   # re.Match from last search
+        self._matchspan  = None   # (start, end) of last match in target text
+        self._matchpos   = None   # grid (row, col) of last match; same as _matchspan if text control
+        self._text       = None   # Text value of target control from last search
+
+        self._flags["findonly"] = bool(findonly)
+        self.SetTarget(target)
+
+        self.MinSize = (450, -1)
+        self._Build()
+        self._Bind()
+        self._Refresh()
+        self.Fit()
+        self.MinSize = (450, self.Size.Height)
+        self._ctrls["hex_find"].MinSize = self._ctrls["text_find"].Size
+
+
+    def Show(self, show=True):
+        """Shhows or hides the dialog."""
+        self._synchidden = False
+        if show:
+            self._LoadSharedHistory()
+            self._RefreshStatus()
+            self._shownonce = True
+        wx.Dialog.Show(self, show=show)
+    def GetTarget(self):
+        """Returns text component being searched."""
+        return self._target
+    def SetTarget(self, target):
+        """Sets text component being searched, raises error if unsupported type."""
+        if not isinstance(target, (wx.TextCtrl, wx.stc.StyledTextCtrl, wx.grid.Grid, type(None))):
+            raise Exception("Unsupported target type: %r" % type(target))
+        self._target = target
+    Target = property(GetTarget, SetTarget)
+
+
+    def IsFindOnly(self):
+        """Returns whether dialog is find-only, without replace."""
+        return self._flags["findonly"]
+    FindOnly = property(IsFindOnly)
+
+
+    def IsSharedHistory(self):
+        """Returns whether search and replace text autocomplete history is shared across dialogs."""
+        return self._flags["shared"]
+    def SetSharedHistory(self, enabled=True):
+        """Toggles searching backward from current position."""
+        if bool(enabled) == self._flags["shared"]: return
+        self._flags["shared"] = bool(enabled)
+        if enabled:
+            self._ctrls["text_find"].SetChoices(self.FIND_TEXTS)
+            if not self._flags["findonly"]:
+                self._ctrls["text_repl"].SetChoices(self.REPLACE_TEXTS)
+    SharedHistory = property(IsSharedHistory, SetSharedHistory)
+
+
+    def IsShownOnce(self):
+        """Returns whether dialog has been shown at least once."""
+        return self._shownonce
+    ShownOnce = property(IsShownOnce)
+
+
+    def IsCase(self):
+        """Returns whether case-sensitive search."""
+        return self._flags["case"]
+    def SetCase(self, enabled=True):
+        """Toggles case-sensitive search."""
+        self._SetFlag("case", enabled)
+    Case = property(IsCase, SetCase)
+
+
+    def IsWholeWords(self):
+        """Returns whether matching whole words only."""
+        return self._flags["word"]
+    def SetWholeWords(self, enabled=True):
+        """Toggles whether matching whole words only."""
+        self._SetFlag("word", enabled)
+    WholeWords = property(IsWholeWords, SetWholeWords)
+
+
+    def IsRegex(self):
+        """Returns whether regular expression search."""
+        return self._flags["regex"]
+    def SetRegex(self, enabled=True):
+        """Toggles regular expression search."""
+        self._SetFlag("regex", enabled)
+    Regex = property(IsRegex, SetRegex)
+
+
+    def IsHex(self):
+        """Returns whether hexadecimal search."""
+        return self._flags["hex"]
+    def SetHex(self, enabled=True):
+        """Toggles hexadecimal search."""
+        self._SetFlag("hex", enabled)
+    Hex = property(IsHex, SetHex)
+
+
+    def IsMultiline(self):
+        """Returns whether multi-line text mode."""
+        return self._flags["multiline"]
+    def SetMultiline(self, enabled=True):
+        """Toggles multi-line text mode."""
+        self._SetFlag("multiline", enabled)
+    Multiline = property(IsMultiline, SetMultiline)
+
+
+    def IsReverse(self):
+        """Returns whether searching backward from current position."""
+        return self._flags["reverse"]
+    def SetReverse(self, enabled=True):
+        """Toggles searching backward from current position."""
+        self._SetFlag("reverse", enabled)
+    Reverse = property(IsReverse, SetReverse)
+
+
+    def GetFindChoices(self):
+        """Returns the list of auto-complete choices for search text."""
+        return self._ctrls["text_find"].GetChoices()
+    def SetFindChoices(self, choices):
+        """Sets the list of auto-complete choices for search text."""
+        return self._ctrls["text_find"].SetChoices(choices)
+    FindChoices = property(GetFindChoices, SetFindChoices)
+
+
+    def GetReplaceChoices(self):
+        """Returns the list of auto-complete choices for search text."""
+        return self._ctrls["text_repl"].GetChoices()
+    def SetReplaceChoices(self, choices):
+        """Sets the list of auto-complete choices for replacement text."""
+        return self._ctrls["text_repl"].SetChoices(choices)
+    ReplaceChoices = property(GetReplaceChoices, SetReplaceChoices)
+
+
+    def _Build(self):
+        """Creates dialog controls."""
+        repl = not self._flags["findonly"]
+        label_find    = wx.StaticText(self, label="F&ind what:",    name="find_label")
+        label_repl    = wx.StaticText(self, label="Re&place with:", name="repl_label")
+        label_findbig = wx.StaticText(self, label="F&ind what:",    name="findbig_label")
+        label_replbig = wx.StaticText(self, label="Re&place with:", name="replbig_label")
+        label_status  = wx.StaticText(self)
+
+        text_find = TextCtrlAutoComplete(self, name="find")
+        text_repl = TextCtrlAutoComplete(self, name="repl")
+        hex_find  = HexTextCtrl(self, name="find", addressed=False)
+        hex_repl  = HexTextCtrl(self, name="repl", addressed=False)
+
+        text_findbig = wx.TextCtrl(self, style=wx.TE_MULTILINE, name="findbig")
+        text_replbig = wx.TextCtrl(self, style=wx.TE_MULTILINE, name="replbig")
+        hex_findbig  = HexTextCtrl(self, name="findbig")
+        hex_replbig  = HexTextCtrl(self, name="replbig")
+
+        check_case  = wx.CheckBox(self, label="Match &case")
+        check_word  = wx.CheckBox(self, label="Match &whole words only")
+        check_regex = wx.CheckBox(self, label="Regular e&xpression")
+        check_hex   = wx.CheckBox(self, label="&Hexadecimal")
+        check_rev   = wx.CheckBox(self, label="Search &upwards")
+
+        button_find    = wx.Button(self, label="&Find next")
+        button_prev    = wx.Button(self, label="&Previous")
+        button_repl    = wx.Button(self, label="&Replace")
+        button_replall = wx.Button(self, label="Replace &all")
+        button_count   = wx.Button(self, label="Cou&nt")
+        button_cancel  = wx.Button(self, label="Cancel")
+        button_multi   = wx.ToggleButton(self, label="Multi-&line")
+
+        check_case .ToolTip = "Find case-sensitive matches only"
+        check_regex.ToolTip = "Find using a regular expression (Python style regex)"
+        check_hex  .ToolTip = "Enter text in hexadecimal codes"
+        check_rev  .ToolTip = "Search backward from current position"
+
+        button_count.ToolTip = "Count number of occurrences"
+
+        text_findbig.MinSize = text_replbig.MinSize = (-1, 5*text_findbig.GetTextExtent("X").Height)
+        hex_findbig.MinSize  = hex_replbig.MinSize  = (-1, 5*hex_findbig .GetTextExtent("X").Height)
+        if self._flags["shared"]:
+            text_find.SetChoices(self.FIND_TEXTS), repl and text_repl.SetChoices(self.REPLACE_TEXTS)
+
+        ColourManager.Manage(label_status, "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
+
+        self.SetAffirmativeId(button_find.Id)
+        self.SetEscapeId(button_cancel.Id)
+        button_find.SetDefault()
+
+        self.Sizer      = wx.BoxSizer(wx.VERTICAL)
+        sizer_padding   = wx.BoxSizer(wx.VERTICAL)
+        sizer_grid      = wx.GridBagSizer(vgap=5, hgap=5)
+        sizer_findedits = wx.BoxSizer(wx.VERTICAL)
+        sizer_repledits = wx.BoxSizer(wx.VERTICAL) if repl else None
+        sizer_flags     = wx.GridBagSizer(vgap=5, hgap=5)
+        sizer_bigedits  = wx.BoxSizer(wx.VERTICAL)
+
+        sizer_findedits.Add(text_find, flag=wx.GROW)
+        sizer_findedits.Add(hex_find,  flag=wx.GROW)
+        sizer_repledits.Add(text_repl, flag=wx.GROW) if repl else None
+        sizer_repledits.Add(hex_repl,  flag=wx.GROW) if repl else None
+
+        sizer_flags.Add(check_case,  pos=(0, 0))
+        sizer_flags.Add(check_word,  pos=(0, 1))
+        sizer_flags.Add(check_regex, pos=(1, 0))
+        sizer_flags.Add(check_hex,   pos=(2, 0))
+        sizer_flags.Add(check_rev,   pos=(1, 1)) if repl else None
+
+        sizer_bigedits.Add(label_findbig, flag=wx.BOTTOM,          border=3)
+        sizer_bigedits.Add(text_findbig,  flag=wx.GROW)
+        sizer_bigedits.Add(hex_findbig,   flag=wx.GROW)
+        sizer_bigedits.Add(label_replbig, flag=wx.TOP | wx.BOTTOM, border=3) if repl else None
+        sizer_bigedits.Add(text_replbig,  flag=wx.GROW)                      if repl else None
+        sizer_bigedits.Add(hex_replbig,   flag=wx.GROW)                      if repl else None
+
+        sizer_grid.Add(label_find,      pos=(0, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        sizer_grid.Add(sizer_findedits, pos=(0, 1), flag=wx.GROW)
+        sizer_grid.Add(button_find,     pos=(0, 2))
+        sizer_grid.Add(label_repl,      pos=(1, 0), flag=wx.ALIGN_CENTER_VERTICAL) if repl else None
+        sizer_grid.Add(sizer_repledits, pos=(1, 1), flag=wx.GROW)                  if repl else None
+        sizer_grid.Add(button_repl,     pos=(1, 2))                                if repl else None
+        sizer_grid.Add(button_prev,     pos=(1, 2))                            if not repl else None
+        sizer_grid.Add(sizer_flags,     pos=(1 + repl, 0), span=(3, 2), border=3, flag=wx.TOP)
+        sizer_grid.Add(button_replall,  pos=(1 + repl, 2))                         if repl else None
+        sizer_grid.Add(button_count,    pos=(2 + repl, 2))
+        sizer_grid.Add(button_cancel,   pos=(3 + repl, 2))
+        sizer_grid.Add(button_multi,    pos=(4 + repl, 2))
+        sizer_grid.Add(sizer_bigedits,  pos=(5 + repl, 0), span=(1, 3), flag=wx.GROW)
+
+        sizer_grid.AddGrowableCol(1)
+        sizer_grid.AddGrowableRow(5 + repl)
+        sizer_padding.Add(sizer_grid, border=5, flag=wx.LEFT | wx.GROW)
+        self.Sizer.Add(sizer_padding, border=5, flag=wx.ALL | wx.GROW)
+        self.Sizer.Add(label_status, border=5, flag=wx.LEFT | wx.RIGHT | wx.BOTTOM)
+
+        repl_ctrls = dict(label_repl=label_repl,       label_replbig=label_replbig, 
+                          text_repl=text_repl,         hex_repl=hex_repl, 
+                          text_replbig=text_replbig,   hex_replbig=hex_replbig, 
+                          check_rev=check_rev,
+                          button_repl=button_repl,     button_replall=button_replall)
+        findonly_ctrls = dict(button_prev=button_prev)
+
+        self._sizers.update(grid=sizer_grid, bigedits=sizer_bigedits)
+        self._ctrls.update(repl_ctrls if repl else findonly_ctrls,
+                           label_find=label_find,        label_findbig=label_findbig,
+                           status=label_status,          text_find=text_find,
+                           hex_find=hex_find,            text_findbig=text_findbig,
+                           hex_findbig=hex_findbig,      check_case=check_case,
+                           check_word=check_word,        check_regex=check_regex,
+                           check_hex=check_hex,          button_find=button_find,
+                           button_count=button_count,    button_cancel=button_cancel,
+                           button_multi=button_multi)
+        for x in findonly_ctrls.values() if repl else repl_ctrls.values():
+            x.Destroy()
+
+
+    def _Bind(self):
+        """Binds control and dialog event and shortcut handlers."""
+        repl = not self._flags["findonly"]
+        on_toggle = lambda f: (lambda event: f(event.EventObject.Value))
+        on_edit   = lambda e: self._RefreshStatus()
+        self.Bind(wx.EVT_CHECKBOX, on_toggle(self.SetCase),       self._ctrls["check_case"])
+        self.Bind(wx.EVT_CHECKBOX, on_toggle(self.SetWholeWords), self._ctrls["check_word"])
+        self.Bind(wx.EVT_CHECKBOX, on_toggle(self.SetRegex),      self._ctrls["check_regex"])
+        self.Bind(wx.EVT_CHECKBOX, on_toggle(self.SetHex),        self._ctrls["check_hex"])
+        self.Bind(wx.EVT_CHECKBOX, on_toggle(self.SetReverse),    self._ctrls["check_rev"]) if repl else None
+
+        self.Bind(wx.EVT_BUTTON, self._OnFind,       self._ctrls["button_find"])
+        self.Bind(wx.EVT_BUTTON, self._OnPrevious,   self._ctrls["button_prev"]) if not repl else None
+        self.Bind(wx.EVT_BUTTON, self._OnReplace,    self._ctrls["button_repl"])     if repl else None
+        self.Bind(wx.EVT_BUTTON, self._OnReplaceAll, self._ctrls["button_replall"])  if repl else None
+        self.Bind(wx.EVT_BUTTON, self._OnCount,      self._ctrls["button_count"])
+        self.Bind(wx.EVT_BUTTON, self._OnClose,      self._ctrls["button_cancel"])
+
+        self.Bind(wx.EVT_LIST_DELETE_ALL_ITEMS, self._OnClearHistory, self._ctrls["text_find"])
+        self.Bind(wx.EVT_LIST_DELETE_ALL_ITEMS, self._OnClearHistory, self._ctrls["text_repl"]) if repl else None
+
+        self.Bind(wx.EVT_TEXT, on_edit, self._ctrls["text_find"])
+        self.Bind(wx.EVT_TEXT, on_edit, self._ctrls["hex_find"])
+        self.Bind(wx.EVT_TEXT, on_edit, self._ctrls["text_findbig"])
+        self.Bind(wx.EVT_TEXT, on_edit, self._ctrls["hex_findbig"])
+
+        self.Bind(wx.EVT_TOGGLEBUTTON, on_toggle(self.SetMultiline), self._ctrls["button_multi"])
+
+        self.Bind(wx.EVT_SET_FOCUS, lambda e: self._LoadSharedHistory())
+        self.Bind(wx.EVT_WINDOW_DESTROY, self._OnDestroy) if self.Parent else None
+        parent_ptr = self.Parent  # Hide dialog if any parent gets hidden
+        while parent_ptr is not None:
+            parent_ptr.Bind(wx.EVT_SHOW, self._OnShowParent)
+            parent_ptr = parent_ptr.Parent
+
+
+    def _Refresh(self):
+        """Enables-disables-shows-hides controls according to current settings."""
+        repl = not self._flags["findonly"]
+        focus_ctrl = self.FindFocus()
+        did_multiline = (self._flags["multiline"] == self._ctrls["label_find"].Enabled)
+        did_hex = any(self._ctrls[k].Shown and self._ctrls[k].Enabled
+                      for k in ("text_find", "text_findbig")) == self._flags["hex"]
+        name_find,  name_repl  = (self._GetCtrlName(replace, visible=True) for replace in (False, True))
+        name_find2, name_repl2 = (self._GetCtrlName(replace) for replace in (False, True))
+        self.Freeze()
+        # Enable/disable single-line text controls for multiline flag
+        self._ctrls["label_find"].Enable(not self._flags["multiline"])
+        self._ctrls["label_repl"].Enable(not self._flags["multiline"]) if repl else None
+        self._ctrls["text_find"] .Enable(not self._flags["multiline"])
+        self._ctrls["text_repl"] .Enable(not self._flags["multiline"]) if repl else None
+        self._ctrls["hex_find"]  .Enable(not self._flags["multiline"])
+        self._ctrls["hex_repl"]  .Enable(not self._flags["multiline"]) if repl else None
+        # Show/hide single-line text/hex controls for hex flag
+        self._ctrls["text_find"].Show(not self._flags["hex"])
+        self._ctrls["text_repl"].Show(not self._flags["hex"]) if repl else None
+        self._ctrls["hex_find"] .Show(self._flags["hex"])
+        self._ctrls["hex_repl"] .Show(self._flags["hex"])     if repl else None
+        # Show/hide multi-line controls for multiline flag, and text/hex controls for hex flag
+        self._ctrls["label_findbig"].Show(self._flags["multiline"])
+        self._ctrls["label_replbig"].Show(self._flags["multiline"]) if repl else None
+        self._ctrls["text_findbig"] .Show(self._flags["multiline"] and not self._flags["hex"])
+        self._ctrls["text_replbig"] .Show(self._flags["multiline"] and not self._flags["hex"]) if repl else None
+        self._ctrls["hex_findbig"]  .Show(self._flags["multiline"] and self._flags["hex"])
+        self._ctrls["hex_replbig"]  .Show(self._flags["multiline"] and self._flags["hex"])     if repl else None
+        # Enable/disable and populate case and regex checkboxes for hex flag
+        self._ctrls["check_case"] .Enable(not self._flags["hex"])
+        self._ctrls["check_regex"].Enable(not self._flags["hex"])
+        self._ctrls["check_word"] .Enable(not self._flags["regex"])
+        self._ctrls["check_case"] .SetValue(False if self._flags["hex"]   else self._flags["case"])
+        self._ctrls["check_regex"].SetValue(False if self._flags["hex"]   else self._flags["regex"])
+        self._ctrls["check_word"] .SetValue(False if self._flags["regex"] else self._flags["word"])
+        self.Layout()
+        # Heighten/shorten dialog for multiline flag if freshly toggled
+        if did_multiline:
+            direction = (1 if self._flags["multiline"] else -1)
+            height = self._sizers["bigedits"].Size.Height + self._sizers["grid"].VGap
+            self.Size = (self.Size.Width, self.Size.Height + direction * height)
+            prevsize = self.Size
+            if direction > 0: self.Fit()
+            self.Size = (prevsize.Width, -1) if direction > 0 else (-1, self.MinSize.Height)
+        if did_multiline or did_hex:
+            for n1, n2 in [(name_find, name_find2), (name_repl, name_repl2)]:
+                if n2 in self._ctrls and self._ctrls[n1].Value:
+                    self._ctrls[n2].Value = self._ctrls[n1].Value
+                    if "hex" not in n2: self._ctrls[n2].SelectAll()
+        if focus_ctrl is self._ctrls.get(name_find): self._ctrls[name_find2].SetFocus()
+        if focus_ctrl is self._ctrls.get(name_repl): self._ctrls[name_repl2].SetFocus()
+        self._RefreshStatus()
+        self.Thaw()
+        self.Refresh()
+
+
+    def _GetCtrlName(self, replace=False, visible=False):
+        """Returns the name of current find or replace text component."""
+        tpl = "%s_repl%s" if replace else "%s_find%s"
+        if visible:
+            shown = lambda *names: any(n in self._ctrls and self._ctrls[n].Shown for n in names)
+            return tpl % ("hex" if shown("hex_find",    "hex_findbig")  else "text",
+                          "big" if shown("hex_findbig", "text_findbig") else "")
+        else:
+            return tpl % ("hex" if self._flags["hex"]       else "text",
+                          "big" if self._flags["multiline"] else "")
+
+
+    def _MakeFindRegex(self):
+        """Returns search text and flags as re.Pattern, None if no text, raises on regex error."""
+        text = self._ctrls[self._GetCtrlName(visible=True)].Value
+        if not text: return None
+        flags = (0 if self._flags["case"] else re.IGNORECASE)
+        if self._flags["regex"] and self._flags["multiline"]:
+            flags |= re.MULTILINE
+        if not self._flags["regex"]: text = re.escape(text)
+        if self._flags["word"] and not self._flags["hex"] and not self._flags["regex"]:
+            text = r"\b%s\b" % text
+        return re.compile(text, flags)
+
+
+    def _SetFlag(self, name, enabled=True):
+        """Toggles flag and refreshes dialog."""
+        if bool(self._flags[name]) == bool(enabled): return
+        self._flags[name] = bool(enabled)
+        self._Refresh()
+
+
+    def _OnDestroy(self, event):
+        """Handler for destroying dialog, unbinds EVT_SHOW from parents."""
+        parent_ptr = self.Parent
+        while parent_ptr is not None:
+            parent_ptr.Unbind(wx.EVT_SHOW, handler=self._OnShowParent)
+            parent_ptr = parent_ptr.Parent
+
+
+    def _OnShowParent(self, event):
+        """Handler for hiding a parent, hides dialog if shown."""
+        event.Skip()
+        if not event.Show and self.Shown:
+            self._synchidden = True
+            self.Hide()
+        elif event.Show and not self.Shown and self._synchidden:
+            self.Show()
+
+
+    def _OnClearHistory(self, event):
+        """Handler for clearing autocomplete history in search or replace texts."""
+        event.EventObject.SetChoices([])
+        event.EventObject.ShowDropDown(False)
+        event.EventObject.Value = ""
+
+
+    def _OnFind(self, event):
+        """Handler for searching and selecting next match."""
+        if not self._IsSearchable(): return
+        self._RefreshStatus()
+        try: pattern = self._MakeFindRegex()
+        except Exception as e:
+            wx.MessageBox("Invalid regular expression.\n\n%s" % e, self.Title, wx.ICON_ERROR)
+        else: pattern and self._DoFind(pattern)
+
+
+    def _OnPrevious(self, event):
+        """Handler for searching and selecting previous match."""
+        if not self._IsSearchable(): return
+        self._RefreshStatus()
+        try: pattern = self._MakeFindRegex()
+        except Exception as e: 
+            wx.MessageBox("Invalid regular expression.\n\n%s" % e, self.Title, wx.ICON_ERROR)
+        else:
+            if not pattern: return
+            self._flags["reverse"] = True
+            try: self._DoFind(pattern, reverse=True)
+            finally: self._flags["reverse"] = False
+
+
+    def _OnReplace(self, event):
+        """Handler for searching and replacing current or new match."""
+        if not self._IsSearchable(): return
+        self._RefreshStatus()
+        try: pattern = self._MakeFindRegex()
+        except Exception as e:
+            wx.MessageBox("Invalid regular expression.\n\n%s" % e, self.Title, wx.ICON_ERROR)
+        else: pattern and self._DoReplace(pattern)
+
+
+    def _OnReplaceAll(self, event):
+        """Handler for searching and replacing all matches."""
+        if not self._IsSearchable(): return
+        self._RefreshStatus()
+        try: pattern = self._MakeFindRegex()
+        except Exception as e:
+            wx.MessageBox("Invalid regular expression.\n\n%s" % e, self.Title, wx.ICON_ERROR)
+        else: pattern and self._DoReplaceAll(pattern)
+
+
+    def _OnCount(self, event):
+        """Handler for counting all occurrences, pops up dialog with result."""
+        if not self._IsSearchable(): return
+        self._RefreshStatus()
+        try: pattern = self._MakeFindRegex()
+        except Exception as e:
+            wx.MessageBox("Invalid regular expression.\n\n%s" % e, self.Title, wx.ICON_ERROR)
+        else:
+            if not pattern: return
+            matches = set()
+            reverse0, self._flags["reverse"] = self._flags["reverse"], False
+            try:
+                startspan = startpos = None
+                while self._FindMatch(pattern, startspan=startspan, startpos=startpos):
+                    matchkey = (self._matchspan, self._matchpos)
+                    if matchkey in matches: break  # while
+                    matches.add(matchkey)
+                    startspan, startpos = matchkey
+            finally: self._flags["reverse"] = reverse0
+            wx.MessageBox("Found %s occurrence%s." %
+                          (len(matches), "" if 1 == len(matches) else "s"), self.Title)
+
+
+    def _OnClose(self, event):
+        """Handler for closing dialog, hides window."""
+        self.Hide()
+
+
+    def _DoFind(self, pattern, reverse=None):
+        """Searches and selects next match."""
+        self._RefreshStatus(searching=True)
+        self._FindMatch(pattern, reverse)
+        self._RefreshStatus(action="find")
+        self._SelectMatch()
+        self._StoreHistory()
+
+
+    def _DoReplace(self, pattern):
+        """Searches and replaces current or new match, selects next match."""
+        self._RefreshStatus(searching=True)
+        found = self._IsAtMatch(pattern)
+        if found:  # Replace selection if selected by last search
+            self._ReplaceMatch()
+        if self._FindMatch(pattern): found = True # Find and select next match, if any
+        self._RefreshStatus(action="replace", found=found)
+        self._SelectMatch()
+        self._StoreHistory()
+
+
+    def _DoReplaceAll(self, pattern):
+        """Searches and replaces all matches for pattern."""
+        self._RefreshStatus(searching=True)
+        found = anyfound = self._IsAtMatch(pattern) or self._FindMatch(pattern)
+        while found:
+            self._ReplaceMatch()
+            found = self._FindMatch(pattern)
+        self._RefreshStatus(action="replace_all", found=anyfound    )
+        self._StoreHistory()
+
+
+    def _SelectMatch(self):
+        """Selects current match in target control, or deselects current selection if no match."""
+        if not self._match:
+            if not isinstance(self._target, wx.grid.Grid):
+                self._target.SetSelection(*self._target.GetSelection()[-1:] * 2)
+            return
+        if isinstance(self._target, wx.grid.Grid):
+            self._target.GoToCell(*self._matchpos)
+        else:
+            self._target.ShowPosition(self._matchspan[0]) # Try to make whole selection visible
+            self._target.ShowPosition(self._matchspan[1])
+            self._target.SetSelection(*self._matchspan)
+
+
+    def _ReplaceMatch(self):
+        """Replaces current match in target control with entered text."""
+        text = self._ctrls[self._GetCtrlName(replace=True)].Value
+        match, span, pos = self._match, self._matchspan, self._matchpos
+        if self._flags["regex"] and (match.groups() or match.groupdict()) \
+        and re.search(r"(\\\d)|(\\g<.+>)", text):
+            refs, repls = {}, []  # Replace all backrefs like \1 in one fell swoop
+            for k, v in match.groupdict().items() or enumerate(match.groups()):
+                repls.append("\\g<%s>" % k) # \g<INDEX> and \g<NAME>
+                refs["\\g<%s>" % k] = v
+                if isinstance(k, int):
+                    repls.append("\\%s" % k) # \INDEX
+                    refs["\\%s" % k] = v
+            text = re.sub("|".join(map(re.escape, repls)), lambda m: refs[m.group(0)], text)
+
+        if isinstance(self._target, wx.grid.Grid):
+            v1 = self._target.GetCellValue(pos)
+            v2 = v1[:span[0]] + text + v1[span[1]:]
+            self._target.SetCellValue(pos[0], pos[1], v2)
+            evt = wx.grid.GridEvent(-1, wx.grid.wxEVT_GRID_CELL_CHANGED, self._target, *pos)
+            wx.PostEvent(self._target, evt)
+        else:
+            self._target.Replace(span[0], span[1], text)
+        self._status["replaced"] = self._status.get("replaced", 0) + 1
+
+
+    def _FindMatch(self, pattern, reverse=None, startspan=None, startpos=None):
+        """
+        Searches target, advances inner search state, returns whether match was found.
+
+        @param   reverse    whether searching backward, defaults to flag state
+        @param   startspan  (start, end) of text span to continue from
+        """
+        reverse = self._flags["reverse"] if reverse is None else reverse
+        direction = -1 if reverse else 1
+
+        def get_match(text):
+            match = None
+            for match in pattern.finditer(text) if reverse else (): pass
+            return match if reverse else pattern.search(text)
+
+        if isinstance(self._target, wx.grid.Grid):
+            if startspan or self._IsAtMatch(pattern):  # Continue search in remaining text of currently matched cell
+                text, span, pos = self._GetFromTarget(direction, startspan or self._matchspan, startpos or self._matchpos)
+            else:  # Start search from current cell
+                text, span, pos = self._GetFromTarget(direction=0)
+            match, wrapped = None, (False if pos else None)
+            while pos or wrapped is False:  # Wrap immediately if at grid edge
+                if pos:
+                    match = get_match(text)
+                    if match: break  # while pos
+                    text, span, pos = self._GetFromTarget(direction, startpos=pos)  # Continue search
+                if not pos and not wrapped:  # Wrap search around if not found from current position
+                    (text, span, pos), wrapped = self._GetFromTarget(direction, wrap=True), True
+                    self._status.update(wrapped=True)
+            fulltext = self._target.GetCellValue(pos) if pos else None
+        else:
+            fulltext = self._target.Value
+            if not startspan: startspan = self._matchspan if self._IsAtMatch(pattern) else None
+            text, pos, span = self._GetFromTarget(direction, startspan)
+            match = get_match(text)
+            if not match and text != fulltext:  # Wrap search around if not found in current side
+                text, pos, span = self._GetFromTarget(direction, startspan, wrap=True)
+                match = get_match(text)
+                self._status.update(wrapped=True)
+
+        matchspan = (span[0] + match.start(), span[0] + match.end()) if match else None
+        matchpos = pos if isinstance(self._target, wx.grid.Grid) else matchspan
+        self._match, self._matchspan, self._matchpos = match, matchspan, matchpos
+        self._pattern, self._text = pattern, fulltext
+        self._status.update(found=bool(match))
+        return bool(match)
+
+
+    def _GetFromTarget(self, direction=1, startspan=None, startpos=None, wrap=False):
+        """
+        Returns target text to search, and text position.
+
+        @param   direction  1 for forward, -1 for backward, 0 for current grid cell
+        @param   startpos   target position to start from if not current; (row, col) for grid
+        @param   startspan  (start, end) of text span to continue from
+        @param   wrap       start from other end in direction of given or current position
+
+        @return             (text, span, pos); text as full or remaining side in target;
+                            span as (text start, text end), cell text if grid;
+                            pos as (row, col) if grid, same as span if text
+
+        """
+        def ensure_rows(end=False):  # Tries to populate more or all rows in grid, returns row count
+            seekable = next((c for c in (self._target, self._target.Table)
+                             if callable(getattr(c, "SeekAhead", None))), None)
+            try: seekable and seekable.SeekAhead(end=end)  # Support components like SQLiteGridBase
+            except Exception: pass
+            return self._target.Table.RowsCount
+
+        def move_pos(pos, direction):  # Returns next grid cell in direction, can wrap to next row
+            MAXROW, MAXCOL = ROWS, COLS
+            row2, col2 = pos[0], pos[1] + direction
+            if col2 < 0 or col2 > MAXCOL - 1:
+                row2, col2 = row2 + (direction or 1), MAXCOL - 1 if direction < 0 else 0
+            if row2 < 0 or row2 > MAXROW - 1: MAXROW = ensure_rows(direction < 0)
+            if row2 < 0: row2 += MAXROW
+            return None if row2 < 0 or row2 > MAXROW - 1 else (row2, col2)
+
+        def ensure_pos(pos, direction=0):  # Returns next visible grid cell position, or None
+            if not any(self._target.IsColShown(x) for x in range(COLS)): return None
+            if direction: pos = move_pos(pos, direction)
+            while pos and not self._target.IsColShown(pos[1]):
+                pos = move_pos(pos, direction or 1)
+            return pos
+
+        text = pos = span = None
+
+        if isinstance(self._target, wx.grid.Grid):
+            ROWS, COLS = self._target.Table.RowsCount, self._target.Table.ColsCount
+            startpos = startpos or (self._target.GridCursorRow, self._target.GridCursorCol)
+            if wrap:
+                if direction < 0: ROWS = ensure_rows(end=True)
+                startpos = (ROWS - 1, COLS - 1) if direction < 0 else (0, 0)
+            elif not startspan:
+                startpos = ensure_pos(startpos, direction)
+            if startpos:
+                text = self._target.GetCellValue(startpos)
+                span, pos = (0, len(text)), startpos
+                if startspan:
+                    span = (0, startspan[0]) if direction < 0 else (startspan[1], len(text))
+                    text = text[span[0]:span[1]]
+        else:
+            text = self._target.Value
+            if not startspan: startspan = (self._target.InsertionPoint, ) * 2
+            span = (0, startspan[1]) if (direction < 0) ^ wrap else (startspan[1], len(text))
+            if span != (0, len(text)):
+                text = text[span[0]:span[1]]
+            pos = span
+        return text, span, pos
+
+
+    def _IsAtMatch(self, pattern):
+        """Returns whether current target selection is at last match."""
+        result = False
+        if self._matchpos:
+            if isinstance(self._target, wx.grid.Grid):
+                text, pos = None, (self._target.GridCursorRow, self._target.GridCursorCol)
+                if self._target.IsColShown(self._matchpos[1]): text = self._target.GetCellValue(pos)
+            else:
+                text, pos = self._target.Value, self._target.GetSelection()
+            result = pattern == self._pattern and text == self._text and pos == self._matchpos
+        return result
+
+
+    def _IsSearchable(self):
+        """Returns whether target exists and is searchable (enabled, and has content if grid)."""
+        if not self._target or not self._target.Enabled: return False
+        if isinstance(self._target, wx.grid.Grid):
+            return all((self._target.Table.RowsCount, self._target.Table.ColsCount))
+        return True
+
+
+    def _RefreshStatus(self, **status):
+        """Sets find / replace status colour and text to find control and status label."""
+        self._status.update(status)
+        ok = True if "action" not in status else (self._status.get("found") or self._status.get("replaced"))
+        colour = ColourManager.ColourHex(wx.SYS_COLOUR_WINDOW) if ok else self.COLOUR_NOTFOUND
+        for ctrl in map(self._ctrls.get, ("text_find", "hex_find", "text_findbig", "hex_findbig")):
+            if not ctrl.Shown or not ctrl.Enabled: continue # for ctrl
+            if isinstance(ctrl, wx.TextCtrl):
+                ctrl.SetBackgroundColour(colour)
+            else:
+                ctrl.StyleSetSpec(wx.stc.STC_STYLE_DEFAULT, "back:%s" % colour)
+                ctrl.StyleClearAll()
+            ctrl.Refresh()
+            break # for ctrl
+        status1 = self._ctrls["status"].Label
+        status2 = ""
+        if status:
+            texts = []
+            if self._status.get("replaced") and "replace_all" == self._status.get("action"):
+                texts.append("Replaced %(replaced)s occurrences" % self._status)
+            elif self._status.get("found") and isinstance(self._target, wx.grid.Grid):
+                a, b = [x + 1 for x in self._matchpos], [self._matchspan[0] + 1, self._matchspan[1]]
+                texts.append("Matched in grid cell (%s, %s), text position %s-%s" % tuple(a + b))
+            if "replaced" not in self._status \
+            and self._status.get("wrapped") and self._status.get("found"):
+                texts.append("Search wrapped around to %s" % \
+                             ("end" if self._flags["reverse"] else "beginning"))
+            if not texts and not ok: texts.append("Nothing found")
+            elif self._status.get("searching"): texts.append("Searching..")
+            status2 = ". ".join(texts) + ("." if len(texts) > 1 else "")
+        self._status.clear() 
+        if status1 != status2:
+            self._ctrls["status"].ToolTip = self._ctrls["status"].Label = status2
+            self.Layout()
+            wx.SafeYield()
+
+
+    def _StoreHistory(self):
+        """
+        Adds current search and replace values to autocomplete history, updates shared if enabled.
+        """
+        names  = [self._GetCtrlName(replace) for replace in (False, True)]
+        values = [self._ctrls[n].Value if n in self._ctrls else None for n in names]
+        for name, value in zip(("text_find", "text_repl"), values):
+            if not value or name not in self._ctrls: continue  # for
+            choices = self._ctrls[name].GetChoices()
+            choices0 = choices[:]
+            if value in choices and value != choices[0]: choices.remove(value)
+            if value not in choices: choices.insert(0, value)
+            if choices == choices0: continue  # for
+            self._ctrls[name].SetChoices(choices)
+            if self._flags["shared"]:
+                (self.FIND_TEXTS if "text_find" == name else self.REPLACE_TEXTS)[:] = choices
+
+                
+    def _LoadSharedHistory(self):
+        """Populates search and replace text control autocomplete from shared history if enabled."""
+        if not self._flags["shared"]: return
+        for n, tt in zip(("text_find", "text_repl"), (self.FIND_TEXTS, self.REPLACE_TEXTS)):
+            if n in self._ctrls and len(self._ctrls[n].Choices) != len(tt):
+                self._ctrls[n].SetChoices(tt)
 
 
 
@@ -4621,6 +5411,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
                 self.StartStyling(pos - idx)
                 self.SetStyling(2, self.STYLE_CHANGED if self._bytes[bpos] != self._bytes0[bpos] else 0)
             sself.SetSelection(pos + 1 + idx, pos + 1 + idx)
+            " @todo siin võiks ka advancida kui not self._addressed "
             cmd.Store()
         elif event.KeyCode in KEYS.INSERT and not event.HasAnyModifiers():
             if not self._fixed: event.Skip() # Disallow changing overtype if length fixed
@@ -5834,6 +6625,7 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         elif index == len(self._choices) + 1: # Clicked "Clear choices" item
             event = wx.CommandEvent(wx.wxEVT_COMMAND_LIST_DELETE_ALL_ITEMS,
                                     self.GetId())
+            event.SetEventObject(self)
             wx.PostEvent(self, event)
 
 
@@ -6478,6 +7270,13 @@ def YesNoMessageBox(message, caption, icon=wx.ICON_NONE, default=wx.YES):
     dlg = wx.MessageDialog(None, message, caption, style)
     dlg.SetOKCancelLabels("&Yes", "&No")
     return wx.YES if wx.ID_OK == dlg.ShowModal() else wx.NO
+
+
+def center_in_window(dialog, window):
+    """Centers dialog in given window."""
+    x = window.ScreenPosition[0] + (window.Size[0] - dialog.Size[0]) // 2
+    y = window.ScreenPosition[1] + max(0, (window.Size[1] - dialog.Size[1]) // 2)
+    dialog.SetPosition((x, y))
 
 
 def cmp(x, y):
