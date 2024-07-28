@@ -8810,22 +8810,26 @@ class ColumnDialog(wx.Dialog):
         """
         super(ColumnDialog, self).__init__(parent, id, title, pos, size, style, name)
 
-        self._timer    = None               # Delayed change handler
-        self._getters  = OrderedDict()      # {view name: get()}
-        self._setters  = OrderedDict()      # {view name: set(value, reset=False)}
-        self._reprers  = OrderedDict()      # {view name: get_text()}
-        self._state    = defaultdict(dict)  # {view name: {view state}}
-        self._row      = row
-        self._col      = col
-        self._rowdata  = rowdata or gridbase.GetRowData(row)
-        self._rowdata0 = gridbase.GetRowData(row, original=True)
-        self._coldatas = copy.deepcopy(gridbase.columns) # [{name, }, ]
-        self._coldata  = self._coldatas[col]
-        self._collabel = columnlabel
+        self._timer     = None               # Delayed change handler
+        self._getters   = OrderedDict()      # {view name: get()}
+        self._setters   = OrderedDict()      # {view name: set(value, reset=False)}
+        self._reprers   = OrderedDict()      # {view name: get_text()}
+        self._findctrls = {}                 # {view name: [component for FindReplaceDialog, ]}
+        self._state     = defaultdict(dict)  # {view name: {view state}}
+        self._row       = row
+        self._col       = col
+        self._rowdata   = rowdata or gridbase.GetRowData(row)
+        self._rowdata0  = gridbase.GetRowData(row, original=True)
+        self._coldatas  = copy.deepcopy(gridbase.columns) # [{name, }, ]
+        self._coldata   = self._coldatas[col]
+        self._collabel  = columnlabel
 
-        self._name     = self._coldata["name"]     # Column name
-        self._value    = self._rowdata[self._name] # Column raw value
-        self._gridbase = gridbase
+        self._name      = self._coldata["name"]     # Column name
+        self._value     = self._rowdata[self._name] # Column raw value
+        self._gridbase  = gridbase
+
+        self._dialog_find = None  # Created later, to avoid appearing in taskbar
+        self._dialog_find_unhide = False  # Whether should show dialog on opening another page
 
         button_prev  = wx.Button(self,     label="&Previous %s" % columnlabel)
         label_cols   = wx.StaticText(self, label="&Select %s:" % columnlabel)
@@ -8892,11 +8896,14 @@ class ColumnDialog(wx.Dialog):
         self.Bind(wx.EVT_CHOICE,    self._OnColumn, list_cols)
         self.Bind(wx.EVT_SIZE,      lambda e: (e.Skip(), self._SetLabel()))
         self.Bind(wx.EVT_CLOSE,     self._OnClose, id=wx.ID_CANCEL)
+        self.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self._OnChangePage, nb)
         self.Bind(controls.EVT_CALLABLE_MANAGER, self._OnUserFunctionsChanged)
+        self.Bind(wx.EVT_SHOW, self._OnShow)
+        self.Bind(wx.EVT_MENU, self._OnToggleSearch, id=wx.ID_FIND)
 
         self.MinSize = 500, 350
         self.Layout()
-        wx_accel.accelerate(self)
+        wx_accel.accelerate(self, accelerators=[(wx.ACCEL_CMD, ord('F'), wx.ID_FIND)])
 
         self._Populate(self._value, reset=True)
         self._SetLabel()
@@ -8909,7 +8916,7 @@ class ColumnDialog(wx.Dialog):
 
 
     def _MakeToolBar(self, page, name, label=None, filelabel=None, load=True, save=True,
-                     copy=True, paste=True, undo=True, redo=True):
+                     copy=True, paste=True, undo=True, redo=True, find=True):
         """Returns wx.Toolbar for page."""
         aslabel     = "" if label     == "" else " as %s" % (label or name)
         asfilelabel = "" if filelabel == "" else " as %s" % (filelabel or label or name)
@@ -8921,7 +8928,8 @@ class ColumnDialog(wx.Dialog):
         bmp4 = wx.ArtProvider.GetBitmap(wx.ART_PASTE,        wx.ART_TOOLBAR, (16, 16))
         bmp5 = wx.ArtProvider.GetBitmap(wx.ART_UNDO,         wx.ART_TOOLBAR, (16, 16))
         bmp6 = wx.ArtProvider.GetBitmap(wx.ART_REDO,         wx.ART_TOOLBAR, (16, 16))
-        bmp7 = images.ToolbarFunction.Bitmap
+        bmp7 = wx.ArtProvider.GetBitmap(wx.ART_FIND,         wx.ART_TOOLBAR, (16, 16))
+        bmp8 = images.ToolbarFunction.Bitmap
 
         tb.SetToolBitmapSize(bmp1.Size)
 
@@ -8940,7 +8948,9 @@ class ColumnDialog(wx.Dialog):
         if redo:
             tb.AddTool(wx.ID_REDO,  "", bmp6, shortHelp="Redo")
         tb.AddSeparator()
-        tb.AddTool(wx.ID_MORE, "", bmp7, shortHelp="User-defined functions\t(Alt-F)")
+        if find:
+            tb.AddTool(wx.ID_FIND, "", bmp7, shortHelp="Find in text\t(%s-F)" % controls.KEYS.NAME_CTRL)
+        tb.AddTool(wx.ID_MORE, "", bmp8, shortHelp="User-defined functions\t(Alt-F)")
         tb.Realize()
 
         tb.Bind(wx.EVT_TOOL, functools.partial(self._OnLoad,  name=name, handler=load  if callable(load)  else None), id=wx.ID_OPEN)
@@ -8949,6 +8959,7 @@ class ColumnDialog(wx.Dialog):
         tb.Bind(wx.EVT_TOOL, functools.partial(self._OnPaste, name=name, handler=paste if callable(paste) else None), id=wx.ID_PASTE)
         tb.Bind(wx.EVT_TOOL, functools.partial(self._OnUndo,  name=name, handler=undo  if callable(undo)  else None), id=wx.ID_UNDO)
         tb.Bind(wx.EVT_TOOL, functools.partial(self._OnRedo,  name=name, handler=redo  if callable(redo)  else None), id=wx.ID_REDO)
+        tb.Bind(wx.EVT_TOOL, handler=self._OnToggleSearch,  id=wx.ID_FIND) if find else None
         tb.Bind(wx.EVT_TOOL, handler=self._OnUserFunctions, id=wx.ID_MORE)
 
         return tb
@@ -9006,7 +9017,7 @@ class ColumnDialog(wx.Dialog):
 
     def _CreatePageSimple(self, notebook):
         NAME = "simple"
-        page = wx.Panel(notebook)
+        page = wx.Panel(notebook, name=NAME)
 
 
         def set_value(value, cursor=False, replace=False):
@@ -9331,6 +9342,7 @@ class ColumnDialog(wx.Dialog):
 
         self._getters[NAME] = lambda: tedit.GetValue() if tedit.Shown else nedit.GetValue()
         self._setters[NAME] = update
+        self._findctrls[NAME] = [tedit, nedit]
         state = self._state.setdefault(NAME, {"changing": True})
         tedit.SetFocus()
         wx.CallAfter(state.update, {"changing": False})
@@ -9339,7 +9351,7 @@ class ColumnDialog(wx.Dialog):
 
     def _CreatePageHex(self, notebook):
         NAME = "hex"
-        page = wx.Panel(notebook)
+        page = wx.Panel(notebook, name=NAME)
 
 
         def on_scroll(event):
@@ -9393,6 +9405,10 @@ class ColumnDialog(wx.Dialog):
                 state["skip"] = True # Avoid handling mirror event
                 self._Populate(event.EventObject.Value, skip=NAME)
                 wx.CallAfter(state.update, skip=False)
+
+        def on_focus(event):
+            event.Skip()
+            self._dialog_find.SetTarget(event.EventObject)
 
         def on_undo(*a, **kw): stchex.Undo(mirror=True)
         def on_redo(*a, **kw): stchex.Redo(mirror=True)
@@ -9460,17 +9476,20 @@ class ColumnDialog(wx.Dialog):
         stctxt.Bind(controls.EVT_CARET_POS,  on_position)
         stctxt.Bind(controls.EVT_LINE_POS,   on_scroll)
         stctxt.Bind(controls.EVT_SELECT,     on_select)
+        stchex.Bind(wx.EVT_SET_FOCUS,        on_focus)
+        stctxt.Bind(wx.EVT_SET_FOCUS,        on_focus)
 
         self._getters[NAME] = stchex.GetValue
         self._setters[NAME] = update
         self._reprers[NAME] = stchex.GetHex
+        self._findctrls[NAME] = [stchex]
         state = self._state.setdefault(NAME, {"pristine": True, "skip": False, "scrolling": {}})
         return page
 
 
     def _CreatePageJSON(self, notebook):
         NAME = "json"
-        page = wx.Panel(notebook)
+        page = wx.Panel(notebook, name=NAME)
 
 
         def validate(value, propagate=True):
@@ -9562,13 +9581,14 @@ class ColumnDialog(wx.Dialog):
 
         self._getters[NAME] = stc.GetText
         self._setters[NAME] = update
+        self._findctrls[NAME] = [stc]
         state = self._state.setdefault(NAME, {"validate": True, "changing": False})
         return page
 
 
     def _CreatePageYAML(self, notebook):
         NAME = "yaml"
-        page = wx.Panel(notebook)
+        page = wx.Panel(notebook, name=NAME)
 
 
         def validate(value, propagate=True):
@@ -9665,6 +9685,7 @@ class ColumnDialog(wx.Dialog):
 
         self._getters[NAME] = stc.GetText
         self._setters[NAME] = update
+        self._findctrls[NAME] = [stc]
         state = self._state.setdefault(NAME, {"validate": True, "changing": False})
         return page
 
@@ -9672,7 +9693,7 @@ class ColumnDialog(wx.Dialog):
     def _CreatePageBase64(self, notebook):
         NAME = "base64"
         MASK = string.digits + string.ascii_letters
-        page = wx.Panel(notebook)
+        page = wx.Panel(notebook, name=NAME)
 
 
         FONT_FACE = "Courier New" if os.name == "nt" else "Courier"
@@ -9766,13 +9787,14 @@ class ColumnDialog(wx.Dialog):
 
         self._getters[NAME] = stc.GetText
         self._setters[NAME] = update
+        self._findctrls[NAME] = [stc]
         state = self._state.setdefault(NAME, {"validate": True, "changing": False})
         return page
 
 
     def _CreatePageDate(self, notebook):
         NAME = "date"
-        page = wx.Panel(notebook)
+        page = wx.Panel(notebook, name=NAME)
 
 
         EPOCH = datetime.datetime.fromtimestamp(0, pytz.UTC)
@@ -9942,7 +9964,7 @@ class ColumnDialog(wx.Dialog):
             wx.CallAfter(state.update, {"changing": False})
 
 
-        tb      = self._MakeToolBar(page, NAME, load=False, save=False, undo=False, redo=False)
+        tb      = self._MakeToolBar(page, NAME, load=False, save=False, undo=False, redo=False, find=False)
         hint    = wx.StaticText(page)
         panel   = wx.ScrolledWindow(page)
         dcb     = wx.CheckBox(panel, label="&Date:")
@@ -10043,7 +10065,7 @@ class ColumnDialog(wx.Dialog):
 
     def _CreatePageImage(self, notebook):
         NAME = "image"
-        page = wx.Panel(notebook)
+        page = wx.Panel(notebook, name=NAME)
 
 
         FMTS = sorted(x for x in self.IMAGE_FORMATS.values() if "SVG" != x)
@@ -10198,7 +10220,7 @@ class ColumnDialog(wx.Dialog):
                 wx.CallAfter(self._Populate, v, skip=NAME)
 
 
-        tb     = self._MakeToolBar(page, NAME, save=on_save, paste=update, undo=False, redo=False)
+        tb     = self._MakeToolBar(page, NAME, save=on_save, paste=update, undo=False, redo=False, find=False)
         hint   = wx.StaticText(page)
         panel  = wx.Panel(page)
         bmp    = wx.StaticBitmap(panel)
@@ -10286,6 +10308,39 @@ class ColumnDialog(wx.Dialog):
         if self.IsModal(): wx.CallAfter(lambda: self and self.Destroy())
 
 
+    def _OnShow(self, event):
+        """Handler for showing dialog, creates find/replace dialog if not yet created."""
+        if event.Show and self._dialog_find is None:
+            self._dialog_find = controls.FindReplaceDialog(self)
+            self._dialog_find.SetIcons(self.GetIcons())
+
+
+    def _OnToggleSearch(self, event):
+        """Handler for showing or hiding find/replace dialog."""
+        name = self.notebook.GetCurrentPage().Name
+        target = next((x for x in self._findctrls.get(name, []) if x.Shown), None)
+        if target is None: return
+        self._dialog_find.SetTarget(target)
+        if not self._dialog_find.Shown and not self._dialog_find.ShownOnce:
+            controls.center_in_window(self._dialog_find, self._dialog_find.Target)
+        self._dialog_find_unhide = False
+        self._dialog_find.Show(not self._dialog_find.Shown)
+
+
+    def _OnChangePage(self, event):
+        """Handler for changing view page, reassigns find/replace dialog target or hides dialog."""
+        name = self.notebook.GetCurrentPage().Name
+        target = next((x for x in self._findctrls.get(name, []) if x.Shown), None)
+        if target is None:
+            if self._dialog_find.Shown:
+                self._dialog_find_unhide = True
+                self._dialog_find.Hide()
+            return
+        self._dialog_find.SetTarget(target)
+        if self._dialog_find_unhide: self._dialog_find.Show()
+        self._dialog_find_unhide = False
+
+
     def _OnColumn(self, event, direction=None):
         """
         Handler for selecting another column, sets current column data to parent
@@ -10304,6 +10359,9 @@ class ColumnDialog(wx.Dialog):
         self._button_next.Enabled = self._list_cols.Selection < len(self._coldatas) - 1
         self._Populate(self._rowdata[self._coldata["name"]], reset=True)
         self._SetLabel()
+        name = self.notebook.GetCurrentPage().Name
+        target = next((x for x in self._findctrls.get(name, []) if x.Shown), None)
+        if target: self._dialog_find.SetTarget(target)
 
 
     def _OnReset(self, event=None):
