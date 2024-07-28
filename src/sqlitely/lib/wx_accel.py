@@ -31,7 +31,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     19.11.2011
-@modified    23.05.2023
+@modified    26.07.2024
 ------------------------------------------------------------------------------
 """
 import functools
@@ -139,7 +139,7 @@ def collect_shortcuts(control, use_heuristics=True):
     """
 
     result  = {} # {char: [(control), (control, statictext), ], }
-    nameds  = {} # collected controls with Name {name: control, }
+    nameds  = {} # collected controls with Name {control: name.lower(), }
     statics = {} # collected StaticTexts with a shortcut {control: char, }
 
 
@@ -168,7 +168,7 @@ def collect_shortcuts(control, use_heuristics=True):
                                      ctrl.GetId()))
         if ctrl.Name:
             if DEBUG: print("Found named control %s %s." % (ctrl.Name, ctrl))
-            nameds[ctrl.Name] = ctrl
+            nameds[ctrl] = ctrl.Name.lower()
 
 
     collect_recurse(control, result, nameds, statics)
@@ -228,19 +228,19 @@ def collect_shortcuts(control, use_heuristics=True):
             result_values.add(chosen)
 
     strip_rgx = re.compile(r"(^label[_ \/.]*)|([_ \/.]*label$)", re.I)
-    nameds_lc = dict((k.lower(), v) for k, v in nameds.items())
-    for name, ctrl in nameds.items():
+    for ctrl, name in nameds.items():
         basename = strip_rgx.sub("", name).lower()
         if basename == name or not isinstance(ctrl, wx.StaticText):
             continue # for name, ctrl
-        target = nameds_lc.get(basename)
-        if not target:
+        targets = [k for k, v in nameds.items() if v == basename]
+        if not targets:
             continue # for name, ctrl
 
         key = next(iter(parse_shortcuts(ctrl)), "")
         if DEBUG:
             print("Name %s matches potential %s, key=%s." % (name, basename, key))
-        if target not in result_values:
+        for target in targets:
+            if target in result_values: continue # for target
             if target not in result.get(key, []):
                 result.setdefault(key, []).append((target, ctrl))
             result_values.add(target)
@@ -314,7 +314,7 @@ def accelerate(window, use_heuristics=True, skipclicklabels=None, accelerators=N
             elif isinstance(target, wx.ToolBar):
                 # Toolbar shortcuts are defined in tool labels and shorthelp texts
                 id_tool = parse_shortcuts(target).get(key)
-                if id_tool:
+                if id_tool and target.GetToolEnabled(id_tool):
                     event = wx.CommandEvent(wx.EVT_TOOL.typeId, id_tool)
                     event.SetEventObject(target)
                     event.SetInt(not target.GetToolState(id_tool))
@@ -351,7 +351,7 @@ def accelerate(window, use_heuristics=True, skipclicklabels=None, accelerators=N
                 skipclicklabels.add(label)
             if not key: continue # for key, targets
             ctrls = [t[0] for t in targets]
-            if DEBUG: print("Binding %s to targets %s." % (key, [type(t) for t in ctrls]))
+            if DEBUG: print("Binding %s to targets %s." % (key, [(type(t), t.Id) for t in ctrls]))
             menu_item = dummy_menu.Append(wx.ID_ANY, "&%s" % key)
             window.Bind(wx.EVT_MENU, functools.partial(eventhandler, ctrls, key),
                         menu_item)
