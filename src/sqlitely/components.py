@@ -8829,7 +8829,7 @@ class ColumnDialog(wx.Dialog):
         self._gridbase  = gridbase
 
         self._dialog_find = None  # Created later, to avoid appearing in taskbar
-        self._dialog_find_unhide = False  # Whether should show dialog on opening another page
+        self._unhide_dialog_find = False  # Whether should show dialog on opening another page
 
         button_prev  = wx.Button(self,     label="&Previous %s" % columnlabel)
         label_cols   = wx.StaticText(self, label="&Select %s:" % columnlabel)
@@ -10313,6 +10313,7 @@ class ColumnDialog(wx.Dialog):
         if event.Show and self._dialog_find is None:
             self._dialog_find = controls.FindReplaceDialog(self)
             self._dialog_find.SetIcons(self.GetIcons())
+            wx_accel.accelerate(self._dialog_find)
 
 
     def _OnToggleSearch(self, event):
@@ -10323,7 +10324,7 @@ class ColumnDialog(wx.Dialog):
         self._dialog_find.SetTarget(target)
         if not self._dialog_find.Shown and not self._dialog_find.ShownOnce:
             controls.center_in_window(self._dialog_find, self._dialog_find.Target)
-        self._dialog_find_unhide = False
+        self._unhide_dialog_find = False
         self._dialog_find.Show(not self._dialog_find.Shown)
 
 
@@ -10333,12 +10334,12 @@ class ColumnDialog(wx.Dialog):
         target = next((x for x in self._findctrls.get(name, []) if x.Shown), None)
         if target is None:
             if self._dialog_find.Shown:
-                self._dialog_find_unhide = True
+                self._unhide_dialog_find = True
                 self._dialog_find.Hide()
             return
         self._dialog_find.SetTarget(target)
-        if self._dialog_find_unhide: self._dialog_find.Show()
-        self._dialog_find_unhide = False
+        if self._unhide_dialog_find: self._dialog_find.Show()
+        self._unhide_dialog_find = False
 
 
     def _OnColumn(self, event, direction=None):
