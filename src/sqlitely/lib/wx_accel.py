@@ -31,7 +31,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     19.11.2011
-@modified    26.07.2024
+@modified    29.07.2024
 ------------------------------------------------------------------------------
 """
 import functools
@@ -126,8 +126,8 @@ def parse_shortcuts(ctrl):
 
 def collect_shortcuts(control, use_heuristics=True):
     """
-    Returns a map of detected shortcut keys and target controls under the
-    specified control.
+    Returns a map of detected shortcut keys and target controls under the specified control.
+    Skips children that are wx.TopLevelWindow instances.
 
     @param   control         the control to start from
     @param   use_heuristics  whether to use heuristic analysis to detect
@@ -153,7 +153,8 @@ def collect_shortcuts(control, use_heuristics=True):
         if hasattr(ctrl, "GetChildren"):
             children = ctrl.GetChildren()
             for i in range(len(children)):
-                collect_recurse(children[i], result, nameds, statics)
+                if not isinstance(children[i], wx.TopLevelWindow):
+                    collect_recurse(children[i], result, nameds, statics)
 
         for key in parse_shortcuts(ctrl):
             if isinstance(ctrl, wx.StaticText):
@@ -253,6 +254,17 @@ def collect_shortcuts(control, use_heuristics=True):
     return result
 
 
+def collect_windows(control):
+    """Returns a list containing given control, and any child wx.TopLevelWindow instances."""
+    result = [control]
+    stack = list(control.GetChildren()) if hasattr(control, "GetChildren") else []
+    while stack:
+        ctrl = stack.pop()
+        if isinstance(ctrl, wx.TopLevelWindow): result.append(ctrl)
+        if hasattr(ctrl, "GetChildren"): stack.extend(ctrl.GetChildren())
+    return result
+
+
 def accelerate(window, use_heuristics=True, skipclicklabels=None, accelerators=None):
     """
     Assigns global keyboard shortcuts to all controls under the specified
@@ -332,30 +344,41 @@ def accelerate(window, use_heuristics=True, skipclicklabels=None, accelerators=N
         else:
             shortcut_event.Skip(True) # Not handled by us: propagate
 
-    if hasattr(window, "__ampersand_shortcut_menu"):
-        # Remove previously created menu, if any
-        for menu_item in window.__ampersand_shortcut_menu.MenuItems:
-            if DEBUG: print("Removing dummy menu item '%s'" % menu_item.Label)
-            window.Unbind(wx.EVT_MENU, menu_item)
-        del window.__ampersand_shortcut_menu
-    accelerators = list(accelerators or [])
-    shortcuts = collect_shortcuts(window, use_heuristics)
-    if shortcuts:
+
+    all_accelerators, all_shortcuts = [], {}
+    for mywindow in collect_windows(window): # Bind events to child frames/dialogs separately
+        if hasattr(mywindow, "__ampersand_shortcut_menu"):
+            # Remove previously created menu, if any
+            for menu_item in mywindow.__ampersand_shortcut_menu.MenuItems:
+                if DEBUG: print("Removing dummy menu item '%s'" % menu_item.Label)
+                mywindow.Unbind(wx.EVT_MENU, menu_item)
+            del mywindow.__ampersand_shortcut_menu
+        myaccelerators = list(accelerators if accelerators and mywindow is window else [])
+        shortcuts = collect_shortcuts(mywindow, use_heuristics)
+        if not shortcuts:
+            if myaccelerators: mywindow.SetAcceleratorTable(wx.AcceleratorTable(myaccelerators))
+            continue # for mywindow
+
         dummy_menu = wx.Menu()
         for key, targets in shortcuts.items():
+            label_targets = {}
             for ctrl, label in [x for x in targets if len(x) > 1]:
-                if label in skipclicklabels: continue # for ctrl, label
+                label_targets.setdefault(label, []).append(ctrl)
+            for label, ctrls in label_targets.items():
+                if label in skipclicklabels: continue # for label, ctrls
                 if DEBUG:
-                    print("Binding click from label %s to %s." % (label, ctrl))
-                label.Bind(wx.EVT_LEFT_UP, functools.partial(eventhandler, [ctrl], ""))
+                    print("Binding click from label %s to %s." % (label, ctrls))
+                label.Bind(wx.EVT_LEFT_UP, functools.partial(eventhandler, ctrls, ""))
                 skipclicklabels.add(label)
             if not key: continue # for key, targets
             ctrls = [t[0] for t in targets]
             if DEBUG: print("Binding %s to targets %s." % (key, [(type(t), t.Id) for t in ctrls]))
             menu_item = dummy_menu.Append(wx.ID_ANY, "&%s" % key)
-            window.Bind(wx.EVT_MENU, functools.partial(eventhandler, ctrls, key),
-                        menu_item)
-            accelerators.append((wx.ACCEL_ALT, ord(key), menu_item.Id))
-        window.SetAcceleratorTable(wx.AcceleratorTable(accelerators))
-        window.__ampersand_shortcut_menu = dummy_menu
-    return accelerators, shortcuts
+            mywindow.Bind(wx.EVT_MENU, functools.partial(eventhandler, ctrls, key),
+                          menu_item)
+            myaccelerators.append((wx.ACCEL_ALT, ord(key), menu_item.Id))
+        mywindow.SetAcceleratorTable(wx.AcceleratorTable(myaccelerators))
+        mywindow.__ampersand_shortcut_menu = dummy_menu
+        all_accelerators.extend(myaccelerators)
+        for k, v in shortcuts.items(): all_shortcuts.setdefault(k, []).extend(v)
+    return all_accelerators, all_shortcuts
