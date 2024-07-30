@@ -100,7 +100,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    28.07.2024
+@modified    30.07.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -995,7 +995,7 @@ class FindReplaceDialog(wx.Dialog):
         }
         self._ctrls      = {}     # {name: wx.Control}
         self._sizers     = {}     # {name: wx.Sizer}
-        self._status     = {}     # {action, found, wrapped, replaced, searching}
+        self._status     = {}     # {action, found, wrapped, replaced, reverse, searching}
         self._target     = None   # wx control being searched
         self._synchidden = False  # Whether dialog was hidden when parent was hidden
         self._shownonce  = False  # Whether dialog has been shown at least once
@@ -1409,7 +1409,7 @@ class FindReplaceDialog(wx.Dialog):
         try: pattern = self._MakeFindRegex()
         except Exception as e:
             wx.MessageBox("Invalid regular expression.\n\n%s" % e, self.Title, wx.ICON_ERROR)
-        else: pattern and self._DoFind(pattern)
+        else: pattern and self._DoFind(pattern, reverse=self._flags["reverse"])
 
 
     def _OnPrevious(self, event):
@@ -1420,10 +1420,7 @@ class FindReplaceDialog(wx.Dialog):
         except Exception as e: 
             wx.MessageBox("Invalid regular expression.\n\n%s" % e, self.Title, wx.ICON_ERROR)
         else:
-            if not pattern: return
-            self._flags["reverse"] = True
-            try: self._DoFind(pattern, reverse=True)
-            finally: self._flags["reverse"] = False
+            pattern and self._DoFind(pattern, reverse=True)
 
 
     def _OnReplace(self, event):
@@ -1455,18 +1452,8 @@ class FindReplaceDialog(wx.Dialog):
             wx.MessageBox("Invalid regular expression.\n\n%s" % e, self.Title, wx.ICON_ERROR)
         else:
             if not pattern: return
-            matches = set()
-            reverse0, self._flags["reverse"] = self._flags["reverse"], False
-            try:
-                startspan = startpos = None
-                while self._FindMatch(pattern, startspan=startspan, startpos=startpos):
-                    matchkey = (self._matchspan, self._matchpos)
-                    if matchkey in matches: break  # while
-                    matches.add(matchkey)
-                    startspan, startpos = matchkey
-            finally: self._flags["reverse"] = reverse0
-            wx.MessageBox("Found %s occurrence%s." %
-                          (len(matches), "" if 1 == len(matches) else "s"), self.Title)
+            count = self._DoCount(pattern)
+            wx.MessageBox("Found %s occurrence%s." % (count, "" if 1 == count else "s"), self.Title)
 
 
     def _OnClose(self, event):
@@ -1474,11 +1461,11 @@ class FindReplaceDialog(wx.Dialog):
         self.Hide()
 
 
-    def _DoFind(self, pattern, reverse=None):
+    def _DoFind(self, pattern, reverse=False):
         """Searches and selects next match."""
         self._RefreshStatus(searching=True)
         self._FindMatch(pattern, reverse)
-        self._RefreshStatus(action="find")
+        self._RefreshStatus(action="find", reverse=reverse)
         self._SelectMatch()
         self._StoreHistory()
 
@@ -1486,11 +1473,13 @@ class FindReplaceDialog(wx.Dialog):
     def _DoReplace(self, pattern):
         """Searches and replaces current or new match, selects next match."""
         self._RefreshStatus(searching=True)
+        kwargs = dict(pattern=pattern, reverse=self._flags["reverse"])
         found = self._IsAtMatch(pattern)
         if found:  # Replace selection if selected by last search
             self._ReplaceMatch()
-        if self._FindMatch(pattern): found = True # Find and select next match, if any
-        self._RefreshStatus(action="replace", found=found)
+            kwargs.update(startspan=self._matchspan, startpos=self._matchpos)
+        if self._FindMatch(**kwargs): found = True # Find and select next match, if any
+        self._RefreshStatus(action="replace", found=found, reverse=self._flags["reverse"])
         self._SelectMatch()
         self._StoreHistory()
 
@@ -1498,12 +1487,23 @@ class FindReplaceDialog(wx.Dialog):
     def _DoReplaceAll(self, pattern):
         """Searches and replaces all matches for pattern."""
         self._RefreshStatus(searching=True)
-        found = anyfound = self._IsAtMatch(pattern) or self._FindMatch(pattern)
-        while found:
+        kwargs = dict(reverse=False, wrap=False)
+        kwargs["startpos" if isinstance(self._target, wx.grid.Grid) else "startspan"] = (0, 0)
+        while self._FindMatch(pattern, **kwargs):
             self._ReplaceMatch()
-            found = self._FindMatch(pattern)
-        self._RefreshStatus(action="replace_all", found=anyfound    )
+            kwargs.update(startspan=self._matchspan, startpos=self._matchpos)
+        self._RefreshStatus(action="replace_all", found=len(kwargs) > 3)
         self._StoreHistory()
+
+
+    def _DoCount(self, pattern):
+        """Returns count of all occurrences of pattern in target."""
+        count, kwargs = 0, dict(reverse=False, wrap=False)
+        kwargs["startpos" if isinstance(self._target, wx.grid.Grid) else "startspan"] = (0, 0)
+        while self._FindMatch(pattern, **kwargs):
+            kwargs.update(startspan=self._matchspan, startpos=self._matchpos)
+            count += 1
+        return count
 
 
     def _SelectMatch(self):
@@ -1527,7 +1527,7 @@ class FindReplaceDialog(wx.Dialog):
         if self._flags["regex"] and (match.groups() or match.groupdict()) \
         and re.search(r"(\\\d)|(\\g<.+>)", text):
             refs, repls = {}, []  # Replace all backrefs like \1 in one fell swoop
-            for k, v in match.groupdict().items() or enumerate(match.groups()):
+            for k, v in match.groupdict().items() or enumerate(match.groups(), 1):
                 repls.append("\\g<%s>" % k) # \g<INDEX> and \g<NAME>
                 refs["\\g<%s>" % k] = v
                 if isinstance(k, int):
@@ -1541,19 +1541,22 @@ class FindReplaceDialog(wx.Dialog):
             self._target.SetCellValue(pos[0], pos[1], v2)
             evt = wx.grid.GridEvent(-1, wx.grid.wxEVT_GRID_CELL_CHANGED, self._target, *pos)
             wx.PostEvent(self._target, evt)
+            self._matchspan = (span[0], span[1] + len(v2) - len(v1))
         else:
             self._target.Replace(span[0], span[1], text)
+            self._matchspan = (span[0], span[1] + len(text) - (span[1] - span[0]))
         self._status["replaced"] = self._status.get("replaced", 0) + 1
 
 
-    def _FindMatch(self, pattern, reverse=None, startspan=None, startpos=None):
+    def _FindMatch(self, pattern, reverse=False, startspan=None, startpos=None, wrap=True):
         """
         Searches target, advances inner search state, returns whether match was found.
 
-        @param   reverse    whether searching backward, defaults to flag state
+        @param   reverse    whether searching backward
         @param   startspan  (start, end) of text span to continue from
+        @param   startpos   (row, col) of target grid position to start from if not current
+        @param   wrap       wrap search around if not found from current position
         """
-        reverse = self._flags["reverse"] if reverse is None else reverse
         direction = -1 if reverse else 1
 
         def get_match(text):
@@ -1562,17 +1565,19 @@ class FindReplaceDialog(wx.Dialog):
             return match if reverse else pattern.search(text)
 
         if isinstance(self._target, wx.grid.Grid):
-            if startspan or self._IsAtMatch(pattern):  # Continue search in remaining text of currently matched cell
-                text, span, pos = self._GetFromTarget(direction, startspan or self._matchspan, startpos or self._matchpos)
+            if startspan or startpos or self._IsAtMatch(pattern):  # Continue in remaining cell text
+                mydirection = 0 if startpos and not startspan else direction
+                text, span, pos = self._GetFromTarget(mydirection, startspan or self._matchspan,
+                                                      startpos or self._matchpos)
             else:  # Start search from current cell
                 text, span, pos = self._GetFromTarget(direction=0)
             match, wrapped = None, (False if pos else None)
-            while pos or wrapped is False:  # Wrap immediately if at grid edge
+            while pos or (wrap and wrapped is False):  # Wrap immediately if at grid edge
                 if pos:
                     match = get_match(text)
                     if match: break  # while pos
                     text, span, pos = self._GetFromTarget(direction, startpos=pos)  # Continue search
-                if not pos and not wrapped:  # Wrap search around if not found from current position
+                if not pos and (wrap and not wrapped):  # Wrap search around if not found this side
                     (text, span, pos), wrapped = self._GetFromTarget(direction, wrap=True), True
                     self._status.update(wrapped=True)
             fulltext = self._target.GetCellValue(pos) if pos else None
@@ -1581,7 +1586,7 @@ class FindReplaceDialog(wx.Dialog):
             if not startspan: startspan = self._matchspan if self._IsAtMatch(pattern) else None
             text, pos, span = self._GetFromTarget(direction, startspan)
             match = get_match(text)
-            if not match and text != fulltext:  # Wrap search around if not found in current side
+            if not match and wrap and text != fulltext:  # Wrap search around if not found this side
                 text, pos, span = self._GetFromTarget(direction, startspan, wrap=True)
                 match = get_match(text)
                 self._status.update(wrapped=True)
@@ -1621,7 +1626,6 @@ class FindReplaceDialog(wx.Dialog):
             if col2 < 0 or col2 > MAXCOL - 1:
                 row2, col2 = row2 + (direction or 1), MAXCOL - 1 if direction < 0 else 0
             if row2 < 0 or row2 > MAXROW - 1: MAXROW = ensure_rows(direction < 0)
-            if row2 < 0: row2 += MAXROW
             return None if row2 < 0 or row2 > MAXROW - 1 else (row2, col2)
 
         def ensure_pos(pos, direction=0):  # Returns next visible grid cell position, or None
@@ -1650,7 +1654,7 @@ class FindReplaceDialog(wx.Dialog):
         else:
             text = self._target.Value
             if not startspan: startspan = (self._target.InsertionPoint, ) * 2
-            span = (0, startspan[1]) if (direction < 0) ^ wrap else (startspan[1], len(text))
+            span = (0, startspan[0]) if (direction < 0) ^ wrap else (startspan[1], len(text))
             if span != (0, len(text)):
                 text = text[span[0]:span[1]]
             pos = span
@@ -1698,13 +1702,14 @@ class FindReplaceDialog(wx.Dialog):
             texts = []
             if self._status.get("replaced") and "replace_all" == self._status.get("action"):
                 texts.append("Replaced %(replaced)s occurrences" % self._status)
-            elif self._status.get("found") and isinstance(self._target, wx.grid.Grid):
+            elif self._status.get("found") and not self._status.get("replaced") \
+            and isinstance(self._target, wx.grid.Grid):
                 a, b = [x + 1 for x in self._matchpos], [self._matchspan[0] + 1, self._matchspan[1]]
                 texts.append("Matched in grid cell (%s, %s), text position %s-%s" % tuple(a + b))
             if "replaced" not in self._status \
             and self._status.get("wrapped") and self._status.get("found"):
                 texts.append("Search wrapped around to %s" % \
-                             ("end" if self._flags["reverse"] else "beginning"))
+                             ("end" if self._status.get("reverse") else "beginning"))
             if not texts and not ok: texts.append("Nothing found")
             elif self._status.get("searching"): texts.append("Searching..")
             status2 = ". ".join(texts) + ("." if len(texts) > 1 else "")
