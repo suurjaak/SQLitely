@@ -2947,6 +2947,8 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
 
     def _OnFind(self, event):
         """Handler for toggling find dialog in data grid."""
+        if not self._dialog_find.Shown and not self._dialog_find.ShownOnce:
+            controls.center_in_window(self._dialog_find, self._dialog_find.Target)
         self._dialog_find.Show(not self._dialog_find.Shown)
 
 
