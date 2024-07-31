@@ -1015,6 +1015,7 @@ class FindReplaceDialog(wx.Dialog):
         self.Fit()
         self.MinSize = (450, self.Size.Height)
         self._ctrls["hex_find"].MinSize = self._ctrls["text_find"].Size
+        self._ctrls["status"].MaxSize = (450 - self._ctrls["button_multi"].Size.Width - 30, -1)
 
 
     def Show(self, show=True):
@@ -1712,10 +1713,11 @@ class FindReplaceDialog(wx.Dialog):
                              ("end" if self._status.get("reverse") else "beginning"))
             if not texts and not ok: texts.append("Nothing found")
             elif self._status.get("searching"): texts.append("Searching..")
-            status2 = ". ".join(texts) + ("." if len(texts) > 1 else "")
+            status2 = ".\n".join(texts) + ("." if len(texts) > 1 else "")
         self._status.clear() 
         if status1 != status2:
             self._ctrls["status"].ToolTip = self._ctrls["status"].Label = status2
+            self._ctrls["status"].Wrap(self._ctrls["status"].MaxSize.Width)
             self.Layout()
             wx.SafeYield()
 
