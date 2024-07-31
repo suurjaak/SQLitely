@@ -1222,6 +1222,7 @@ class FindReplaceDialog(wx.Dialog):
         sizer_grid.Add(button_replall,  pos=(1 + repl, 2))                         if repl else None
         sizer_grid.Add(button_count,    pos=(2 + repl, 2))
         sizer_grid.Add(button_cancel,   pos=(3 + repl, 2))
+        sizer_grid.Add(label_status,    pos=(4 + repl, 0), span=(1, 2), flag=wx.ALIGN_BOTTOM)
         sizer_grid.Add(button_multi,    pos=(4 + repl, 2))
         sizer_grid.Add(sizer_bigedits,  pos=(5 + repl, 0), span=(1, 3), flag=wx.GROW)
 
@@ -1229,7 +1230,6 @@ class FindReplaceDialog(wx.Dialog):
         sizer_grid.AddGrowableRow(5 + repl)
         sizer_padding.Add(sizer_grid, border=5, flag=wx.LEFT | wx.GROW)
         self.Sizer.Add(sizer_padding, border=5, flag=wx.ALL | wx.GROW)
-        self.Sizer.Add(label_status, border=5, flag=wx.LEFT | wx.RIGHT | wx.BOTTOM)
 
         repl_ctrls = dict(label_repl=label_repl,       label_replbig=label_replbig, 
                           text_repl=text_repl,         hex_repl=hex_repl, 
