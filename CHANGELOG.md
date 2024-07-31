@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.4, 2024-07-28
+2.4, 2024-07-31
 ---------------
 - add support for generated columns
 - add find/replace dialog to data grids and column editors and database schema text
@@ -9,6 +9,7 @@ CHANGELOG
 - upgrade ANTLR version from 4.9 to 4.13
 - show STRICT checkbox for STRICT table in schema editor even if current SQLite does not support it
 - add ANY as possible column type if SQLite version supports STRICT
+- improve converting changed values in table grids to original type for untyped columns
 - fix compatibility issues with Python 3.10+
 - fix opening third-party license link in snaps
 

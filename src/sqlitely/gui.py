@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.07.2024
+@modified    31.07.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1852,6 +1852,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             dummygridbase.name = "dummy"
             dummygridbase.KEY_NEW = components.SQLiteGridBase.KEY_NEW
             dummygridbase.GetRowData = lambda *a, **kw: dict(rowdata)
+            dummygridbase.GetAffinity = lambda c, *_, **__: database.Database.get_affinity(cols[c])
 
             def onclose(event):
                 event.Skip()

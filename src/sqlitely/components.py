@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.07.2024
+@modified    31.07.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -253,6 +253,25 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             wx.PostEvent(self.View, GridBaseEvent(wx.ID_ANY, refresh=True))
 
 
+    def GetAffinity(self, col, row=None):
+        """
+        Returns column type affinity, e.g. "REAL" for "FLOAT".
+
+        Tries auto-detecting from existing row data if column is untyped.
+        """
+        coldata = self.columns[col] if col < len(self.columns) else None
+        if coldata is None: return None
+        if "type" in coldata or row is None: return self.db.get_affinity(coldata)
+
+        self.SeekToRow(row)
+        if row < self.GetNumberRows():
+            data = self.rows_current[row]
+            if data[self.KEY_ID] in self.rows_backup: data = self.rows_backup[data[self.KEY_ID]]
+            if isinstance(data[coldata["name"]], six.integer_types): return "INTEGER"
+            if isinstance(data[coldata["name"]], float):             return "FLOAT"
+        return "BLOB"
+
+
     def GetRowLabelValue(self, row):
         """Returns row label value, with cursor arrow if grid cursor on row."""
         pref = u"\u25ba " if self.View and row == self.View.GridCursorRow else ""
@@ -282,8 +301,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 value = self.rows_current[row][self.columns[col]["name"]]
                 if sys.version_info < (3, ) and type(value) is buffer:  # Py2
                     value = str(value).decode("latin1")
-        if value and isinstance(value, six.string_types) \
-        and "BLOB" == self.db.get_affinity(self.columns[col]):
+        if value and isinstance(value, six.string_types) and "BLOB" == self.GetAffinity(col):
             # Text editor does not support control characters or null bytes.
             value = util.to_unicode(value).encode("unicode-escape").decode("latin1")
         return value
@@ -394,15 +412,15 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
         if noconvert: col_value = val
         else:
-            col_value = None
-            if self.db.get_affinity(self.columns[col]) in ("INTEGER", "REAL"):
+            col_value, affinity = None, self.GetAffinity(col, row)
+            if affinity in ("INTEGER", "REAL"):
                 if val not in ("", None):
                     try:
                         valc = val.replace(",", ".") # Allow comma separator
                         col_value = float(valc) if ("." in valc) else util.to_long(val)
                     except Exception:
                         col_value = val
-            elif "BLOB" == self.db.get_affinity(self.columns[col]) and hasattr(val, "decode"):
+            elif "BLOB" == affinity and hasattr(val, "decode"):
                 # Text editor does not support control characters or null bytes.
                 try: col_value = val.decode("unicode-escape")
                 except UnicodeError: pass # Text is not valid escaped Unicode
@@ -418,8 +436,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             backup = self.rows_backup.get(idx)
             if backup:
                 data[self.columns[col]["name"]] = col_value
-                if all(data[c["name"]] == backup[c["name"]]
-                       for c in self.columns):
+                if all(data[c["name"]] == backup[c["name"]] for c in self.columns):
                     del self.rows_backup[idx]
                     self.idx_changed.remove(idx)
                     data[self.KEY_CHANGED] = False
@@ -691,7 +708,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         """
         value = val
         rows_before = self.GetNumberRows()
-        if self.db.get_affinity(self.columns[col]) in ("INTEGER", "REAL"):
+        if self.GetAffinity(col) in ("INTEGER", "REAL"):
             value = val.replace(",", ".").strip() # Allow comma for decimals
         if value: self.filters[col] = value
         else: self.filters.pop(col, None)
@@ -8038,7 +8055,7 @@ class DataDialog(wx.Dialog):
             label = wx.StaticText(panel, style=wx.ST_ELLIPSIZE_END,
                                   label=name + ":", name="label_data_" + name)
             label.MaxSize = 100, -1
-            resizable, rw = gridbase.db.get_affinity(coldata) in ("TEXT", "BLOB"), None
+            resizable, rw = gridbase.GetAffinity(i, row) in ("TEXT", "BLOB"), None
             style = wx.TE_RICH | wx.TE_PROCESS_ENTER | (wx.TE_MULTILINE if resizable else 0)
             edit = controls.HintedTextCtrl(panel, escape=False, adjust=True, style=style,
                                            name="data_" + name)
@@ -8263,7 +8280,7 @@ class DataDialog(wx.Dialog):
         name, value = self._columns[col]["name"], c.Value
         if self._ignore_change or not value and self._data[name] is None: return
 
-        if database.Database.get_affinity(self._columns[col]) in ("INTEGER", "REAL"):
+        if self._gridbase.GetAffinity(col, self._row) in ("INTEGER", "REAL"):
             try: # Try converting to number
                 valc = value.replace(",", ".") # Allow comma separator
                 value = float(valc) if ("." in valc) else util.to_long(value)
@@ -8446,7 +8463,7 @@ class DataDialog(wx.Dialog):
                         for y in x["name"])
             item_null.Enabled = "notnull" not in coldata or is_pk and self._data[self._gridbase.KEY_NEW]
             item_default.Enabled = "default" in coldata
-            x = self._gridbase.db.get_affinity(coldata) not in ("INTEGER", "REAL")
+            x = self._gridbase.GetAffinity(col, self._row) not in ("INTEGER", "REAL")
             item_date.Enabled = item_datetime.Enabled = item_stamp.Enabled = x
 
 
@@ -8975,12 +8992,12 @@ class ColumnDialog(wx.Dialog):
         if not self: return
         if value is None and "notnull" in self._coldata and not reset: return
 
-        v, affinity = value, database.Database.get_affinity(self._coldata)
+        v, affinity = value, self._gridbase.GetAffinity(self._col, self._row)
         if affinity in ("INTEGER", "REAL") and not isinstance(v, (int, float)):
             try:
                 valc = value.replace(",", ".") # Allow comma separator
                 v = float(valc) if ("." in valc) else util.to_long(value)
-                if isinstance(v, float) and (not v % 1 or "INTEGER" == affinity):
+                if isinstance(v, float) and ("INTEGER" == affinity):
                     v = util.to_long(v)
                 if util.is_long(v) and -2**31 <= v < 2**31: v = int(v)
             except Exception: pass
@@ -9142,7 +9159,7 @@ class ColumnDialog(wx.Dialog):
                         for y in x["name"])
             item_null   .Enable("notnull" not in self._coldata or is_pk and self._rowdata[self._gridbase.KEY_NEW])
             item_default.Enable("default" in self._coldata)
-            x = database.Database.get_affinity(self._coldata) not in ("INTEGER", "REAL")
+            x = self._gridbase.GetAffinity(self._col, self._row) not in ("INTEGER", "REAL")
             item_date.Enabled = item_datetime.Enabled = item_stamp.Enabled = x
 
             menu.Bind(wx.EVT_MENU, on_null,     item_null)
@@ -9284,7 +9301,7 @@ class ColumnDialog(wx.Dialog):
 
         def update(value, reset=False):
             state["changing"] = True
-            num = database.Database.get_affinity(self._coldata) in ("INTEGER", "REAL")
+            num = self._gridbase.GetAffinity(self._col, self._row) in ("INTEGER", "REAL")
             tedit.Shown, nedit.Shown = not num, num
             edit = tedit if tedit.Shown else nedit
             v = "" if value is None else util.to_unicode(value)
@@ -9908,7 +9925,7 @@ class ColumnDialog(wx.Dialog):
                 elif isinstance(value, datetime.date): d = value
                 elif isinstance(value, datetime.time): t = value
             else:
-                if database.Database.get_affinity(self._coldata) in ("INTEGER", "REAL"):
+                if self._gridbase.GetAffinity(self._col, self._row) in ("INTEGER", "REAL"):
                     state["numeric"] = True
                     dtlabel.Font, tslabel.Font = font_normal, font_bold
                     try: x = datetime.datetime.fromtimestamp(float(value), pytz.UTC)
