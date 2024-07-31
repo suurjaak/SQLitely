@@ -1654,7 +1654,7 @@ class FindReplaceDialog(wx.Dialog):
         else:
             text = self._target.Value
             if not startspan: startspan = (self._target.InsertionPoint, ) * 2
-            span = (0, startspan[0]) if (direction < 0) ^ wrap else (startspan[1], len(text))
+            span = (0, startspan[wrap]) if (direction < 0) ^ wrap else (startspan[not wrap], len(text))
             if span != (0, len(text)):
                 text = text[span[0]:span[1]]
             pos = span
