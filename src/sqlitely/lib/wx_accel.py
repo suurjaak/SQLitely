@@ -31,7 +31,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     19.11.2011
-@modified    29.07.2024
+@modified    09.08.2024
 ------------------------------------------------------------------------------
 """
 import functools
@@ -321,7 +321,10 @@ def accelerate(window, use_heuristics=True, skipclicklabels=None, accelerators=N
                 # Need to change value, as event goes directly to handler
                 if target.Is3State():
                     target.Set3StateValue(CHK_3STATE_NEXT[target.Get3StateValue()])
-                else: target.Value = not target.Value
+                    event.SetInt(target.Get3StateValue())
+                else:
+                    target.Value = not target.Value
+                    event.SetInt(target.Value)
                 target.SetFocus()
             elif isinstance(target, wx.ToolBar):
                 # Toolbar shortcuts are defined in tool labels and shorthelp texts
