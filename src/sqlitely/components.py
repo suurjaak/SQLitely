@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    31.07.2024
+@modified    22.08.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -155,7 +155,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         self.sort_ascending = None
         self.complete = False
         self.hiddens = {} # {col index: bool, }
-        self.filters = {} # {col index: value, }
+        self.filters = {} # {col index: {filtered, inverted, value}, }
         self.attrs = {}   # {("default", "null"): wx.grid.GridCellAttr, }
 
         if not self.is_query:
@@ -193,12 +193,16 @@ class SQLiteGridBase(wx.grid.GridTableBase):
     def GetNumberRows(self, total=False, present=False):
         """
         Returns the number of grid rows, currently retrieved if present or query
-        or filtered else total row count.
+        or filtered else total row count (wx.grid.GridTableBase override).
         """
-        return len(self.rows_current) if (present or self.filters) and not total else self.row_count
+        return len(self.rows_current) \
+               if (present or any(x.get("filtered") for x in self.filters.values())) and not total \
+               else self.row_count
 
 
-    def GetNumberCols(self): return len(self.columns)
+    def GetNumberCols(self):
+        """Returns the total number of grid columns (wx.grid.GridTableBase override)."""
+        return len(self.columns)
 
 
     def IsComplete(self):
@@ -273,7 +277,10 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
 
     def GetRowLabelValue(self, row):
-        """Returns row label value, with cursor arrow if grid cursor on row."""
+        """
+        Returns row label value, with cursor arrow if grid cursor on row
+        (wx.grid.GridTableBase override).
+        """
         pref = u"\u25ba " if self.View and row == self.View.GridCursorRow else ""
         return "%s%s  " % (pref, row + 1)
 
@@ -281,7 +288,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
     def GetColLabelValue(self, col):
         """
         Returns column label value, with cursor arrow if grid cursor on col,
-        and sort arrow if grid sorted by column.
+        and sort arrow if grid sorted by column (wx.grid.GridTableBase override).
         """
         EM3, EM4, TRIANGLE = u"\u2004", u"\u2005", u"\u25be"
         pref, suf = EM3 + EM4, EM4 * 3
@@ -289,11 +296,47 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         if self.View and col == self.View.GridCursorCol \
         and len(self.columns) > 1 and self.GetNumberRows(): pref = TRIANGLE
         label = u" %s %s %s " % (pref, util.unprint(self.columns[col]["name"]), suf)
-        if col in self.filters: label += u'\nhas "%s"' % self.filters[col]
+        filtertext = self.GetColFilterText(col, name=False, ellipsis=10)
+        if filtertext:
+            label += u"\n%s" % filtertext
         return label
 
 
+    def GetColFilterText(self, col, sql=True, name=True, ellipsis=0):
+        """
+        Returns current column filter text for display, or empty string if no filter.
+
+        @param   sql       whether to return valid SQL
+        @param   name      whether to include column name
+        @param   ellipsis  maximum length to ellipsize filter value from
+        """
+        result = ""
+        if not self.filters.get(col, {}).get("filtered"): return result
+
+        value, inverted = (self.filters[col][k] for k in ("value", "inverted"))
+
+        if value is not None and ellipsis: value = util.ellipsize(value, ellipsis)
+        if sql:
+            if value is None: result = "IS NOT NULL" if inverted else "IS NULL"
+            else:
+                value = grammar.quote(value, force=True)[1:-1]
+                result = '%sLIKE "%%%s%%"' % ("NOT " if inverted else "", value)
+        else:
+            if value is None: result = "NOT NULL" if inverted else "NULL"
+            else:
+                value = grammar.quote(value, force=True)[1:-1]
+                result = 'LIKE "%s"' % value
+                if inverted: result = "NOT %s" % result
+        if name:
+            result = "%s %s" % (grammar.quote(self.columns[col]["name"]), result)
+        return result
+
+
     def GetValue(self, row, col):
+        """
+        Returns grid value in specified cell, decoding binary buffers to string
+        (wx.grid.GridTableBase override).
+        """
         value = None
         if row < self.row_count:
             self.SeekToRow(row)
@@ -327,7 +370,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         """
         if isinstance(col, six.integer_types) and 0 <= col < len(self.columns):
             hide = not show
-            if col not in self.hiddens or self.hiddens[col] != hide:
+            if hide != self.hiddens.get(col, False):
                 self.hiddens[col] = hide
                 (self.View.HideCol if hide else self.View.ShowCol)(col)
                 return True
@@ -386,13 +429,9 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                                          grammar.quote(self.name))
         where, order = "", ""
 
-        if filter and self.filters:
-            part = ""
-            for col, filter_value in self.filters.items():
-                column_data = self.columns[col]
-                v = grammar.quote(filter_value, force=True)[1:-1]
-                part = '%s LIKE "%%%s%%"' % (column_data["name"], v)
-                where += (" AND " if where else "WHERE ") + part
+        for col in self.filters if filter else ():
+            part = self.GetColFilterText(col)
+            if part: where += (" AND " if where else "WHERE ") + part
 
         if sort and self.sort_column is not None:
             order = "ORDER BY %s%s" % (
@@ -406,7 +445,10 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
 
     def SetValue(self, row, col, val, noconvert=False):
-        """Sets grid cell value and marks row as changed, if table grid."""
+        """
+        Sets grid cell value and marks row as changed, if table grid
+        (wx.grid.GridTableBase override).
+        """
         if self.is_query or "view" == self.category or row >= self.row_count:
             return
 
@@ -516,14 +558,19 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         self.NotifyViewChange(rows_before)
 
 
-    def GetFilterSort(self):
+    def GetFilterSort(self, active=None):
         """
         Returns current filter and sort state,
-        as {?"sort": {col index: direction}, ?"filter": {col index: value}}.
+        as {?"sort": {col index: direction},
+            ?"filter": {col index: {value, ?filtered, ?inverted}}}.
+
+        @param   active  if true, return only active filters if any
         """
         result = {}
         if self.sort_column: result["sort"]   = {self.sort_column: self.sort_ascending}
-        if self.filters:     result["filter"] = dict(self.filters)
+        if self.filters:
+            filters = {i: dict(v) for i, v in self.filters.items() if not active or v["filtered"]}
+            if filters: result["filter"] = filters
         return result
 
 
@@ -539,8 +586,9 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             if name in self.columns:
                 self.sort_column, self.sort_ascending = name, asc
         if "filter" in state:
-            self.filters = {i: x for i, x in (state["filter"] or {}).items()
-                            if i < len(self.columns)}
+            DEFAULTS = {"inverted": False, "filtered": False, "value": ""}
+            self.filters = {i: {k: x.get(k, v) for k, v in DEFAULTS.items()}
+                            for i, x in (state["filter"] or {}).items() if i < len(self.columns)}
         self.Filter(rows_before)
 
 
@@ -554,9 +602,9 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         if self.sort_column:
             result["Sorted by"] = grammar.quote(colnames[self.sort_column]) + \
                                   ("" if self.sort_ascending else " in reverse")
-        if self.filters:
-            result["Filtered by"] = " and ".join("%s LIKE '%%%s%%'" % (colnames[i], v)
-                                                 for i, v in self.filters.items())
+        if any(x.get("filtered") for x in self.filters.values()):
+            texts = (self.GetColFilterText(c) for c in self.filters)
+            result["Filtered by"] = " and ".join(filter(bool, texts))
         if 0 < sum(self.hiddens.values()) < (len(self.columns) + (not partial_hidden)):
             result["Hidden columns"] = ", ".join(grammar.quote(colnames[i])
                                                  for i, v in self.hiddens.items() if v)
@@ -576,7 +624,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
 
     def GetAttr(self, row, col, kind):
-        """Returns wx.grid.GridCellAttr for table cell."""
+        """Returns wx.grid.GridCellAttr for table cell (wx.grid.GridTableBase override)."""
         if not self.attrs: self.PopulateAttrs()
 
         key = ["default"]
@@ -626,7 +674,9 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
 
     def InsertRows(self, row, numRows):
-        """Inserts new, unsaved rows at position 0 (row is ignored)."""
+        """
+        Inserts new, unsaved rows at position 0 (row is ignored) (wx.grid.GridTableBase override)
+        """
         rows_before = self.GetNumberRows()
         for _ in range(numRows):
             # Construct empty dict from column names
@@ -648,7 +698,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
 
     def DeleteRows(self, row, numRows):
-        """Deletes rows from a specified position."""
+        """Deletes rows from a specified position (wx.grid.GridTableBase override)."""
         if row + numRows - 1 >= self.row_count: return False
 
         self.SeekToRow(row + numRows - 1)
@@ -699,19 +749,19 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         wx.PostEvent(self.View, GridBaseEvent(wx.ID_ANY, refresh=True))
 
 
-    def AddFilter(self, col, val):
+    def AddFilter(self, col, val, inverted=False):
         """
         Adds a filter to the grid data on the specified column.
 
-        @param   col   column index
-        @param   val   value to filter by, matched by substring
+        @param   col       column index
+        @param   val       value to filter by, matched by substring or NULL
+        @param   inverted  whether filter is inverted as NOT
         """
         value = val
         rows_before = self.GetNumberRows()
-        if self.GetAffinity(col) in ("INTEGER", "REAL"):
+        if val and self.GetAffinity(col) in ("INTEGER", "REAL"):
             value = val.replace(",", ".").strip() # Allow comma for decimals
-        if value: self.filters[col] = value
-        else: self.filters.pop(col, None)
+        self.filters[col] = {"value": value, "filtered": True, "inverted": inverted}
         self.Filter(rows_before)
 
 
@@ -719,14 +769,14 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         """Removes filter on the specified column, if any."""
         if col not in self.filters: return
         rows_before = self.GetNumberRows()
-        self.filters.pop(col)
+        self.filters[col]["filtered"] = False
         self.Filter(rows_before)
 
 
     def ClearFilter(self, refresh=True):
         """Clears all added filters."""
         rows_before = self.GetNumberRows()
-        self.filters.clear()
+        for x in self.filters.values(): x["filtered"] = False
         if refresh: self.Filter(rows_before)
 
 
@@ -965,24 +1015,82 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
     def OnFilter(self, col):
         """Opens popup dialog for changing column filter."""
-        current_filter = six.text_type(self.filters[col]) if col in self.filters else ""
-        name = fmt_entity(self.columns[col]["name"])
-        dlg = wx.TextEntryDialog(self.View,
-                  "Filter column %s by:" % name, "Filter", value=current_filter,
-                  style=wx.OK | wx.CANCEL)
+        label = fmt_entity(self.columns[col]["name"], limit=30)
+        current_filter = dict(self.filters.get(col, {}))
+        current_filter.update(name=self.columns[col]["name"],
+                              filtered=current_filter.get("filtered", True))
+        row = self.View.GridCursorRow
+        filter_menu = [
+            {"label": "Set value from &this column in current row #%s" % (row + 1),
+             "value": lambda x: self.GetValue(row, col), "disabled": row < 0},
+            {"label": "Set value from &focused column #%s in current row #%s" %
+                      (self.View.GridCursorCol + 1, row + 1),
+             "value": lambda x: self.GetValue(row, self.View.GridCursorCol),
+             "disabled": row < 0 or self.View.GridCursorCol < 0},
+            {"label": "Set &NULL", "value": None},
+        ]
+        filter_hint = lambda x: "<NULL>" if x["value"] is None else ""
+        dlg = controls.FilterEntryDialog(self.View, current_filter,
+                                         message="&Filter column %s by:" % label,
+                                         filter_menu=filter_menu, filter_hint=filter_hint)
         dlg.CenterOnParent()
-        if wx.ID_OK != dlg.ShowModal(): return
+        with dlg:
+            dlg_result, new_filter = dlg.ShowModal(), dlg.GetItem()
+        if wx.ID_OK != dlg_result: return
 
-        new_filter = dlg.GetValue()
-        if new_filter and new_filter != current_filter:
-            busy = controls.BusyPanel(self.View, 'Filtering column %s by "%s".' %
-                                      (name, new_filter))
-            try: self.AddFilter(col, new_filter)
-            finally: busy.Close()
-            self.View.Layout() # React to grid size change
-        elif not new_filter and current_filter:
-            self.RemoveFilter(col)
-            self.View.Layout() # React to grid size change
+        DEFAULTS = {"inverted": False, "filtered": False, "value": ""}
+        if any(new_filter[k] != current_filter.get(k, v) for k, v in DEFAULTS.items()):
+            if new_filter["filtered"]:
+                text = self.GetColFilterText(col, sql=False, name=False, ellipsis=10)
+                busy = controls.BusyPanel(self.View, 'Filtering column %s by "%s".' % (label, text))
+                try: self.AddFilter(col, new_filter["value"], new_filter["inverted"])
+                finally: busy.Close()
+            else:
+                if self.filters.get(col, {}).get("filtered"):
+                    self.RemoveFilter(col)
+                    self.View.Layout() # React to grid size change
+                self.filters[col] = {k: new_filter[k] for k in DEFAULTS}
+
+
+    def OnColumnFilters(self):
+        """Opens popup dialog to hide or filter columns in bulk, returns whether choices changed."""
+        result = False
+
+        columns = [dict(x) for x in self.columns]
+        for col, coldata in enumerate(columns):
+            coldata.update(self.filters.get(col, {}))
+            coldata["hidden"] = self.hiddens.get(col, False)
+            coldata["label"] = fmt_entity(coldata["name"])[1:-1]
+        row, col = self.View.GridCursorRow, self.View.GridCursorCol
+        filter_menu = [
+            {"label": "Set value from &this column in current row #%s" % (row + 1),
+             "value": lambda x, i: self.GetValue(row, i), "disabled": row < 0},
+            {"label": "Set value from &focused column #%s in current row #%s" % (col + 1, row + 1),
+             "value": lambda x, i: self.GetValue(row, col), "disabled": row < 0 or col < 0},
+            {"label": "Set &NULL", "value": None},
+        ]
+        filter_hint = lambda x, i: "<NULL>" if x["value"] is None else ""
+        dlg = controls.ItemFilterDialog(self.View, items=columns, title="Show and filter columns",
+                                        filter_menu=filter_menu, filter_hint=filter_hint)
+        dlg.CenterOnParent()
+        with dlg: 
+            dlg_result, columns2 = dlg.ShowModal(), dlg.GetItems()
+        if wx.ID_OK != dlg_result: return result
+
+        filters2 = copy.deepcopy(self.filters)
+        DEFAULTS = {"inverted": False, "filtered": False, "value": ""}
+        for col, (coldata1, coldata2) in enumerate(zip(columns, columns2)):
+            if self.ShowColumn(col, not coldata2["hidden"]):
+                result = True
+            coldata1_full = {k: coldata1.get(k, v) for k, v in DEFAULTS.items()}
+            coldata2_full = {k: coldata2[k] for k in DEFAULTS}
+            if coldata1_full != coldata2_full:
+                filters2[col] = coldata2_full
+        if filters2 != self.filters:
+            self.SetFilterSort({"filter": filters2})
+            result = True
+
+        return result
 
 
     def OnGoto(self, event):
@@ -1258,8 +1366,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 label += u"\t\u1d18\u1d0b" # Unicode small caps "PK"
             elif any(coldata["name"] in x["name"] for x in fks):
                 label += u"\t\u1da0\u1d4f" # Unicode small "fk"
-            current_filter = six.text_type(self.filters[col]) if col in self.filters else ""
-            fltrval = '"%s"' % util.ellipsize(current_filter, 10) if current_filter else ".."
+            current_filter, fltrval = "", ".."
+            fltrval = self.GetColFilterText(col, sql=False, name=False, ellipsis=10) or ".."
             menu_cols.Append(wx.ID_ANY, label or " ", submenu, tip) # Menu label cannot be empty
             item_col_copy = wx.MenuItem(submenu, -1, "&Copy column value")
             item_col_name = wx.MenuItem(submenu, -1, "Copy column &name")
@@ -1271,7 +1379,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             submenu.Append(item_col_goto)
             submenu.Append(item_col_fltr)
             submenu.Append(item_col_hide)
-            item_col_fltr.Check(bool(current_filter))
+            item_col_fltr.Check(fltrval != "..")
             item_col_hide.Check(bool(self.hiddens.get(col)))
             menu.Bind(wx.EVT_MENU, functools.partial(on_col_copy, col), item_col_copy)
             menu.Bind(wx.EVT_MENU, functools.partial(on_col_name, col), item_col_name)
@@ -1419,17 +1527,19 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
 
     def _IsRowFiltered(self, rowdata):
-        """
-        Returns whether the row is filtered out by the current filtering
-        criteria, if any.
-        """
+        """Returns whether the row is filtered out by the current filtering criteria, if any."""
         is_filtered = False
-        for col, filter_value in self.filters.items():
+        for col, filter_opts in self.filters.items():
+            if not filter_opts.get("filtered"): continue # for col
+            filter_value = filter_opts["value"]
             column_data = self.columns[col]
             value = rowdata[column_data["name"]]
-            if not isinstance(value, six.string_types):
+            if filter_value not in (None, "") and not isinstance(value, six.string_types):
                 value = "" if value is None else str(value)
-            is_filtered = filter_value.lower() not in value.lower()
+            if filter_value is None:       is_filtered = value is not None
+            else: is_filtered = value is None if filter_value == "" else \
+                                filter_value.lower() not in value.lower()
+            if filter_opts.get("inverted"): is_filtered = not is_filtered
             if is_filtered: break # for col
         return is_filtered
 
@@ -1507,25 +1617,23 @@ class SQLiteGridBaseMixin(object):
         if row >= 0 or col < 0: return grid_data.OnMenu(event)
 
         def on_filter(evt):
-            grid_data.OnFilter(col)
+            wx.CallAfter(grid_data.OnFilter, col)
         def on_hide(evt):
             grid_data.ShowColumn(col, not grid_data.IsColumnShown(col))
 
-        current_filter = six.text_type(grid_data.filters[col]) \
-                         if col in grid_data.filters else ""
-        name  = fmt_entity(grid_data.GetColumns()[col]["name"])
-        value = '"%s"' % util.ellipsize(current_filter, 10) if current_filter else ".."
+        name = fmt_entity(grid_data.GetColumns()[col]["name"])
+        fltrval = grid_data.GetColFilterText(col, sql=False, name=False, ellipsis=10) or ".."
 
         menu = wx.Menu()
         item_name   = wx.MenuItem(menu, -1, "Column %s" % name)
-        item_filter = wx.MenuItem(menu, -1, "&Filter by %s" % value, kind=wx.ITEM_CHECK)
+        item_filter = wx.MenuItem(menu, -1, "&Filter by %s" % fltrval, kind=wx.ITEM_CHECK)
         item_hide   = wx.MenuItem(menu, -1, "&Hide column", kind=wx.ITEM_CHECK)
         item_name.Font = self._grid.Font.Bold()
         menu.Append(item_name)
         menu.AppendSeparator()
         menu.Append(item_filter)
         menu.Append(item_hide)
-        item_filter.Check(bool(current_filter))
+        item_filter.Check(fltrval != "..")
         item_hide  .Check(not grid_data.IsColumnShown(col))
         menu.Bind(wx.EVT_MENU, on_filter, item_filter)
         menu.Bind(wx.EVT_MENU, on_hide,   item_hide)
@@ -1646,7 +1754,7 @@ class SQLiteGridBaseMixin(object):
         row, col = self._grid.XYToCell(x, y)
         if row >= 0 and col >= 0:
             value = self._grid.Table.GetValue(row, col)
-            col_name = self._grid.Table.GetColLabelValue(col).lower()
+            col_name = self._grid.Table.columns[col]["name"].lower()
             if isinstance(value, six.integer_types + (float, )) and value > 100000000 \
             and ("time" in col_name or "date" in col_name or "stamp" in col_name):
                 try:
@@ -1735,7 +1843,7 @@ class SQLiteGridBaseMixin(object):
                 data = dict(tdata, count=tdata["count"] + shift)
             else: suf = "+"
 
-        if gridbase.filters:
+        if any(x["filtered"] for x in gridbase.filters.values()):
             total = dict(data, count=gridbase.GetNumberRows(total=True))
             # Filtered count is never approximated, but can be incomplete
             suf2 = "" if gridbase.IsComplete() else "+"
@@ -1846,20 +1954,22 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         tbgrid = self._tbgrid = wx.ToolBar(panel2, style=wx.TB_FLAT | wx.TB_NODIVIDER)
         bmp1 = wx.ArtProvider.GetBitmap(wx.ART_COPY, wx.ART_TOOLBAR, (16, 16))
         bmp2 = images.ToolbarRefresh.Bitmap
-        bmp3 = images.ToolbarClear.Bitmap
-        bmp4 = wx.ArtProvider.GetBitmap(wx.ART_FIND, wx.ART_TOOLBAR, (16, 16))
-        bmp5 = images.ToolbarGoto.Bitmap
-        bmp6 = images.ToolbarForm.Bitmap
-        bmp7 = images.ToolbarColumnForm.Bitmap
+        bmp3 = images.ToolbarFilter.Bitmap
+        bmp4 = images.ToolbarClear.Bitmap
+        bmp5 = wx.ArtProvider.GetBitmap(wx.ART_FIND, wx.ART_TOOLBAR, (16, 16))
+        bmp6 = images.ToolbarGoto.Bitmap
+        bmp7 = images.ToolbarForm.Bitmap
+        bmp8 = images.ToolbarColumnForm.Bitmap
         tbgrid.SetToolBitmapSize(bmp1.Size)
         tbgrid.AddTool(wx.ID_INFO,    "", bmp1, shortHelp="Copy executed SQL statement to clipboard")
         tbgrid.AddTool(wx.ID_REFRESH, "", bmp2, shortHelp="Re-execute query  (F5)")
-        tbgrid.AddTool(wx.ID_RESET,   "", bmp3, shortHelp="Reset all applied sorting and filtering")
+        tbgrid.AddTool(wx.ID_SETUP,   "", bmp3, shortHelp="Manage shown and filtered columns  (%s-M)" % controls.KEYS.NAME_CTRL)
+        tbgrid.AddTool(wx.ID_RESET,   "", bmp4, shortHelp="Reset all applied sorting and filtering")
         tbgrid.AddSeparator()
-        tbgrid.AddTool(wx.ID_FIND,    "", bmp4, shortHelp="Find in data  (%s-F)" % controls.KEYS.NAME_CTRL)
-        tbgrid.AddTool(wx.ID_INDEX,   "", bmp5, shortHelp="Go to row ..  (%s-G)" % controls.KEYS.NAME_CTRL)
-        tbgrid.AddTool(wx.ID_EDIT,    "", bmp6, shortHelp="Open row in data form  (F4)")
-        tbgrid.AddTool(wx.ID_MORE,    "", bmp7, shortHelp="Open row cell in column form  (Ctrl-F2)")
+        tbgrid.AddTool(wx.ID_FIND,    "", bmp5, shortHelp="Find in data  (%s-F)" % controls.KEYS.NAME_CTRL)
+        tbgrid.AddTool(wx.ID_INDEX,   "", bmp6, shortHelp="Go to row ..  (%s-G)" % controls.KEYS.NAME_CTRL)
+        tbgrid.AddTool(wx.ID_EDIT,    "", bmp7, shortHelp="Open row in data form  (F4)")
+        tbgrid.AddTool(wx.ID_MORE,    "", bmp8, shortHelp="Open row cell in column form  (Ctrl-F2)")
         tbgrid.Realize()
         tbgrid.Disable()
 
@@ -1895,6 +2005,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         self.Bind(wx.EVT_TOOL,     self._OnSaveSQL,            id=wx.ID_SAVE)
         self.Bind(wx.EVT_TOOL,     self._OnCopyGridSQL,        id=wx.ID_INFO)
         self.Bind(wx.EVT_TOOL,     self._OnRequery,            id=wx.ID_REFRESH)
+        self.Bind(wx.EVT_TOOL,     self._OnColumnFilter,       id=wx.ID_SETUP)
         self.Bind(wx.EVT_TOOL,     self._OnResetView,          id=wx.ID_RESET)
         self.Bind(wx.EVT_TOOL,     self._OnFindGrid,           id=wx.ID_FIND)
         self.Bind(wx.EVT_TOOL,     self._OnGotoRow,            id=wx.ID_INDEX)
@@ -1938,6 +2049,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
                         (wx.ACCEL_NORMAL, wx.WXK_F5,  wx.ID_REFRESH),
                         (wx.ACCEL_CMD,    wx.WXK_F2,  wx.ID_MORE),
                         (wx.ACCEL_CMD,    ord('F'),   wx.ID_FIND),
+                        (wx.ACCEL_CMD,    ord('M'),   wx.ID_SETUP),
                         (wx.ACCEL_CMD,    ord('G'),   wx.ID_INDEX)]
         wx_accel.accelerate(self, accelerators=accelerators)
         wx_accel.accelerate(stc, accelerators=[(wx.ACCEL_CMD, ord('F'), wx.ID_REPLACE)])
@@ -2066,12 +2178,14 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             if cursor and cursor.description is not None: # Resultset: populate grid
                 grid_data = SQLiteGridBase(self._db, sql=sql, cursor=cursor)
                 self._grid.SetTable(grid_data, takeOwnership=True)
+                self._tbgrid.EnableTool(wx.ID_SETUP, True)
                 self._tbgrid.EnableTool(wx.ID_RESET, True)
                 self._button_export.Enabled = bool(cursor.description)
                 self._button_close.Enabled  = True
             else: # Action query or script
                 self._db.log_query("SQL", sql)
                 self._grid.Table = None
+                self._tbgrid.EnableTool(wx.ID_SETUP, False)
                 self._tbgrid.EnableTool(wx.ID_RESET, False)
                 self._button_export.Enabled = False
                 if cursor and cursor.rowcount >= 0:
@@ -2245,11 +2359,14 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         wx.CallAfter(self._OnResult, result, **kwargs)
 
 
+    def _OnColumnFilter(self, event):
+        """Handler for opening column filters dialog."""
+        wx.Yield() # Allow toolbar icon time to toggle back
+        wx.CallAfter(self._grid.Table.OnColumnFilters)
+
+
     def _OnResetView(self, event=None):
-        """
-        Handler for clicking to remove sorting and filtering,
-        resets the grid and its view.
-        """
+        """Handler for clicking to remove sorting and filtering, resets the grid and its view."""
         self._grid.Table.ClearFilter()
         self._grid.Table.ClearSort()
         for c, _ in enumerate(self._grid.Table.columns): self._grid.Table.ShowColumn(c)
@@ -2484,27 +2601,29 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         bmp1 = images.ToolbarInsert.Bitmap
         bmp2 = images.ToolbarDelete.Bitmap
         bmp3 = images.ToolbarRefresh.Bitmap
-        bmp4 = images.ToolbarClear.Bitmap
-        bmp5 = wx.ArtProvider.GetBitmap(wx.ART_FIND, wx.ART_TOOLBAR, (16, 16))
-        bmp6 = images.ToolbarGoto.Bitmap
-        bmp7 = images.ToolbarForm.Bitmap
-        bmp8 = images.ToolbarColumnForm.Bitmap
-        bmp9 = images.ToolbarCommit.Bitmap
-        bmpA = images.ToolbarRollback.Bitmap
+        bmp4 = images.ToolbarFilter.Bitmap
+        bmp5 = images.ToolbarClear.Bitmap
+        bmp6 = wx.ArtProvider.GetBitmap(wx.ART_FIND, wx.ART_TOOLBAR, (16, 16))
+        bmp7 = images.ToolbarGoto.Bitmap
+        bmp8 = images.ToolbarForm.Bitmap
+        bmp9 = images.ToolbarColumnForm.Bitmap
+        bmpA = images.ToolbarCommit.Bitmap
+        bmpB = images.ToolbarRollback.Bitmap
         tb.SetToolBitmapSize(bmp1.Size)
         tb.AddTool(wx.ID_ADD,     "", bmp1, shortHelp="Add new row")
         tb.AddTool(wx.ID_DELETE,  "", bmp2, shortHelp="Delete current row")
         tb.AddSeparator()
         tb.AddTool(wx.ID_REFRESH, "", bmp3, shortHelp="Reload data  (F5)")
-        tb.AddTool(wx.ID_RESET,   "", bmp4, shortHelp="Reset all applied sorting and filtering")
+        tb.AddTool(wx.ID_SETUP,   "", bmp4, shortHelp="Manage shown and filtered columns  (%s-M)" % controls.KEYS.NAME_CTRL)
+        tb.AddTool(wx.ID_RESET,   "", bmp5, shortHelp="Reset all applied sorting and filtering")
         tb.AddSeparator()
-        tb.AddTool(wx.ID_FIND,    "", bmp5, shortHelp="Find in data  (%s-F)" % controls.KEYS.NAME_CTRL)
-        tb.AddTool(wx.ID_INDEX,   "", bmp6, shortHelp="Go to row ..  (%s-G)" % controls.KEYS.NAME_CTRL)
-        tb.AddTool(wx.ID_EDIT,    "", bmp7, shortHelp="Open row in data form  (F4)")
-        tb.AddTool(wx.ID_MORE,    "", bmp8, shortHelp="Open row cell in column form  (Ctrl-F2)")
+        tb.AddTool(wx.ID_FIND,    "", bmp6, shortHelp="Find in data  (%s-F)" % controls.KEYS.NAME_CTRL)
+        tb.AddTool(wx.ID_INDEX,   "", bmp7, shortHelp="Go to row ..  (%s-G)" % controls.KEYS.NAME_CTRL)
+        tb.AddTool(wx.ID_EDIT,    "", bmp8, shortHelp="Open row in data form  (F4)")
+        tb.AddTool(wx.ID_MORE,    "", bmp9, shortHelp="Open row cell in column form  (Ctrl-F2)")
         tb.AddSeparator()
-        tb.AddTool(wx.ID_SAVE,    "", bmp9, shortHelp="Commit changes to database  (F10)")
-        tb.AddTool(wx.ID_UNDO,    "", bmpA, shortHelp="Rollback changes and restore original values  (F9)")
+        tb.AddTool(wx.ID_SAVE,    "", bmpA, shortHelp="Commit changes to database  (F10)")
+        tb.AddTool(wx.ID_UNDO,    "", bmpB, shortHelp="Rollback changes and restore original values  (F9)")
         tb.EnableTool(wx.ID_INDEX, False)
         tb.EnableTool(wx.ID_EDIT,  False)
         tb.EnableTool(wx.ID_MORE,  False)
@@ -2542,6 +2661,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         self.Bind(wx.EVT_TOOL,       self._OnOpenForm,       id=wx.ID_EDIT)
         self.Bind(wx.EVT_TOOL,       self._OnOpenColumnForm, id=wx.ID_MORE)
         self.Bind(wx.EVT_TOOL,       self._OnRefresh,        id=wx.ID_REFRESH)
+        self.Bind(wx.EVT_TOOL,       self._OnColumnFilter,   id=wx.ID_SETUP)
         self.Bind(wx.EVT_TOOL,       self._OnResetView,      id=wx.ID_RESET)
         self.Bind(wx.EVT_TOOL,       self._OnCommit,         id=wx.ID_SAVE)
         self.Bind(wx.EVT_TOOL,       self._OnRollback,       id=wx.ID_UNDO)
@@ -2577,6 +2697,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
                         (wx.ACCEL_NORMAL, wx.WXK_F9,  wx.ID_UNDO),
                         (wx.ACCEL_CMD,    wx.WXK_F2,  wx.ID_MORE),
                         (wx.ACCEL_CMD,    ord('F'),   wx.ID_FIND),
+                        (wx.ACCEL_CMD,    ord('M'),   wx.ID_SETUP),
                         (wx.ACCEL_CMD,    ord('G'),   wx.ID_INDEX)]
         wx_accel.accelerate(self, accelerators=accelerators)
         self._grid.SetFocus()
@@ -2890,7 +3011,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
                     "callable": functools.partial(importexport.export_data, **args)}
             if grid.IsComplete() and not grid.IsChanged():
                 opts.update({"total": grid.GetNumberRows()})
-            elif "filter" not in grid.GetFilterSort(): opts.update({
+            elif "filter" not in grid.GetFilterSort(active=True): opts.update({
                 "total": self._item.get("count"),
                 "is_total_estimated": self._item.get("is_count_estimated"),
             })
@@ -3052,11 +3173,14 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         self._OnChange(updated=True)
 
 
+    def _OnColumnFilter(self, event):
+        """Handler for opening column filters dialog."""
+        wx.Yield() # Allow toolbar icon time to toggle back
+        wx.CallAfter(self._grid.Table.OnColumnFilters)
+
+
     def _OnResetView(self, event):
-        """
-        Handler for clicking to remove sorting and filtering,
-        resets the grid and its view.
-        """
+        """Handler for clicking to remove sorting and filtering, resets the grid and its view."""
         self._grid.Table.ClearFilter()
         self._grid.Table.ClearSort()
         for c, _ in enumerate(self._grid.Table.columns): self._grid.Table.ShowColumn(c)
