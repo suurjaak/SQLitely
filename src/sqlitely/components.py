@@ -2473,9 +2473,11 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
     def _OnFindSQL(self, event):
         """Handler for toggling find dialog for SQL text."""
-        if not self._dialog_find_sql.Shown and not self._dialog_find_sql.ShownOnce:
-            controls.center_in_window(self._dialog_find_sql, self._dialog_find_sql.Target)
-        self._dialog_find_sql.Show(not self._dialog_find_sql.Shown)
+        dlg = self._dialog_find_sql
+        if not dlg.Shown and not dlg.ShownOnce:
+            controls.center_in_window(dlg, dlg.Target)
+        if isinstance(event.EventObject, wx.ToolBar): dlg.Show(not dlg.Shown)
+        else: dlg.Show() if not dlg.Shown else dlg.Hide() if dlg.HasFocus() else dlg.SetFocus()
 
 
     def _OnFindGrid(self, event):
@@ -2483,9 +2485,11 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         if not self._grid.Enabled:
             self._OnFindSQL(event)
             return
-        if not self._dialog_find_grid.Shown and not self._dialog_find_grid.ShownOnce:
-            controls.center_in_window(self._dialog_find_grid, self._dialog_find_grid.Target)
-        self._dialog_find_grid.Show(not self._dialog_find_grid.Shown)
+        dlg = self._dialog_find_grid
+        if not dlg.Shown and not dlg.ShownOnce:
+            controls.center_in_window(dlg, dlg.Target)
+        if isinstance(event.EventObject, wx.ToolBar): dlg.Show(not dlg.Shown)
+        else: dlg.Show() if not dlg.Shown else dlg.Hide() if dlg.HasFocus() else dlg.SetFocus()
 
 
     def _OnGotoRow(self, event=None):
@@ -3082,9 +3086,11 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
 
     def _OnFind(self, event):
         """Handler for toggling find dialog in data grid."""
-        if not self._dialog_find.Shown and not self._dialog_find.ShownOnce:
-            controls.center_in_window(self._dialog_find, self._dialog_find.Target)
-        self._dialog_find.Show(not self._dialog_find.Shown)
+        dlg = self._dialog_find
+        if not dlg.Shown and not dlg.ShownOnce:
+            controls.center_in_window(dlg, dlg.Target)
+        if isinstance(event.EventObject, wx.ToolBar): dlg.Show(not dlg.Shown)
+        else: dlg.Show() if not dlg.Shown else dlg.Hide() if dlg.HasFocus() else dlg.SetFocus()
 
 
     def _OnGotoRow(self, event=None):
@@ -10478,11 +10484,13 @@ class ColumnDialog(wx.Dialog):
         name = self.notebook.GetCurrentPage().Name
         target = next((x for x in self._findctrls.get(name, []) if x.Shown), None)
         if target is None: return
-        self._dialog_find.SetTarget(target)
-        if not self._dialog_find.Shown and not self._dialog_find.ShownOnce:
-            controls.center_in_window(self._dialog_find, self._dialog_find.Target)
+        dlg = self._dialog_find
+        if not dlg.Shown: dlg.SetTarget(target)
+        if not dlg.Shown and not dlg.ShownOnce:
+            controls.center_in_window(dlg, dlg.Target)
         self._unhide_dialog_find = False
-        self._dialog_find.Show(not self._dialog_find.Shown)
+        if isinstance(event.EventObject, wx.ToolBar): dlg.Show(not dlg.Shown)
+        else: dlg.Show() if not dlg.Shown else dlg.Hide() if dlg.HasFocus() else dlg.SetFocus()
 
 
     def _OnChangePage(self, event):
@@ -10495,7 +10503,10 @@ class ColumnDialog(wx.Dialog):
                 self._dialog_find.Hide()
             return
         self._dialog_find.SetTarget(target)
-        if self._unhide_dialog_find: self._dialog_find.Show()
+        if self._unhide_dialog_find:
+            focused_ctrl = self.FindFocus()
+            self._dialog_find.Show()
+            if focused_ctrl: focused_ctrl.SetFocus()
         self._unhide_dialog_find = False
 
 

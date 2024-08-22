@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    31.07.2024
+@modified    22.08.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4229,7 +4229,9 @@ class DatabasePage(wx.Panel):
 
     def on_search_stc_schema(self, event=None):
         """Handler for toggling find dialog in schema STC."""
-        self.dialog_search_schema.Show(not self.dialog_search_schema.Shown)
+        dlg = self.dialog_search_schema
+        if isinstance(event.EventObject, wx.ToolBar): dlg.Show(not dlg.Shown)
+        else: dlg.Show() if not dlg.Shown else dlg.Hide() if dlg.HasFocus() else dlg.SetFocus()
 
 
     def on_update_stc_schema(self, event=None):
