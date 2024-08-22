@@ -7,7 +7,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.06.2024
+@modified    10.08.2024
 ------------------------------------------------------------------------------
 """
 try:
@@ -2096,6 +2096,20 @@ ToolbarFileSave = PyEmbeddedImage(
     "QqFQbgae55FIJBgbGyOZTCIiiAiBQIDR0VFM08xW27axbTv3CkopiooKycvLy34SANd1ETUH"
     "EzV3PuX7uRaCwSDFxcWEw2EA0uk0QDbtmtoalFLU1NailKIsHM5a1k6dbrukaVxcYPI/JMLl"
     "XzXUOEhXykcYAAAAAElFTkSuQmCC"
+)
+
+
+"""Toolbar icon for column filter button in data grids."""
+ToolbarFilter = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGXRFWHRTb2Z0d2FyZQBBZG9i"
+    "ZSBJbWFnZVJlYWR5ccllPAAAAYFJREFUeNqkUsFqwkAQnSwGDfTcQkvBj8jdswFv0v6B0A8o"
+    "XjwVPEg/oD/gJbHQg0eh4D2B3JOIWGyCJwURNWnSmTUpS2pjSwdeZpjZnczse1KSJPAfkzqd"
+    "DkiS1EBcigVs/I4YUtztdn9sUNrtduSver3eU5Y0TRMGg8EdxYZhFE7A1us1INh4PIbtdgv9"
+    "fh+CIOA5x3FgNpsVN1itVoBg8/kcaB3btqFWq/HcZDKhM8+I2yP+ga+wXC55o3q9DtPpFFqt"
+    "FkRRBJhniqJQrZn+TM/5wyOqqgr4Djc4/rVYqFQqb+Vy2bAsq3CFEn3wskGr5A0b/I5GxhiH"
+    "aHEcc5ykMeW8gYe/6QDdMI3/pgOydrvNdaDrevEbkA6Ihf1+/zUyrUM68H3/tA5c1+Wc0ySb"
+    "zYaDYsp5nkdnFoj7I/6FTzAajUqapjHiPpsg0wFNgHae/uwx5w8sEOXVarUpy/KFWAjDcIHC"
+    "eqV+iA/BE+IMUsrEGULJGBQuxDkkguf4FGAA8qXjJZtgkBwAAAAASUVORK5CYII="
 )
 
 
