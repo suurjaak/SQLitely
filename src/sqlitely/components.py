@@ -2339,6 +2339,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
                     "name": name, "title": title}
             self.Freeze()
             try:
+                self._dialog_find_grid.Hide()
                 for x in self._panel2.Children: x.Hide()
                 self._export.Show()
                 opts = {"callable": functools.partial(importexport.export_data, **args),
@@ -2652,7 +2653,8 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         grid = self._grid = wx.grid.Grid(self)
         SQLiteGridBaseMixin.__init__(self)
 
-        dialog_find = controls.FindReplaceDialog(self, grid, title="Find in data", findonly="view" == self._category)
+        dialog_find = controls.FindReplaceDialog(self, grid, title="Find in data",
+                                                 findonly="view" == self._category)
         dialog_find.SetSharedHistory()
         self._dialog_find = dialog_find
 
@@ -3039,7 +3041,8 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         """Handler for closing export panel, shows normal view."""
         self.Freeze()
         try:
-            for x in self.Children: x.Show()
+            for x in self.Children:
+                if not isinstance(x, wx.Dialog): x.Show()
             self._export.Hide()
             self.Layout()
         finally: self.Thaw()
