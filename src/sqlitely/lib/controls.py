@@ -22,6 +22,9 @@ Stand-alone GUI components for wx:
 - FileDrop(wx.FileDropTarget):
   A simple file drag-and-drop handler.
 
+- FilterEntryDialog(wx.Dialog):
+  Dialog allowing to set filter values on a single item.
+
 - FindReplaceDialog(wx.Dialog):
   Dialog allowing to search and replace in wx controls.
   Supported controls: wx.TextCtrl, wx.stc.StyledTextCtrl, wx.grid.Grid.
@@ -35,6 +38,9 @@ Stand-alone GUI components for wx:
 
 - HintedTextCtrl(wx.TextCtrl):
   A text control with a hint text shown when no value, hidden when focused.
+
+- ItemFilterDialog(wx.Dialog):
+  Dialog allowing to set hidden-flag or filter values on a range of items.
 
 - JSONTextCtrl(wx.stc.StyledTextCtrl):
   A StyledTextCtrl configured for JSON syntax highlighting and folding.
@@ -100,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    30.07.2024
+@modified    21.08.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -953,6 +959,163 @@ class FileDrop(wx.FileDropTarget):
         filenames = list(filter(os.path.isfile, paths))
         if folders   and self.on_folders: self.on_folders(folders)
         if filenames and self.on_files:   self.on_files(filenames)
+
+
+
+class FilterEntryDialog(wx.Dialog):
+    """
+    Dialog allowing to set filter values on a single item.
+    """
+
+
+    def __init__(self, parent=None, item=None, title="Filter", message="",
+                 filter_menu=(), filter_hint=None,
+                 style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER | wx.FRAME_FLOAT_ON_PARENT):
+        """
+        @param   item         item to manage,
+                              as {name, ?hidden, ?filtered, ?inverted, ?value}
+        @param   message      message to show on dialog if any
+        @param   filter_menu  list of menu choices for filter value, as [{label, value, ?disabled}],
+                              "value" optionally being callback(item)
+        @param   filter_hint  hint text displayed for empty filter value,
+                              optionally as callback(item)
+        """
+        wx.Dialog.__init__(self, parent, title=title, style=style)
+
+        self._item    = {} # {name, label, hidden, filtered, filter}
+        self._ctrls   = {} # {name: wx.Control}
+        self._message = "" # text for optional wx.StaticText
+        self._filter_menu = []    # [{label, value}]
+        self._filter_hint = None  # value or callable(item)
+
+        self._item = dict(name=item["name"], value=item.get("value", ""),
+                          inverted=bool(item.get("inverted")), filtered=bool(item.get("filtered")))
+        self._message = message or ""
+        self._filter_menu = [dict(label=x["label"], value=x["value"],
+                             disabled=bool(x.get("disabled"))) for x in filter_menu]
+        self._filter_hint = filter_hint
+
+        self._Build()
+        self._Bind()
+        self.Fit()
+        self._Refresh()
+        self.MinSize = self.Size = max(300, self.Size.Width), self.Size.Height
+        if self._item["filtered"] and not self._ctrls["edit_filter"].Hint:
+            self._ctrls["edit_filter"].SetFocus()
+
+
+    def GetItem(self):
+        """Returns the item, with current choices for flags and filter values."""
+        return dict(self._item)
+    Item = property(GetItem)
+
+
+    def _Build(self):
+        """Creates dialog controls."""
+        sizer_main = wx.BoxSizer(wx.VERTICAL)
+        sizer_item = wx.BoxSizer(wx.HORIZONTAL)
+
+        name = self._item["name"]
+        check_filter = wx.CheckBox(self, label=self._message)
+        edit_filter  = HintedTextCtrl(self, escape=False)
+        button_menu  = wx.Button(self, label="..", size=(BUTTON_MIN_WIDTH, ) * 2) \
+                       if self._filter_menu else None
+        check_invert = wx.CheckBox(self, label="&NOT")
+
+        check_filter.ToolTip = "Enable filter for %r" % name
+        edit_filter.ToolTip  = "Filter value for %r" % name
+        if button_menu:
+            button_menu.ToolTip = "Open options menu"
+        check_invert.ToolTip = "Revert filter for column, matching where value is different"
+
+        sizer_item.Add(check_filter, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=5) \
+            if not self._message else None
+        sizer_item.Add(edit_filter,  flag=wx.GROW, proportion=1)
+        sizer_item.Add(button_menu,  flag=wx.ALIGN_CENTER_VERTICAL | wx.LEFT, border=5) \
+            if button_menu else None
+        sizer_item.Add(check_invert, flag=wx.LEFT | wx.ALIGN_CENTER_VERTICAL, border=5)
+
+        self._ctrls["check_filter"] = check_filter
+        self._ctrls["edit_filter" ] = edit_filter
+        self._ctrls["check_invert"] = check_invert
+        if button_menu:
+            self._ctrls["button_menu"] = button_menu
+
+        sizer_buttons = self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL)
+
+        sizer_main.Add(check_filter, flag=wx.GROW | wx.ALL ^ wx.BOTTOM, border=5) \
+            if self._message else None
+        sizer_main.Add(sizer_item, flag=wx.GROW | wx.ALL, border=10, proportion=1)
+        sizer_main.Add(sizer_buttons, flag=wx.GROW | wx.ALL ^ wx.TOP, border=10)
+
+        self.Sizer = sizer_main
+
+
+    def _Bind(self):
+        """Binds control handlers."""
+        self.Bind(wx.EVT_CHECKBOX,   self._OnToggleFiltered, self._ctrls["check_filter"])
+        self.Bind(wx.EVT_CHECKBOX,   self._OnToggleInverted, self._ctrls["check_invert"])
+        self.Bind(wx.EVT_TEXT_ENTER, self._OnChangeFilter,   self._ctrls["edit_filter"])
+        if self._filter_menu:
+            self.Bind(wx.EVT_BUTTON, self._OnOpenFilterOptions, self._ctrls["button_menu"])
+
+
+    def _Refresh(self):
+        """Enables-disables-populates controls according to current settings."""
+        filter_text = self._item["value"]
+        if filter_text is not None: filter_text = text_type(filter_text)
+        self._ctrls["check_filter"].Value = self._item["filtered"]
+        self._ctrls["edit_filter" ].Value = filter_text
+        self._ctrls["edit_filter" ].Enable(self._item["filtered"])
+        self._ctrls["check_invert"].Enable(self._item["filtered"])
+        self._ctrls["check_invert"].Value = self._item["inverted"]
+        if self._filter_menu:
+            self._ctrls["button_menu"].Enable(self._item["filtered"])
+        if self._filter_hint:
+            hint = self._filter_hint if self._item["filtered"] else ""
+            self._ctrls["edit_filter"].Hint = hint(self._item) if callable(hint) else hint
+
+
+    def _OnToggleFiltered(self, event):
+        """Handler for toggling item filtered on/off, updates state and refreshes display."""
+        self._item["filtered"] = not self._item["filtered"]
+        self._Refresh()
+        if self._item["filtered"] and not self._ctrls["edit_filter"].Hint:
+            self._ctrls["edit_filter"].SetFocus()
+            self._ctrls["edit_filter"].SelectNone()
+
+
+    def _OnToggleInverted(self, event):
+        """Handler for toggling item filter inverted on/off, updates state and refreshes display."""
+        self._item["inverted"] = not self._item["inverted"]
+        self._Refresh()
+
+
+    def _OnChangeFilter(self, event):
+        """Handler for editing filter text, refreshes filter hint if any."""
+        self._item["value"] = event.EventObject.Value
+        if self._filter_hint:
+            hint = self._filter_hint if self._item["filtered"] else ""
+            self._ctrls["edit_filter"].Hint = hint(self._item) if callable(hint) else ""
+
+
+    def _OnOpenFilterOptions(self, event):
+        """Handler for clicking filter options button, opens popup menu."""
+        menu = wx.Menu()
+        for i, opts in enumerate(self._filter_menu):
+            menuitem = wx.MenuItem(menu, -1, opts["label"])
+            menu.Append(menuitem)
+            if opts["disabled"]: menuitem.Enable(False)
+            on_menu = functools.partial(self._OnSetFilterOption, value=opts["value"])
+            menu.Bind(wx.EVT_MENU, on_menu, menuitem)
+        event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
+
+
+    def _OnSetFilterOption(self, event, value):
+        """Handler for filter options menu item, applies value."""
+        value2 = value(self._item) if callable(value) else value
+        self._item["value"] = value2 if value2 is None else text_type(value2)
+        self._Refresh()
 
 
 
@@ -5948,6 +6111,257 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
                 evt.SetEventObject(self)
                 wx.PostEvent(self, evt)
         wx.CallAfter(after)
+
+
+
+class ItemFilterDialog(wx.Dialog):
+    """
+    Dialog allowing to set hidden-flag or filter values on a range of items.
+    """
+
+
+    def __init__(self, parent=None, items=(), title="Filter items", filter_menu=(),
+                 filter_hint=None,
+                 style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER | wx.FRAME_FLOAT_ON_PARENT):
+        """
+        @param   items        list of items to manage,
+                              as [{name, ?label, ?hidden, ?filtered, ?inverted, ?value}]
+        @param   filter_menu  list of menu choices for filter values, as [{label, value, ?disabled}],
+                              "value" optionally being callback(item, index)
+        @param   filter_hint  hint text displayed for empty filter value,
+                              optionally as callback(item, index)
+        """
+        wx.Dialog.__init__(self, parent, title=title, style=style)
+
+        self._items  = {} # [{name, label, hidden, filtered, filter}]
+        self._ctrls  = {} # {name or (row, name): wx.Control}
+        self._filter_menu = []    # [{label, value}]
+        self._filter_hint = None  # value or callable(item)
+
+        self._items = [dict(name=x["name"], value=x.get("value", ""),
+                            inverted=bool(x.get("inverted")),
+                            hidden=bool(x.get("hidden")), filtered=bool(x.get("filtered")),
+                            label=x.get("label", x["name"])) for x in items]
+        self._filter_menu = [dict(label=x["label"], value=x["value"],
+                                  disabled=bool(x.get("disabled"))) for x in filter_menu]
+        self._filter_hint = filter_hint
+
+        self._Build()
+        self._Bind()
+        self._SizeToFit()
+        self._AlignColumns()
+        self._Refresh()
+
+
+    def GetItems(self):
+        """Returns the list of items, with current choices for flags and filter values."""
+        return [dict(x) for x in self._items]
+    Items = property(GetItems)
+
+
+    def _Build(self):
+        """Creates dialog controls."""
+        check_show_all   = wx.CheckBox(self, label="&Show all")
+        check_filter_all = wx.CheckBox(self, label="&Filter all")
+
+        container = wx.ScrolledWindow(self)
+
+        check_show_all.ToolTip   = "Toggle all items shown or hidden"
+        check_filter_all.ToolTip = "Enable filters for all"
+        check_show_all.Value   = all(not x["hidden"] for x in self._items)
+        check_filter_all.Value = all(x["filtered"] for x in self._items)
+        container.SetScrollRate(0, 20)
+
+        sizer_main = wx.BoxSizer(wx.VERTICAL)
+        sizer_header = wx.GridBagSizer()
+        sizer_grid = wx.GridBagSizer()
+
+        for i, item in enumerate(self._items):
+            name, label = item["name"], item["label"]
+            check_name   = wx.CheckBox(container)
+            label_name   = wx.StaticText(container, label=label, style=wx.ST_ELLIPSIZE_END)
+            check_filter = wx.CheckBox(container)
+            edit_filter  = HintedTextCtrl(container, escape=False)
+            button_menu  = wx.Button(container, label="..", size=(BUTTON_MIN_WIDTH, ) * 2) \
+                           if self._filter_menu else None
+            check_invert = wx.CheckBox(container, label="NOT")
+
+            label_name.MinSize = ( 20, -1)
+            label_name.MaxSize = (250, -1)
+            check_name.ToolTip   = "Show or hide %r" % name
+            label_name.ToolTip   = "Show or hide %r" % name
+            check_filter.ToolTip = "Enable filter for %r" % name
+            edit_filter.ToolTip  = "Filter value for %r" % name
+            if button_menu:
+                button_menu.ToolTip = "Open options menu"
+            check_invert.ToolTip = "Revert filter for column, matching where value is different"
+
+            sizer_grid.Add(check_name,   pos=(i, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+            sizer_grid.Add(label_name,   pos=(i, 1), flag=wx.ALIGN_CENTER_VERTICAL | wx.GROW)
+            sizer_grid.Add(check_filter, pos=(i, 2), flag=wx.ALIGN_CENTER_VERTICAL | wx.ALIGN_RIGHT)
+            sizer_grid.Add(edit_filter,  pos=(i, 3), flag=wx.GROW)
+            sizer_grid.Add(button_menu,  pos=(i, 4), flag=wx.GROW) if button_menu else None
+            sizer_grid.Add(check_invert, pos=(i, 4 + bool(button_menu)), flag=wx.GROW | wx.RIGHT, border=5)
+
+            self._ctrls[(i, "check_name"  )] = check_name
+            self._ctrls[(i, "label_name"  )] = label_name
+            self._ctrls[(i, "check_filter")] = check_filter
+            self._ctrls[(i, "edit_filter" )] = edit_filter
+            self._ctrls[(i, "check_invert")] = check_invert
+            if button_menu:
+                self._ctrls[(i, "button_menu")] = button_menu
+
+        sizer_buttons = self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL)
+
+        sizer_header.Add(check_show_all,   pos=(0, 0))
+        sizer_header.Add(check_filter_all, pos=(0, 1), flag=wx.LEFT)
+        sizer_main.Add(sizer_header,  flag=wx.GROW | wx.ALL, border=10)
+        sizer_main.Add(container,     flag=wx.GROW | wx.LEFT | wx.RIGHT, border=10, proportion=1)
+        sizer_main.Add(sizer_buttons, flag=wx.GROW | wx.ALL, border=10)
+
+        sizer_grid.HGap, sizer_grid.VGap = 5, 5
+        sizer_grid.AddGrowableCol(1)
+        sizer_grid.AddGrowableCol(3)
+
+        self.Sizer = sizer_main
+        container.Sizer = sizer_grid
+        self._ctrls.update(check_show_all=check_show_all, check_filter_all=check_filter_all,
+                           container=container)
+
+
+    def _Bind(self):
+        """Binds control and dialog event handlers."""
+        self.Bind(wx.EVT_CHECKBOX, self._OnToggleAllShown,    self._ctrls["check_show_all"])
+        self.Bind(wx.EVT_CHECKBOX, self._OnToggleAllFiltered, self._ctrls["check_filter_all"])
+        self.Bind(wx.EVT_SIZE, lambda e: (e.Skip(), wx.CallAfter(self._AlignColumns)))
+        for i in range(len(self._items)):
+            on_toggle_show   = functools.partial(self._OnToggleItemShown,    index=i)
+            on_toggle_filter = functools.partial(self._OnToggleItemFiltered, index=i)
+            on_toggle_invert = functools.partial(self._OnToggleItemInverted, index=i)
+            on_edit_filter   = functools.partial(self._OnChangeItemFilter,   index=i)
+            self._ctrls[(i, "label_name")].Bind(wx.EVT_LEFT_UP, on_toggle_show)
+            self.Bind(wx.EVT_CHECKBOX,   on_toggle_show,   self._ctrls[(i, "check_name")])
+            self.Bind(wx.EVT_CHECKBOX,   on_toggle_filter, self._ctrls[(i, "check_filter")])
+            self.Bind(wx.EVT_CHECKBOX,   on_toggle_invert, self._ctrls[(i, "check_invert")])
+            self.Bind(wx.EVT_TEXT_ENTER, on_edit_filter,   self._ctrls[(i, "edit_filter")])
+            if self._filter_menu:
+                on_filter_menu = functools.partial(self._OnOpenItemFilterOptions, index=i)
+                self.Bind(wx.EVT_BUTTON, on_filter_menu, self._ctrls[(i, "button_menu")])
+
+
+    def _SizeToFit(self):
+        """Resizes dialog window to reasonable width and height."""
+        self.Fit()
+        FRH, CPNH = (wx.SystemSettings.GetMetric(x) for x in (wx.SYS_FRAMESIZE_Y, wx.SYS_CAPTION_Y))
+        MINH = 2 * FRH + CPNH
+        container = self._ctrls["container"]
+        for szitem in map(self.Sizer.GetItem, range(self.Sizer.ItemCount)):
+            MINH += 0 if szitem.Window is container else szitem.Size.Height
+        ITMH = max(x.Size.Height for x in map(container.Sizer.GetItem, range(container.Sizer.Cols)))
+        self.MinSize = (400, MINH + ITMH)
+        self.MaxSize = (600, -1)
+        if self.Size.Height > 400:
+            self.Size = (self.Size.Width, 400)
+        elif container.VirtualSize.Height > container.Size.Height:
+            h = MINH + ITMH
+            while h < 240: h += ITMH
+            h = min(h, MINH + container.VirtualSize.Height)
+            self.Size = (self.Size.Width, h)
+        self.MaxSize = (-1, -1)
+
+
+    def _AlignColumns(self):
+        """Aligns header columns with item columns."""
+        container = self._ctrls["container"]
+        NAMESW = sum(container.Sizer.ColWidths[:2]) + 2 * container.Sizer.HGap
+        sizer_header = self.Sizer.GetItem(0).Sizer
+        sizer_header.GetItem(1).Border = NAMESW - sizer_header.GetItem(0).Size.Width
+        self.Layout()
+
+
+    def _Refresh(self, index=None):
+        """Enables-disables-populates all or specific items according to current settings."""
+        self.Freeze()
+        try:
+            items = enumerate(self._items) if index is None else [(index, self._items[index])]
+            for i, item in items:
+                item_shown, item_filtered = not item["hidden"], item["filtered"]
+                filter_text = "" if item["value"] is None else text_type(item["value"])
+                fgcolour = wx.SYS_COLOUR_WINDOWTEXT if item_shown else wx.SYS_COLOUR_GRAYTEXT
+                ColourManager.Manage(self._ctrls[(i, "label_name")], "ForegroundColour", fgcolour)
+                self._ctrls[(i, "check_name"  )].Value = item_shown
+                self._ctrls[(i, "check_filter")].Value = item_filtered
+                self._ctrls[(i, "edit_filter" )].Value = filter_text
+                self._ctrls[(i, "edit_filter" )].Enable(item_filtered)
+                self._ctrls[(i, "check_invert")].Enable(item_filtered)
+                self._ctrls[(i, "check_invert")].Value = item["inverted"]
+                if self._filter_menu:
+                    self._ctrls[(i, "button_menu")].Enable(item_filtered)
+                if self._filter_hint:
+                    hint = self._filter_hint if item_filtered else ""
+                    self._ctrls[(i, "edit_filter")].Hint = hint(item, i) if callable(hint) else hint
+        finally: self.Thaw()
+
+
+    def _OnToggleAllShown(self, event):
+        """Handler for toggling all items shown on/off, updates state and refreshes display."""
+        for item in self._items: item["hidden"] = not event.IsChecked()
+        self._Refresh()
+
+
+    def _OnToggleAllFiltered(self, event):
+        """Handler for toggling all items filtered on/off, updates state and refreshes display."""
+        for item in self._items: item["filtered"] = event.IsChecked()
+        self._Refresh()
+
+
+    def _OnToggleItemShown(self, event, index):
+        """Handler for toggling item shown on/off, updates state and refreshes display."""
+        self._items[index]["hidden"] = not self._items[index]["hidden"]
+        self._Refresh(index)
+
+
+    def _OnToggleItemFiltered(self, event, index):
+        """Handler for toggling item filtered on/off, updates state and refreshes display."""
+        self._items[index]["filtered"] = not self._items[index]["filtered"]
+        self._Refresh(index)
+        if self._items[index]["filtered"] and not self._ctrls[(index, "edit_filter")].Hint:
+            self._ctrls[(index, "edit_filter")].SetFocus()
+            self._ctrls[(index, "edit_filter")].SelectNone()
+
+
+    def _OnToggleItemInverted(self, event, index):
+        """Handler for toggling item filter inverted on/off, updates state and refreshes display."""
+        self._items[index]["inverted"] = not self._items[index]["inverted"]
+        self._Refresh(index)
+
+
+    def _OnChangeItemFilter(self, event, index):
+        """Handler for editing filter text, refreshes filter hint if any."""
+        item = self._items[index]
+        item["value"] = event.EventObject.Value
+        if self._filter_hint:
+            hint = self._filter_hint if item["filtered"] else ""
+            self._ctrls[(index, "edit_filter")].Hint = hint(item, index) if callable(hint) else hint
+
+
+    def _OnOpenItemFilterOptions(self, event, index):
+        """Handler for clicking filter options button, opens popup menu."""
+        menu = wx.Menu()
+        for i, opts in enumerate(self._filter_menu):
+            menuitem = wx.MenuItem(menu, -1, opts["label"])
+            menu.Append(menuitem)
+            if opts["disabled"]: menuitem.Enable(False)
+            on_menu = functools.partial(self._OnSetItemFilterOption, index=index, value=opts["value"])
+            menu.Bind(wx.EVT_MENU, on_menu, menuitem)
+        event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
+
+
+    def _OnSetItemFilterOption(self, event, index, value):
+        """Handler for filter options menu item, applies value."""
+        value2 = value(self._items[index], index) if callable(value) else value
+        self._items[index]["value"] = value2 if value2 is None else text_type(value2)
+        self._Refresh(index)
 
 
 
