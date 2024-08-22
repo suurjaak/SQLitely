@@ -5,7 +5,7 @@ CHANGELOG
 ---------------
 - add support for generated columns
 - add find/replace dialog to data grids and column editors and database schema text
-- add dialog to manage shown and filtered columns in data grids; add NOT-option to column filter
+- add dialog to manage shown and filtered columns in data grids; add EXACT- and NOT-option to column filter
 - upgrade embedded sqlite3_analyzer Windows binary from 3.29 to 3.43
 - upgrade ANTLR version from 4.9 to 4.13
 - show STRICT checkbox for STRICT table in schema editor even if current SQLite does not support it

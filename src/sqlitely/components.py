@@ -155,7 +155,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         self.sort_ascending = None
         self.complete = False
         self.hiddens = {} # {col index: bool, }
-        self.filters = {} # {col index: {filtered, inverted, value}, }
+        self.filters = {} # {col index: {filtered, exact, inverted, value}, }
         self.attrs = {}   # {("default", "null"): wx.grid.GridCellAttr, }
 
         if not self.is_query:
@@ -313,19 +313,20 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         result = ""
         if not self.filters.get(col, {}).get("filtered"): return result
 
-        value, inverted = (self.filters[col][k] for k in ("value", "inverted"))
+        value, exact, inverted = (self.filters[col][k] for k in ("value", "exact", "inverted"))
 
         if value is not None and ellipsis: value = util.ellipsize(value, ellipsis)
         if sql:
             if value is None: result = "IS NOT NULL" if inverted else "IS NULL"
             else:
                 value = grammar.quote(value, force=True)[1:-1]
-                result = '%sLIKE "%%%s%%"' % ("NOT " if inverted else "", value)
+                if exact: result = '%s "%s"' % ("!=" if inverted else "==", value)
+                else: result = '%sLIKE "%%%s%%"' % ("NOT " if inverted else "", value)
         else:
             if value is None: result = "NOT NULL" if inverted else "NULL"
             else:
                 value = grammar.quote(value, force=True)[1:-1]
-                result = 'LIKE "%s"' % value
+                result = '"%s"' % value if exact else 'LIKE "%%%s%%"' % value
                 if inverted: result = "NOT %s" % result
         if name:
             result = "%s %s" % (grammar.quote(self.columns[col]["name"]), result)
@@ -562,7 +563,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         """
         Returns current filter and sort state,
         as {?"sort": {col index: direction},
-            ?"filter": {col index: {value, ?filtered, ?inverted}}}.
+            ?"filter": {col index: {value, ?filtered, ?exact, ?inverted}}}.
 
         @param   active  if true, return only active filters if any
         """
@@ -586,7 +587,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             if name in self.columns:
                 self.sort_column, self.sort_ascending = name, asc
         if "filter" in state:
-            DEFAULTS = {"inverted": False, "filtered": False, "value": ""}
+            DEFAULTS = {"exact": False, "inverted": False, "filtered": False, "value": ""}
             self.filters = {i: {k: x.get(k, v) for k, v in DEFAULTS.items()}
                             for i, x in (state["filter"] or {}).items() if i < len(self.columns)}
         self.Filter(rows_before)
@@ -749,19 +750,20 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         wx.PostEvent(self.View, GridBaseEvent(wx.ID_ANY, refresh=True))
 
 
-    def AddFilter(self, col, val, inverted=False):
+    def AddFilter(self, col, val, exact=False, inverted=False):
         """
         Adds a filter to the grid data on the specified column.
 
         @param   col       column index
         @param   val       value to filter by, matched by substring or NULL
+        @param   exavt     whether filter matches value exactly instead of partially
         @param   inverted  whether filter is inverted as NOT
         """
         value = val
         rows_before = self.GetNumberRows()
         if val and self.GetAffinity(col) in ("INTEGER", "REAL"):
             value = val.replace(",", ".").strip() # Allow comma for decimals
-        self.filters[col] = {"value": value, "filtered": True, "inverted": inverted}
+        self.filters[col] = {"value": value, "filtered": True, "exact": exact, "inverted": inverted}
         self.Filter(rows_before)
 
 
@@ -1038,12 +1040,13 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             dlg_result, new_filter = dlg.ShowModal(), dlg.GetItem()
         if wx.ID_OK != dlg_result: return
 
-        DEFAULTS = {"inverted": False, "filtered": False, "value": ""}
+        DEFAULTS = {"exact": False, "inverted": False, "filtered": False, "value": ""}
         if any(new_filter[k] != current_filter.get(k, v) for k, v in DEFAULTS.items()):
             if new_filter["filtered"]:
                 text = self.GetColFilterText(col, sql=False, name=False, ellipsis=10)
                 busy = controls.BusyPanel(self.View, 'Filtering column %s by "%s".' % (label, text))
-                try: self.AddFilter(col, new_filter["value"], new_filter["inverted"])
+                try: self.AddFilter(col, new_filter["value"],
+                                    new_filter["exact"], new_filter["inverted"])
                 finally: busy.Close()
             else:
                 if self.filters.get(col, {}).get("filtered"):
@@ -1078,7 +1081,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         if wx.ID_OK != dlg_result: return result
 
         filters2 = copy.deepcopy(self.filters)
-        DEFAULTS = {"inverted": False, "filtered": False, "value": ""}
+        DEFAULTS = {"exact": False, "inverted": False, "filtered": False, "value": ""}
         for col, (coldata1, coldata2) in enumerate(zip(columns, columns2)):
             if self.ShowColumn(col, not coldata2["hidden"]):
                 result = True
@@ -1534,12 +1537,20 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             filter_value = filter_opts["value"]
             column_data = self.columns[col]
             value = rowdata[column_data["name"]]
-            if filter_value not in (None, "") and not isinstance(value, six.string_types):
-                value = "" if value is None else str(value)
-            if filter_value is None:       is_filtered = value is not None
-            else: is_filtered = value is None if filter_value == "" else \
-                                filter_value.lower() not in value.lower()
-            if filter_opts.get("inverted"): is_filtered = not is_filtered
+
+            if value is None and filter_value is not None: is_filtered = True
+            elif value is not None and filter_value is None:
+                is_filtered = False if filter_opts.get("inverted") else True
+            elif value is None and filter_value is None:
+                is_filtered = True if filter_opts.get("inverted") else False
+            elif filter_opts.get("exact"):
+                if not isinstance(value, six.string_types): value = str(value)
+                is_filtered = (value != filter_value)
+                if filter_opts.get("inverted"): is_filtered = not is_filtered
+            else:
+                if not isinstance(value, six.string_types): value = str(value)
+                is_filtered = filter_value.lower() not in value.lower()
+                if filter_opts.get("inverted"): is_filtered = not is_filtered
             if is_filtered: break # for col
         return is_filtered
 

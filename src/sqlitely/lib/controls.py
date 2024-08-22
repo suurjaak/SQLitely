@@ -973,7 +973,7 @@ class FilterEntryDialog(wx.Dialog):
                  style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER | wx.FRAME_FLOAT_ON_PARENT):
         """
         @param   item         item to manage,
-                              as {name, ?hidden, ?filtered, ?inverted, ?value}
+                              as {name, ?hidden, ?filtered, ?exact, ?inverted, ?value}
         @param   message      message to show on dialog if any
         @param   filter_menu  list of menu choices for filter value, as [{label, value, ?disabled}],
                               "value" optionally being callback(item)
@@ -989,7 +989,8 @@ class FilterEntryDialog(wx.Dialog):
         self._filter_hint = None  # value or callable(item)
 
         self._item = dict(name=item["name"], value=item.get("value", ""),
-                          inverted=bool(item.get("inverted")), filtered=bool(item.get("filtered")))
+                          exact=bool(item.get("exact")), inverted=bool(item.get("inverted")),
+                          filtered=bool(item.get("filtered")))
         self._message = message or ""
         self._filter_menu = [dict(label=x["label"], value=x["value"],
                              disabled=bool(x.get("disabled"))) for x in filter_menu]
@@ -999,7 +1000,7 @@ class FilterEntryDialog(wx.Dialog):
         self._Bind()
         self.Fit()
         self._Refresh()
-        self.MinSize = self.Size = max(300, self.Size.Width), self.Size.Height
+        self.MinSize = self.Size = max(350, self.Size.Width), self.Size.Height
         if self._item["filtered"] and not self._ctrls["edit_filter"].Hint:
             self._ctrls["edit_filter"].SetFocus()
 
@@ -1020,12 +1021,15 @@ class FilterEntryDialog(wx.Dialog):
         edit_filter  = HintedTextCtrl(self, escape=False)
         button_menu  = wx.Button(self, label="..", size=(BUTTON_MIN_WIDTH, ) * 2) \
                        if self._filter_menu else None
+        check_exact  = wx.CheckBox(self, label="&EXACT")
         check_invert = wx.CheckBox(self, label="&NOT")
 
         check_filter.ToolTip = "Enable filter for %r" % name
         edit_filter.ToolTip  = "Filter value for %r" % name
         if button_menu:
             button_menu.ToolTip = "Open options menu"
+        check_exact.ToolTip  = "Match entered filter value exactly as is, " \
+                               "do not use partial case-insensitive match"
         check_invert.ToolTip = "Revert filter for column, matching where value is different"
 
         sizer_item.Add(check_filter, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=5) \
@@ -1033,10 +1037,12 @@ class FilterEntryDialog(wx.Dialog):
         sizer_item.Add(edit_filter,  flag=wx.GROW, proportion=1)
         sizer_item.Add(button_menu,  flag=wx.ALIGN_CENTER_VERTICAL | wx.LEFT, border=5) \
             if button_menu else None
+        sizer_item.Add(check_exact,  flag=wx.LEFT | wx.ALIGN_CENTER_VERTICAL, border=5)
         sizer_item.Add(check_invert, flag=wx.LEFT | wx.ALIGN_CENTER_VERTICAL, border=5)
 
         self._ctrls["check_filter"] = check_filter
         self._ctrls["edit_filter" ] = edit_filter
+        self._ctrls["check_exact"]  = check_exact
         self._ctrls["check_invert"] = check_invert
         if button_menu:
             self._ctrls["button_menu"] = button_menu
@@ -1054,6 +1060,7 @@ class FilterEntryDialog(wx.Dialog):
     def _Bind(self):
         """Binds control handlers."""
         self.Bind(wx.EVT_CHECKBOX,   self._OnToggleFiltered, self._ctrls["check_filter"])
+        self.Bind(wx.EVT_CHECKBOX,   self._OnToggleExact,    self._ctrls["check_exact"])
         self.Bind(wx.EVT_CHECKBOX,   self._OnToggleInverted, self._ctrls["check_invert"])
         self.Bind(wx.EVT_TEXT_ENTER, self._OnChangeFilter,   self._ctrls["edit_filter"])
         if self._filter_menu:
@@ -1067,6 +1074,8 @@ class FilterEntryDialog(wx.Dialog):
         self._ctrls["check_filter"].Value = self._item["filtered"]
         self._ctrls["edit_filter" ].Value = filter_text
         self._ctrls["edit_filter" ].Enable(self._item["filtered"])
+        self._ctrls["check_exact" ].Enable(self._item["filtered"])
+        self._ctrls["check_exact" ].Value = self._item["exact"]
         self._ctrls["check_invert"].Enable(self._item["filtered"])
         self._ctrls["check_invert"].Value = self._item["inverted"]
         if self._filter_menu:
@@ -1083,6 +1092,12 @@ class FilterEntryDialog(wx.Dialog):
         if self._item["filtered"] and not self._ctrls["edit_filter"].Hint:
             self._ctrls["edit_filter"].SetFocus()
             self._ctrls["edit_filter"].SelectNone()
+
+
+    def _OnToggleExact(self, event):
+        """Handler for toggling item filter exact on/off, updates state and refreshes display."""
+        self._item["exact"] = not self._item["exact"]
+        self._Refresh()
 
 
     def _OnToggleInverted(self, event):
@@ -6125,7 +6140,7 @@ class ItemFilterDialog(wx.Dialog):
                  style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER | wx.FRAME_FLOAT_ON_PARENT):
         """
         @param   items        list of items to manage,
-                              as [{name, ?label, ?hidden, ?filtered, ?inverted, ?value}]
+                              as [{name, ?label, ?hidden, ?exact, ?filtered, ?inverted, ?value}]
         @param   filter_menu  list of menu choices for filter values, as [{label, value, ?disabled}],
                               "value" optionally being callback(item, index)
         @param   filter_hint  hint text displayed for empty filter value,
@@ -6139,7 +6154,7 @@ class ItemFilterDialog(wx.Dialog):
         self._filter_hint = None  # value or callable(item)
 
         self._items = [dict(name=x["name"], value=x.get("value", ""),
-                            inverted=bool(x.get("inverted")),
+                            exact=bool(x.get("exact")), inverted=bool(x.get("inverted")),
                             hidden=bool(x.get("hidden")), filtered=bool(x.get("filtered")),
                             label=x.get("label", x["name"])) for x in items]
         self._filter_menu = [dict(label=x["label"], value=x["value"],
@@ -6184,6 +6199,7 @@ class ItemFilterDialog(wx.Dialog):
             edit_filter  = HintedTextCtrl(container, escape=False)
             button_menu  = wx.Button(container, label="..", size=(BUTTON_MIN_WIDTH, ) * 2) \
                            if self._filter_menu else None
+            check_exact  = wx.CheckBox(container, label="EXACT")
             check_invert = wx.CheckBox(container, label="NOT")
 
             label_name.MinSize = ( 20, -1)
@@ -6194,6 +6210,8 @@ class ItemFilterDialog(wx.Dialog):
             edit_filter.ToolTip  = "Filter value for %r" % name
             if button_menu:
                 button_menu.ToolTip = "Open options menu"
+            check_exact.ToolTip  = "Match entered filter value exactly as is, "\
+                                   "do not use partial case-insensitive match"
             check_invert.ToolTip = "Revert filter for column, matching where value is different"
 
             sizer_grid.Add(check_name,   pos=(i, 0), flag=wx.ALIGN_CENTER_VERTICAL)
@@ -6201,12 +6219,14 @@ class ItemFilterDialog(wx.Dialog):
             sizer_grid.Add(check_filter, pos=(i, 2), flag=wx.ALIGN_CENTER_VERTICAL | wx.ALIGN_RIGHT)
             sizer_grid.Add(edit_filter,  pos=(i, 3), flag=wx.GROW)
             sizer_grid.Add(button_menu,  pos=(i, 4), flag=wx.GROW) if button_menu else None
-            sizer_grid.Add(check_invert, pos=(i, 4 + bool(button_menu)), flag=wx.GROW | wx.RIGHT, border=5)
+            sizer_grid.Add(check_exact,  pos=(i, 4 + bool(button_menu)), flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=5)
+            sizer_grid.Add(check_invert, pos=(i, 5 + bool(button_menu)), flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=5)
 
             self._ctrls[(i, "check_name"  )] = check_name
             self._ctrls[(i, "label_name"  )] = label_name
             self._ctrls[(i, "check_filter")] = check_filter
             self._ctrls[(i, "edit_filter" )] = edit_filter
+            self._ctrls[(i, "check_exact" )] = check_exact
             self._ctrls[(i, "check_invert")] = check_invert
             if button_menu:
                 self._ctrls[(i, "button_menu")] = button_menu
@@ -6237,11 +6257,13 @@ class ItemFilterDialog(wx.Dialog):
         for i in range(len(self._items)):
             on_toggle_show   = functools.partial(self._OnToggleItemShown,    index=i)
             on_toggle_filter = functools.partial(self._OnToggleItemFiltered, index=i)
+            on_toggle_exact  = functools.partial(self._OnToggleItemExact,    index=i)
             on_toggle_invert = functools.partial(self._OnToggleItemInverted, index=i)
             on_edit_filter   = functools.partial(self._OnChangeItemFilter,   index=i)
             self._ctrls[(i, "label_name")].Bind(wx.EVT_LEFT_UP, on_toggle_show)
             self.Bind(wx.EVT_CHECKBOX,   on_toggle_show,   self._ctrls[(i, "check_name")])
             self.Bind(wx.EVT_CHECKBOX,   on_toggle_filter, self._ctrls[(i, "check_filter")])
+            self.Bind(wx.EVT_CHECKBOX,   on_toggle_exact,  self._ctrls[(i, "check_exact")])
             self.Bind(wx.EVT_CHECKBOX,   on_toggle_invert, self._ctrls[(i, "check_invert")])
             self.Bind(wx.EVT_TEXT_ENTER, on_edit_filter,   self._ctrls[(i, "edit_filter")])
             if self._filter_menu:
@@ -6258,7 +6280,7 @@ class ItemFilterDialog(wx.Dialog):
         for szitem in map(self.Sizer.GetItem, range(self.Sizer.ItemCount)):
             MINH += 0 if szitem.Window is container else szitem.Size.Height
         ITMH = max(x.Size.Height for x in map(container.Sizer.GetItem, range(container.Sizer.Cols)))
-        self.MinSize = (400, MINH + ITMH)
+        self.MinSize = (450, MINH + ITMH)
         self.MaxSize = (600, -1)
         if self.Size.Height > 400:
             self.Size = (self.Size.Width, 400)
@@ -6293,6 +6315,8 @@ class ItemFilterDialog(wx.Dialog):
                 self._ctrls[(i, "check_filter")].Value = item_filtered
                 self._ctrls[(i, "edit_filter" )].Value = filter_text
                 self._ctrls[(i, "edit_filter" )].Enable(item_filtered)
+                self._ctrls[(i, "check_exact" )].Enable(item_filtered)
+                self._ctrls[(i, "check_exact" )].Value = item["exact"]
                 self._ctrls[(i, "check_invert")].Enable(item_filtered)
                 self._ctrls[(i, "check_invert")].Value = item["inverted"]
                 if self._filter_menu:
@@ -6328,6 +6352,12 @@ class ItemFilterDialog(wx.Dialog):
         if self._items[index]["filtered"] and not self._ctrls[(index, "edit_filter")].Hint:
             self._ctrls[(index, "edit_filter")].SetFocus()
             self._ctrls[(index, "edit_filter")].SelectNone()
+
+
+    def _OnToggleItemExact(self, event, index):
+        """Handler for toggling item filter exact on/off, updates state and refreshes display."""
+        self._items[index]["exact"] = not self._items[index]["exact"]
+        self._Refresh(index)
 
 
     def _OnToggleItemInverted(self, event, index):
