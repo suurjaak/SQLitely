@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    12.07.2024
+@modified    23.08.2024
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -268,7 +268,8 @@ def terminate(sql, data=None):
 def uni(x, encoding="utf-8"):
     """Convert anything to Unicode, except None."""
     if x is None or isinstance(x, six.text_type): return x
-    return six.text_type(str(x), encoding, errors="replace")
+    if isinstance(x, six.binary_type): return six.text_type(x, encoding, errors="replace")
+    return six.text_type(x)
 
 
 def collapse_whitespace(s):
