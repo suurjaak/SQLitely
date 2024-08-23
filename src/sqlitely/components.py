@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.08.2024
+@modified    23.08.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -2191,11 +2191,15 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
                 self._grid.SetTable(grid_data, takeOwnership=True)
                 self._tbgrid.EnableTool(wx.ID_SETUP, True)
                 self._tbgrid.EnableTool(wx.ID_RESET, True)
+                self._dialog_find_grid.SetTarget(self._grid)
                 self._button_export.Enabled = bool(cursor.description)
                 self._button_close.Enabled  = True
             else: # Action query or script
                 self._db.log_query("SQL", sql)
                 self._grid.Table = None
+                self._grid.Enabled = False
+                self._dialog_find_grid.SetTarget(None)
+                self._dialog_find_grid.Hide()
                 self._tbgrid.EnableTool(wx.ID_SETUP, False)
                 self._tbgrid.EnableTool(wx.ID_RESET, False)
                 self._button_export.Enabled = False

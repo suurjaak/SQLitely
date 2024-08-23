@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    21.08.2024
+@modified    23.08.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -1209,9 +1209,19 @@ class FindReplaceDialog(wx.Dialog):
         return self._target
     def SetTarget(self, target):
         """Sets text component being searched, raises error if unsupported type."""
+        if target is self._target: return
         if not isinstance(target, (wx.TextCtrl, wx.stc.StyledTextCtrl, wx.grid.Grid, type(None))):
             raise Exception("Unsupported target type: %r" % type(target))
-        self._target = target
+        self._target    = target
+        if not self._ctrls: return  # Still constructing
+        self._pattern   = None
+        self._match     = None
+        self._matchspan = None
+        self._matchpos  = None
+        self._status.clear()
+        self._RefreshStatus()
+
+
     Target = property(GetTarget, SetTarget)
 
 
