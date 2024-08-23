@@ -1021,6 +1021,24 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         current_filter = dict(self.filters.get(col, {}))
         current_filter.update(name=self.columns[col]["name"],
                               filtered=current_filter.get("filtered", True))
+
+        def apply_filter(new_filter):
+            DEFAULTS = {"exact": False, "inverted": False, "filtered": False, "value": ""}
+            if not any(new_filter[k] != current_filter.get(k, v) for k, v in DEFAULTS.items()):
+                return
+            if new_filter["filtered"]:
+                text = self.GetColFilterText(col, sql=False, name=False, ellipsis=10)
+                busy = controls.BusyPanel(self.View, 'Filtering column %s by "%s".' % (label, text))
+                try: self.AddFilter(col, new_filter["value"],
+                                    new_filter["exact"], new_filter["inverted"])
+                finally: busy.Close()
+            else:
+                if self.filters.get(col, {}).get("filtered"):
+                    self.RemoveFilter(col)
+                    self.View.Layout() # React to grid size change
+                self.filters[col] = {k: new_filter[k] for k in DEFAULTS}
+                current_filter.update(self.filters[col])
+
         row = self.View.GridCursorRow
         filter_menu = [
             {"label": "Set value from &this column in current row #%s" % (row + 1),
@@ -1041,35 +1059,32 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         dlg = controls.FilterEntryDialog(self.View, current_filter,
                                          message="&Filter column %s by:" % label,
                                          filter_menu=filter_menu, filter_hint=filter_hint)
+        dlg.SetApplyCallback(apply_filter)
         dlg.CenterOnParent()
         with dlg:
             dlg_result, new_filter = dlg.ShowModal(), dlg.GetItem()
-        if wx.ID_OK != dlg_result: return
-
-        DEFAULTS = {"exact": False, "inverted": False, "filtered": False, "value": ""}
-        if any(new_filter[k] != current_filter.get(k, v) for k, v in DEFAULTS.items()):
-            if new_filter["filtered"]:
-                text = self.GetColFilterText(col, sql=False, name=False, ellipsis=10)
-                busy = controls.BusyPanel(self.View, 'Filtering column %s by "%s".' % (label, text))
-                try: self.AddFilter(col, new_filter["value"],
-                                    new_filter["exact"], new_filter["inverted"])
-                finally: busy.Close()
-            else:
-                if self.filters.get(col, {}).get("filtered"):
-                    self.RemoveFilter(col)
-                    self.View.Layout() # React to grid size change
-                self.filters[col] = {k: new_filter[k] for k in DEFAULTS}
+        if wx.ID_OK == dlg_result: apply_filter(new_filter)
 
 
     def OnColumnFilters(self):
-        """Opens popup dialog to hide or filter columns in bulk, returns whether choices changed."""
-        result = False
-
+        """Opens popup dialog to hide or filter columns in bulk."""
         columns = [dict(x) for x in self.columns]
         for col, coldata in enumerate(columns):
             coldata.update(self.filters.get(col, {}))
             coldata["hidden"] = self.hiddens.get(col, False)
             coldata["label"] = fmt_entity(coldata["name"])[1:-1]
+
+        def apply_filter(columns2):
+            filters2 = copy.deepcopy(self.filters)
+            DEFAULTS = {"exact": False, "inverted": False, "filtered": False, "value": ""}
+            for col, (coldata1, coldata2) in enumerate(zip(columns, columns2)):
+                self.ShowColumn(col, not coldata2["hidden"])
+                coldata1_full = {k: coldata1.get(k, v) for k, v in DEFAULTS.items()}
+                coldata2_full = {k: coldata2[k] for k in DEFAULTS}
+                if coldata1_full != coldata2_full:
+                    filters2[col] = coldata2_full
+            if filters2 != self.filters: self.SetFilterSort({"filter": filters2})
+
         row, col = self.View.GridCursorRow, self.View.GridCursorCol
         filter_menu = [
             {"label": "Set value from &this column in current row #%s" % (row + 1),
@@ -1087,25 +1102,11 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         filter_hint = lambda x, i: "<NULL>" if x["value"] is None else ""
         dlg = controls.ItemFilterDialog(self.View, items=columns, title="Show and filter columns",
                                         filter_menu=filter_menu, filter_hint=filter_hint)
+        dlg.SetApplyCallback(apply_filter)
         dlg.CenterOnParent()
         with dlg: 
             dlg_result, columns2 = dlg.ShowModal(), dlg.GetItems()
-        if wx.ID_OK != dlg_result: return result
-
-        filters2 = copy.deepcopy(self.filters)
-        DEFAULTS = {"exact": False, "inverted": False, "filtered": False, "value": ""}
-        for col, (coldata1, coldata2) in enumerate(zip(columns, columns2)):
-            if self.ShowColumn(col, not coldata2["hidden"]):
-                result = True
-            coldata1_full = {k: coldata1.get(k, v) for k, v in DEFAULTS.items()}
-            coldata2_full = {k: coldata2[k] for k in DEFAULTS}
-            if coldata1_full != coldata2_full:
-                filters2[col] = coldata2_full
-        if filters2 != self.filters:
-            self.SetFilterSort({"filter": filters2})
-            result = True
-
-        return result
+        if wx.ID_OK == dlg_result: apply_filter(columns2)
 
 
     def OnGoto(self, event):
