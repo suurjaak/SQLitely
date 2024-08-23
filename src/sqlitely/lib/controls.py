@@ -977,6 +977,7 @@ class FilterEntryDialog(wx.Dialog):
         @param   message      message to show on dialog if any
         @param   filter_menu  list of menu choices for filter value, as [{label, value, ?disabled}],
                               "value" optionally being callback(item)
+                              or a list/tuple of nested submenu choices
         @param   filter_hint  hint text displayed for empty filter value,
                               optionally as callback(item)
         """
@@ -1116,14 +1117,27 @@ class FilterEntryDialog(wx.Dialog):
 
     def _OnOpenFilterOptions(self, event):
         """Handler for clicking filter options button, opens popup menu."""
-        menu = wx.Menu()
-        for i, opts in enumerate(self._filter_menu):
-            menuitem = wx.MenuItem(menu, -1, opts["label"])
-            menu.Append(menuitem)
-            if opts["disabled"]: menuitem.Enable(False)
-            on_menu = functools.partial(self._OnSetFilterOption, value=opts["value"])
-            menu.Bind(wx.EVT_MENU, on_menu, menuitem)
-        event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
+
+        def populate_menu(menu, menu_opts):
+            for opts in menu_opts:
+                value = opts["value"]
+                if value and isinstance(value, (list, tuple)) \
+                and all(isinstance(x, dict) and "label" in x and "value" in x for x in value):
+                    submenu = wx.Menu()
+                    menuitem = menu.Append(wx.ID_ANY, opts["label"], submenu)
+                    if opts.get("disabled"): menuitem.Enable(False)
+                    else: populate_menu(submenu, value)
+                    continue # for opts
+
+                menuitem = wx.MenuItem(menu, -1, opts["label"])
+                menu.Append(menuitem)
+                if opts.get("disabled"): menuitem.Enable(False)
+                on_menu = functools.partial(self._OnSetFilterOption, value=value)
+                rootmenu.Bind(wx.EVT_MENU, on_menu, menuitem)
+
+        rootmenu = wx.Menu()
+        populate_menu(rootmenu, self._filter_menu)
+        event.EventObject.PopupMenu(rootmenu, tuple(event.EventObject.Size))
 
 
     def _OnSetFilterOption(self, event, value):
@@ -6166,6 +6180,7 @@ class ItemFilterDialog(wx.Dialog):
                               as [{name, ?label, ?hidden, ?exact, ?filtered, ?inverted, ?value}]
         @param   filter_menu  list of menu choices for filter values, as [{label, value, ?disabled}],
                               "value" optionally being callback(item, index)
+                              or a list/tuple of nested submenu choices
         @param   filter_hint  hint text displayed for empty filter value,
                               optionally as callback(item, index)
         """
@@ -6400,14 +6415,27 @@ class ItemFilterDialog(wx.Dialog):
 
     def _OnOpenItemFilterOptions(self, event, index):
         """Handler for clicking filter options button, opens popup menu."""
-        menu = wx.Menu()
-        for i, opts in enumerate(self._filter_menu):
-            menuitem = wx.MenuItem(menu, -1, opts["label"])
-            menu.Append(menuitem)
-            if opts["disabled"]: menuitem.Enable(False)
-            on_menu = functools.partial(self._OnSetItemFilterOption, index=index, value=opts["value"])
-            menu.Bind(wx.EVT_MENU, on_menu, menuitem)
-        event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
+
+        def populate_menu(menu, menu_opts):
+            for opts in menu_opts:
+                value = opts["value"]
+                if isinstance(value, (list, tuple)) \
+                and all(isinstance(x, dict) and "label" in x and "value" in x for x in value):
+                    submenu = wx.Menu()
+                    menuitem = menu.Append(wx.ID_ANY, opts["label"], submenu)
+                    if opts.get("disabled"): menuitem.Enable(False)
+                    else: populate_menu(submenu, value)
+                    continue # for opts
+
+                menuitem = wx.MenuItem(menu, -1, opts["label"])
+                menu.Append(menuitem)
+                if opts.get("disabled"): menuitem.Enable(False)
+                on_menu = functools.partial(self._OnSetItemFilterOption, index=index, value=value)
+                rootmenu.Bind(wx.EVT_MENU, on_menu, menuitem)
+
+        rootmenu = wx.Menu()
+        populate_menu(rootmenu, self._filter_menu)
+        event.EventObject.PopupMenu(rootmenu, tuple(event.EventObject.Size))
 
 
     def _OnSetItemFilterOption(self, event, index, value):
