@@ -67,7 +67,7 @@ from . import plugins
 from . import scheme
 from . import templates
 from . import workers
-from . database import fmt_entity
+from . database import fmt_entity, fmt_value
 
 logger = logging.getLogger(__name__)
 
@@ -1029,6 +1029,12 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                       (self.View.GridCursorCol + 1, row + 1),
              "value": lambda x: self.GetValue(row, self.View.GridCursorCol),
              "disabled": row < 0 or self.View.GridCursorCol < 0},
+            {"label": "Set value from current row #%s &column .." % (row + 1),
+             "value": [{"label": "&%s. %s:\t%s" %  (c + 1, fmt_entity(cdata["name"], force=False),
+                                                  row >= 0 and fmt_value(self.GetValue(row, c))),
+                        "value": (lambda c: lambda x: self.GetValue(row, c))(c)}
+                        for c, cdata in enumerate(self.columns)],
+             "disabled": row < 0 or self.View.GridCursorCol < 0},
             {"label": "Set &NULL", "value": None},
         ]
         filter_hint = lambda x: "<NULL>" if x["value"] is None else ""
@@ -1070,6 +1076,12 @@ class SQLiteGridBase(wx.grid.GridTableBase):
              "value": lambda x, i: self.GetValue(row, i), "disabled": row < 0},
             {"label": "Set value from &focused column #%s in current row #%s" % (col + 1, row + 1),
              "value": lambda x, i: self.GetValue(row, col), "disabled": row < 0 or col < 0},
+            {"label": "Set value from current row #%s &column .." % (row + 1),
+             "value": [{"label": "&%s. %s:\t%s" %  (c + 1, fmt_entity(cdata["name"], force=False),
+                                                  row >= 0 and fmt_value(self.GetValue(row, c))),
+                        "value": lambda x, i: self.GetValue(row, i)}
+                        for c, cdata in enumerate(self.columns)],
+             "disabled": row < 0 or col < 0},
             {"label": "Set &NULL", "value": None},
         ]
         filter_hint = lambda x, i: "<NULL>" if x["value"] is None else ""
