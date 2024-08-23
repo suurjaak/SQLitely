@@ -970,7 +970,8 @@ class FilterEntryDialog(wx.Dialog):
 
     def __init__(self, parent=None, item=None, title="Filter", message="",
                  filter_menu=(), filter_hint=None,
-                 style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER | wx.FRAME_FLOAT_ON_PARENT):
+                 style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER | wx.FRAME_FLOAT_ON_PARENT | 
+                       wx.APPLY):
         """
         @param   item         item to manage,
                               as {name, ?hidden, ?filtered, ?exact, ?inverted, ?value}
@@ -980,19 +981,25 @@ class FilterEntryDialog(wx.Dialog):
                               or a list/tuple of nested submenu choices
         @param   filter_hint  hint text displayed for empty filter value,
                               optionally as callback(item)
+        @param   style        dialog style flags; dialog will have Apply-button if wx.APPLY included
+                              (see SetApplyCallback)
         """
+        apply, style = (style & wx.APPLY), (style ^ wx.APPLY if style & wx.APPLY else style)
         wx.Dialog.__init__(self, parent, title=title, style=style)
 
         self._item    = {} # {name, label, hidden, filtered, filter}
         self._ctrls   = {} # {name: wx.Control}
         self._message = "" # text for optional wx.StaticText
-        self._filter_menu = []    # [{label, value}]
-        self._filter_hint = None  # value or callable(item)
+        self._apply       = True # whether to show Apply-button
+        self._apply_cb    = None # callback(item) registered for Apply-button
+        self._filter_menu = []   # [{label, value}]
+        self._filter_hint = None # value or callable(item)
 
         self._item = dict(name=item["name"], value=item.get("value", ""),
                           exact=bool(item.get("exact")), inverted=bool(item.get("inverted")),
                           filtered=bool(item.get("filtered")))
         self._message = message or ""
+        self._apply   = apply
         self._filter_menu = [dict(label=x["label"], value=x["value"],
                              disabled=bool(x.get("disabled"))) for x in filter_menu]
         self._filter_hint = filter_hint
@@ -1010,6 +1017,13 @@ class FilterEntryDialog(wx.Dialog):
         """Returns the item, with current choices for flags and filter values."""
         return dict(self._item)
     Item = property(GetItem)
+
+
+    def SetApplyCallback(self, callback):
+        """Sets callback function(item) invoked on clicking Apply-button."""
+        if callback is not None and not callable(callback):
+            raise ValueError("Invalid callback %r" % callback)
+        self._apply_cb = callback
 
 
     def _Build(self):
@@ -1048,7 +1062,8 @@ class FilterEntryDialog(wx.Dialog):
         if button_menu:
             self._ctrls["button_menu"] = button_menu
 
-        sizer_buttons = self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL)
+        buttonflags = wx.OK | wx.CANCEL | (wx.APPLY if self._apply else 0)
+        sizer_buttons = self.CreateStdDialogButtonSizer(buttonflags)
 
         sizer_main.Add(check_filter, flag=wx.GROW | wx.ALL ^ wx.BOTTOM, border=5) \
             if self._message else None
@@ -1066,6 +1081,8 @@ class FilterEntryDialog(wx.Dialog):
         self.Bind(wx.EVT_TEXT_ENTER, self._OnChangeFilter,   self._ctrls["edit_filter"])
         if self._filter_menu:
             self.Bind(wx.EVT_BUTTON, self._OnOpenFilterOptions, self._ctrls["button_menu"])
+        if self._apply:
+            self.Bind(wx.EVT_BUTTON, self._OnApply, id=wx.ID_APPLY)
 
 
     def _Refresh(self):
@@ -1084,6 +1101,11 @@ class FilterEntryDialog(wx.Dialog):
         if self._filter_hint:
             hint = self._filter_hint if self._item["filtered"] else ""
             self._ctrls["edit_filter"].Hint = hint(self._item) if callable(hint) else hint
+
+
+    def _OnApply(self, event):
+        """Handler for clicking Apply-button, invokes registered apply-callback if any."""
+        if callable(self._apply_cb): self._apply_cb(self.GetItem())
 
 
     def _OnToggleFiltered(self, event):
@@ -6174,7 +6196,8 @@ class ItemFilterDialog(wx.Dialog):
 
     def __init__(self, parent=None, items=(), title="Filter items", filter_menu=(),
                  filter_hint=None,
-                 style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER | wx.FRAME_FLOAT_ON_PARENT):
+                 style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER | wx.FRAME_FLOAT_ON_PARENT |
+                       wx.APPLY):
         """
         @param   items        list of items to manage,
                               as [{name, ?label, ?hidden, ?exact, ?filtered, ?inverted, ?value}]
@@ -6183,11 +6206,16 @@ class ItemFilterDialog(wx.Dialog):
                               or a list/tuple of nested submenu choices
         @param   filter_hint  hint text displayed for empty filter value,
                               optionally as callback(item, index)
+        @param   style        dialog style flags; dialog will have Apply-button if wx.APPLY included
+                              (see SetApplyCallback)
         """
+        apply, style = (style & wx.APPLY), (style ^ wx.APPLY if style & wx.APPLY else style)
         wx.Dialog.__init__(self, parent, title=title, style=style)
 
         self._items  = {} # [{name, label, hidden, filtered, filter}]
         self._ctrls  = {} # {name or (row, name): wx.Control}
+        self._apply       = True # whether to show Apply-button
+        self._apply_cb    = None # callback(item) registered for Apply-button
         self._filter_menu = []    # [{label, value}]
         self._filter_hint = None  # value or callable(item)
 
@@ -6195,6 +6223,7 @@ class ItemFilterDialog(wx.Dialog):
                             exact=bool(x.get("exact")), inverted=bool(x.get("inverted")),
                             hidden=bool(x.get("hidden")), filtered=bool(x.get("filtered")),
                             label=x.get("label", x["name"])) for x in items]
+        self._apply = apply
         self._filter_menu = [dict(label=x["label"], value=x["value"],
                                   disabled=bool(x.get("disabled"))) for x in filter_menu]
         self._filter_hint = filter_hint
@@ -6210,6 +6239,13 @@ class ItemFilterDialog(wx.Dialog):
         """Returns the list of items, with current choices for flags and filter values."""
         return [dict(x) for x in self._items]
     Items = property(GetItems)
+
+
+    def SetApplyCallback(self, callback):
+        """Sets callback function(item) invoked on clicking Apply-button."""
+        if callback is not None and not callable(callback):
+            raise ValueError("Invalid callback %r" % callback)
+        self._apply_cb = callback
 
 
     def _Build(self):
@@ -6269,7 +6305,8 @@ class ItemFilterDialog(wx.Dialog):
             if button_menu:
                 self._ctrls[(i, "button_menu")] = button_menu
 
-        sizer_buttons = self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL)
+        buttonflags = wx.OK | wx.CANCEL | (wx.APPLY if self._apply else 0)
+        sizer_buttons = self.CreateStdDialogButtonSizer(buttonflags)
 
         sizer_header.Add(check_show_all,   pos=(0, 0))
         sizer_header.Add(check_filter_all, pos=(0, 1), flag=wx.LEFT)
@@ -6292,6 +6329,8 @@ class ItemFilterDialog(wx.Dialog):
         self.Bind(wx.EVT_CHECKBOX, self._OnToggleAllShown,    self._ctrls["check_show_all"])
         self.Bind(wx.EVT_CHECKBOX, self._OnToggleAllFiltered, self._ctrls["check_filter_all"])
         self.Bind(wx.EVT_SIZE, lambda e: (e.Skip(), wx.CallAfter(self._AlignColumns)))
+        if self._apply:
+            self.Bind(wx.EVT_BUTTON, self._OnApply, id=wx.ID_APPLY)
         for i in range(len(self._items)):
             on_toggle_show   = functools.partial(self._OnToggleItemShown,    index=i)
             on_toggle_filter = functools.partial(self._OnToggleItemFiltered, index=i)
@@ -6375,6 +6414,11 @@ class ItemFilterDialog(wx.Dialog):
         """Handler for toggling all items filtered on/off, updates state and refreshes display."""
         for item in self._items: item["filtered"] = event.IsChecked()
         self._Refresh()
+
+
+    def _OnApply(self, event):
+        """Handler for clicking Apply-button, invokes registered apply-callback if any."""
+        if callable(self._apply_cb): self._apply_cb(self.GetItems())
 
 
     def _OnToggleItemShown(self, event, index):
