@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.07.2024
+@modified    23.08.2024
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -2335,6 +2335,21 @@ def fmt_entity(name, force=True, limit=None):
     """
     v = util.unprint(grammar.quote(name, force=force))
     if limit is None: limit = 50
+    return util.ellipsize(v, limit) if limit else v
+
+
+def fmt_value(value, limit=None):
+    """
+    Formats the value for display as SQL, enclosed in quotes if text,
+    unprintable characters escaped, and ellipsized if too long.
+
+    @param   limit  max length for ellipsizing text, defaults to 20, 0 disables
+    """
+    if value is None: return "NULL"
+    if isinstance(value, bool): return str(value).upper()
+    if isinstance(value, six.integer_types + (float, )): return str(value)
+    v = util.unprint(grammar.quote(value, force=True))
+    if limit is None: limit = 20
     return util.ellipsize(v, limit) if limit else v
 
 
