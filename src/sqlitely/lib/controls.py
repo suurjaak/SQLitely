@@ -1138,6 +1138,8 @@ class FindReplaceDialog(wx.Dialog):
     """
     Dialog allowing to search and replace in wx controls.
 
+    Automatically hides itself when parent gets hidden, and re-shows itself when parent is restored.
+
     Supported controls: wx.TextCtrl, wx.stc.StyledTextCtrl, wx.grid.Grid.
     """
 
@@ -1362,6 +1364,7 @@ class FindReplaceDialog(wx.Dialog):
         check_rev  .ToolTip = "Search backward from current position"
 
         button_count.ToolTip = "Count number of occurrences"
+        button_multi.ToolTip = "Toggle multi-line controls"
 
         text_findbig.MinSize = text_replbig.MinSize = (-1, 5*text_findbig.GetTextExtent("X").Height)
         hex_findbig.MinSize  = hex_replbig.MinSize  = (-1, 5*hex_findbig .GetTextExtent("X").Height)
@@ -1551,8 +1554,6 @@ class FindReplaceDialog(wx.Dialog):
         text = self._ctrls[self._GetCtrlName(visible=True)].Value
         if not text: return None
         flags = (0 if self._flags["case"] else re.IGNORECASE)
-        if self._flags["regex"] and self._flags["multiline"]:
-            flags |= re.MULTILINE
         if not self._flags["regex"]: text = re.escape(text)
         if self._flags["word"] and not self._flags["hex"] and not self._flags["regex"]:
             text = r"\b%s\b" % text
@@ -1642,6 +1643,7 @@ class FindReplaceDialog(wx.Dialog):
         else:
             if not pattern: return
             count = self._DoCount(pattern)
+            self._RefreshStatus()
             wx.MessageBox("Found %s occurrence%s." % (count, "" if 1 == count else "s"), self.Title)
 
 
@@ -1687,6 +1689,7 @@ class FindReplaceDialog(wx.Dialog):
 
     def _DoCount(self, pattern):
         """Returns count of all occurrences of pattern in target."""
+        self._RefreshStatus(searching=True)
         count, kwargs = 0, dict(reverse=False, wrap=False)
         kwargs["startpos" if isinstance(self._target, wx.grid.Grid) else "startspan"] = (0, 0)
         while self._FindMatch(pattern, **kwargs):
@@ -1760,7 +1763,7 @@ class FindReplaceDialog(wx.Dialog):
                                                       startpos or self._matchpos)
             else:  # Start search from current cell
                 text, span, pos = self._GetFromTarget(direction=0)
-            match, wrapped = None, (False if pos else None)
+            match, wrapped, spanpos_prev = None, (False if pos else None), (span, pos)
             while pos or (wrap and wrapped is False):  # Wrap immediately if at grid edge
                 if pos:
                     match = get_match(text)
@@ -1769,12 +1772,14 @@ class FindReplaceDialog(wx.Dialog):
                 if not pos and (wrap and not wrapped):  # Wrap search around if not found this side
                     (text, span, pos), wrapped = self._GetFromTarget(direction, wrap=True), True
                     self._status.update(wrapped=True)
+                if spanpos_prev == (span, pos): break  # while pos
+                spanpos_prev = (span, pos)
             fulltext = self._target.GetCellValue(pos) if pos else None
         else:
             fulltext = self._target.Value
             if not startspan: startspan = self._matchspan if self._IsAtMatch(pattern) else None
             text, pos, span = self._GetFromTarget(direction, startspan)
-            match = get_match(text)
+            match = get_match(text) if span[0] != span[1] else None
             if not match and wrap and text != fulltext:  # Wrap search around if not found this side
                 text, pos, span = self._GetFromTarget(direction, startspan, wrap=True)
                 match = get_match(text)
@@ -1832,18 +1837,22 @@ class FindReplaceDialog(wx.Dialog):
             if wrap:
                 if direction < 0: ROWS = ensure_rows(end=True)
                 startpos = (ROWS - 1, COLS - 1) if direction < 0 else (0, 0)
-            elif not startspan:
-                startpos = ensure_pos(startpos, direction)
+            elif not startspan or startspan[0] == startspan[1]:  # 0-length match: advance
+                startpos, startspan = ensure_pos(startpos, direction), None
             if startpos:
                 text = self._target.GetCellValue(startpos)
                 span, pos = (0, len(text)), startpos
                 if startspan:
                     span = (0, startspan[0]) if direction < 0 else (startspan[1], len(text))
+                    if startspan[0] == startspan[1] and not (direction < 0):
+                        span = (startspan[1] + 1, len(text))  # 0-length match: advance
                     text = text[span[0]:span[1]]
         else:
             text = self._target.Value
-            if not startspan: startspan = (self._target.InsertionPoint, ) * 2
-            span = (0, startspan[wrap]) if (direction < 0) ^ wrap else (startspan[not wrap], len(text))
+            mystart = startspan or [self._target.InsertionPoint] * 2
+            span = (0, mystart[wrap]) if (direction < 0) ^ wrap else (mystart[not wrap], len(text))
+            if startspan and startspan[0] == startspan[1] and not ((direction < 0) ^ wrap):
+                span = (mystart[not wrap] + 1, len(text))  # 0-length match: advance
             if span != (0, len(text)):
                 text = text[span[0]:span[1]]
             pos = span
@@ -1893,8 +1902,12 @@ class FindReplaceDialog(wx.Dialog):
                 texts.append("Replaced %(replaced)s occurrences" % self._status)
             elif self._status.get("found") and not self._status.get("replaced") \
             and isinstance(self._target, wx.grid.Grid):
-                a, b = [x + 1 for x in self._matchpos], [self._matchspan[0] + 1, self._matchspan[1]]
-                texts.append("Matched in grid cell (%s, %s), text position %s-%s" % tuple(a + b))
+                gridpos = "%s, %s" % tuple(x + 1 for x in self._matchpos)
+                textpos_nums = (self._matchspan[0] + 1, )
+                if self.Regex and self._matchspan[1] - self._matchspan[0] > 1:
+                    textpos_nums += self._matchspan[1:]  # Show full span for regex if length > 1
+                textpos = "-".join(map(str, textpos_nums))
+                texts.append("Matched in grid cell (%s), text position %s" % (gridpos, textpos))
             if "replaced" not in self._status \
             and self._status.get("wrapped") and self._status.get("found"):
                 texts.append("Search wrapped around to %s" % \
