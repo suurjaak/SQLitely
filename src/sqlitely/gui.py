@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.08.2024
+@modified    24.08.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -117,6 +117,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         # Restore cached parse results; memoize cache is {(sql, ..): (meta, error)}
         cache = {(k, ): (v, None) for k, v in (conf.ParseCache or {}).items()}
         util.memoize.set_cache(grammar.parse, cache)
+
+        controls.FindReplaceDialog.FIND_TEXTS[:] = conf.FindReplaceHistory.get("find") or []
+        controls.FindReplaceDialog.REPLACE_TEXTS[:] = conf.FindReplaceHistory.get("replace") or []
 
         icons = images.get_appicons()
         self.SetIcons(icons)
@@ -2199,6 +2202,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         conf.ParseCache = {k[0]: v[0] for i, (k, v) in enumerate(cache.items())
                            if i < conf.MaxParseCache and len(k) == 1 and v[-1] is None}
 
+        # Save find/replace texts history
+        conf.FindReplaceHistory["find"] = controls.FindReplaceDialog.FIND_TEXTS[:]
+        conf.FindReplaceHistory["replace"] = controls.FindReplaceDialog.REPLACE_TEXTS[:]
+
         # Save last selected files in db lists, to reselect them on rerun
         conf.LastSelectedFiles[:] = self.dbs_selected[:]
         conf.WindowMaximized = self.IsMaximized()
@@ -3431,7 +3438,7 @@ class DatabasePage(wx.Panel):
         stc.SetReadOnly(True)
 
         self.dialog_search_schema = controls.FindReplaceDialog(panel_schema, stc, title="Find in schema", findonly=True)
-        self.dialog_search_schema.SetSharedHistory()
+        self.dialog_search_schema.SetSharedHistory(True)
 
         panel_stats.Sizer.Add(tb_stats, border=5, flag=wx.ALL)
         panel_stats.Sizer.Add(html_stats, proportion=1, flag=wx.GROW)

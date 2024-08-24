@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.08.2024
+@modified    24.08.2024
 ------------------------------------------------------------------------------
 """
 try: from configparser import RawConfigParser                 # Py3
@@ -32,7 +32,7 @@ except ImportError: wx = None
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "2.4.dev45"
+Version = "2.4.dev46"
 VersionDate = "23.08.2024"
 
 Frozen, Snapped = getattr(sys, "frozen", False), (sys.executable or "").startswith("/snap/")
@@ -57,7 +57,7 @@ ConfigFileStatic = False
 
 """List of attribute names that can be saved to and loaded from ConfigFile."""
 FileDirectives = ["AllowMultipleInstances", "ConsoleHistoryCommands", "DBFiles",
-    "DBSort", "LastActivePages", "LastExportType", "LastSearchResults",
+    "DBSort", "FindReplaceHistory", "LastActivePages", "LastExportType", "LastSearchResults",
     "LastSelectedFiles", "LastUpdateCheck", "ParseCache", "Plugins", "RecentFiles",
     "SchemaDiagrams", "SearchHistory", "SearchInMeta", "SearchInData",
     "SearchUseNewTab", "SearchCaseSensitive", "SQLWindowTexts", "TextLineNumbers",
@@ -102,6 +102,9 @@ IPCName = quote_plus("%s-%s" % (wx.GetUserId(), ApplicationFile)).encode("latin1
 
 """History of commands entered in console."""
 ConsoleHistoryCommands = []
+
+"""History of search/replace texts in find/replace dialogs, as {"find": [..], "replace": [..]}."""
+FindReplaceHistory = {}
 
 """Index of last active page in database tab, {db path: index}."""
 LastActivePages = {}

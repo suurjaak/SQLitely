@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.08.2024
+@modified    24.08.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -1928,6 +1928,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         )
         self._dialog_find_sql  = controls.FindReplaceDialog(self, title="Find in SQL")
         self._dialog_find_grid = controls.FindReplaceDialog(self, title="Find in data", findonly=True)
+        self._dialog_find_sql.SetSharedHistory(True)
+        self._dialog_find_grid.SetSharedHistory(True)
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
 
@@ -2676,7 +2678,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
 
         dialog_find = controls.FindReplaceDialog(self, grid, title="Find in data",
                                                  findonly="view" == self._category)
-        dialog_find.SetSharedHistory()
+        dialog_find.SetSharedHistory(True)
         self._dialog_find = dialog_find
 
         label_help = wx.StaticText(self, label="Double-click on column header to sort, right click to filter.")
@@ -10493,6 +10495,7 @@ class ColumnDialog(wx.Dialog):
         if event.Show and self._dialog_find is None:
             self._dialog_find = controls.FindReplaceDialog(self)
             self._dialog_find.SetIcons(self.GetIcons())
+            self._dialog_find.SetSharedHistory(True)
             wx_accel.accelerate(self._dialog_find)
 
 
