@@ -6640,10 +6640,6 @@ class JSONTextCtrl(wx.stc.StyledTextCtrl):
             self.BraceBadLight(braceAtCaret)
         else:
             self.BraceHighlight(braceAtCaret, braceOpposite)
-            #pt = self.PointFromPosition(braceOpposite)
-            #self.Refresh(True, wxRect(pt.x, pt.y, 5,5))
-            #print(pt)
-            #self.Refresh(False)
 
 
     def ToggleFolding(self):
