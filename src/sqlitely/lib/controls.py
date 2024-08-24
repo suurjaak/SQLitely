@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    23.08.2024
+@modified    24.08.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -1279,6 +1279,7 @@ class FindReplaceDialog(wx.Dialog):
         if enabled:
             self._ctrls["text_find"].SetChoices(self.FIND_TEXTS)
             if not self._flags["findonly"]:
+                self._ctrls["text_repl"].DROPDOWN_CLEAR_TEXT = "Clear replace history"
                 self._ctrls["text_repl"].SetChoices(self.REPLACE_TEXTS)
     SharedHistory = property(IsSharedHistory, SetSharedHistory)
 
@@ -1405,6 +1406,7 @@ class FindReplaceDialog(wx.Dialog):
         text_findbig.MinSize = text_replbig.MinSize = (-1, 5*text_findbig.GetTextExtent("X").Height)
         hex_findbig.MinSize  = hex_replbig.MinSize  = (-1, 5*hex_findbig .GetTextExtent("X").Height)
         if self._flags["shared"]:
+            if repl: text_repl.DROPDOWN_CLEAR_TEXT = "Clear replace history"
             text_find.SetChoices(self.FIND_TEXTS), repl and text_repl.SetChoices(self.REPLACE_TEXTS)
 
         ColourManager.Manage(label_status, "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
@@ -1623,9 +1625,13 @@ class FindReplaceDialog(wx.Dialog):
 
     def _OnClearHistory(self, event):
         """Handler for clearing autocomplete history in search or replace texts."""
+        kind = "search" if event.EventObject is self._ctrls["text_find"] else "replace"
+        if wx.OK != wx.MessageBox("Clear %s history?" % kind, "Clear history", wx.OK | wx.CANCEL):
+            return
         event.EventObject.SetChoices([])
         event.EventObject.ShowDropDown(False)
         event.EventObject.Value = ""
+        (self.FIND_TEXTS if "search" == kind else self.REPLACE_TEXTS)[:] = []
 
 
     def _OnFind(self, event):
