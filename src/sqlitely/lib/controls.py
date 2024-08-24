@@ -5435,12 +5435,12 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         """Sets current content to widget."""
         lines, hexlify = [], binascii.hexlify
         if sys.version_info < (3, 8): # Support sep-parameter
-            hexlify = lambda data, sep: sep.join("%02X" % c for c in data)
+            hexlify = lambda data, sep: sep.join(b"%02X" % c for c in data)
         if self._addressed:
             for i in range(0, len(self._bytes), self.WIDTH):
-                lines.append(hexlify(self._bytes[i:i + self.WIDTH], " ").decode("latin1").upper())
+                lines.append(hexlify(self._bytes[i:i + self.WIDTH], b" ").decode("latin1").upper())
         else:
-            lines.append(hexlify(self._bytes, " ").decode("latin1").upper())
+            lines.append(hexlify(self._bytes, b" ").decode("latin1").upper())
         super(HexTextCtrl, self).ChangeValue("\n".join(lines))
         self._Restyle()
         self._Remargin()

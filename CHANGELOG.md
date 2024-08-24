@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.4, 2024-08-22
+2.4, 2024-08-24
 ---------------
 - add support for generated columns
 - add find/replace dialog to data grids and column editors and database schema text
@@ -11,6 +11,7 @@ CHANGELOG
 - show STRICT checkbox for STRICT table in schema editor even if current SQLite does not support it
 - add ANY as possible column type if SQLite version supports STRICT
 - improve converting changed values in table grids to original type for untyped columns
+- fix compatibility issues with Python 3.6
 - fix compatibility issues with Python 3.10+
 - fix opening third-party license link in snaps
 
