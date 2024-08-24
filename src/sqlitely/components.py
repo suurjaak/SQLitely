@@ -1120,8 +1120,10 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             value=str(rows[0] + 1) if rows else "", style=wx.OK | wx.CANCEL
         )
         dlg.CenterOnParent()
-        if wx.ID_OK != dlg.ShowModal(): return
-        m = re.match(r"(\d+)?[,\s]*(\d+)?", dlg.GetValue().strip())
+        with dlg:
+            dlg_result, dlg_value = dlg.ShowModal(), dlg.GetValue()
+        if wx.ID_OK != dlg_result: return
+        m = re.match(r"(\d+)?[,\s]*(\d+)?", dlg_value.strip())
         if not m or not any(m.groups()): return
 
         row, col = self.View.GridCursorRow, self.View.GridCursorCol
@@ -2346,9 +2348,9 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
                     conf.Title, style=wx.OK | wx.CANCEL
                 )
                 dlg.CenterOnParent()
-                if wx.ID_OK != dlg.ShowModal(): return
-                name = dlg.GetValue().strip()
-                if not name: return
+                with dlg:
+                    dlg_result, name = dlg.ShowModal(), dlg.GetValue().strip()
+                if wx.ID_OK != dlg_result or not name: return
             columns = [x for i, x in enumerate(self._grid.Table.columns)
                        if self._grid.Table.IsColumnShown(i)] or self._grid.Table.columns
             info = self._grid.Table.GetSettingsInfo(partial_hidden=True)
@@ -7621,9 +7623,10 @@ class ImportDialog(wx.Dialog):
             """Opens popup dialog for entering position."""
             dlg = wx.TextEntryDialog(self, "Move selected items to position:",
                                      conf.Title)
-            if wx.ID_OK != dlg.ShowModal(): return
-            v = dlg.GetValue().strip()
-            pos = max(0, min(int(v) - 1, len(cc))) if v.isdigit() else None
+            with dlg:
+                dlg_result, dlg_value = dlg.ShowModal(), dlg.GetValue().strip()
+            if wx.ID_OK != dlg_result: return
+            pos = max(0, min(int(dlg_value) - 1, len(cc))) if dlg_value.isdigit() else None
             if pos is not None: move_to_pos(pos, idxs)
 
         def on_top(event=None):
@@ -7916,9 +7919,9 @@ class ImportDialog(wx.Dialog):
             dlg = wx.TextEntryDialog(self, "%sEnter name for new table:" %
                                      (msg + "\n\n" if msg else ""),
                                      conf.Title, name)
-            if wx.ID_OK != dlg.ShowModal(): return
-            name = dlg.GetValue().strip()
-            if not name: return
+            with dlg:
+                dlg_result, name = dlg.ShowModal(), dlg.GetValue().strip()
+            if wx.ID_OK != dlg_result or not name: return
 
             if not self._db.is_valid_name(name):
                 msg = "Invalid table name."
@@ -8415,8 +8418,10 @@ class DataDialog(wx.Dialog):
         dlg = wx.TextEntryDialog(self, "Row number to go to:", conf.Title,
                                  value=str(self._row), style=wx.OK | wx.CANCEL)
         dlg.CenterOnParent()
-        if wx.ID_OK != dlg.ShowModal(): return
-        try: row = int(dlg.GetValue())
+        with dlg:
+            dlg_result, dlg_value = dlg.ShowModal(), dlg.GetValue()
+        if wx.ID_OK != dlg_result: return
+        try: row = int(dlg_value.strip())
         except Exception: return
         row = max(1, min(row, self._gridbase.RowsCount)) - 1
         if row == self._row: return
@@ -10657,8 +10662,10 @@ class ColumnDialog(wx.Dialog):
                                      value="\n" * 6, style=wx.OK | wx.CANCEL | wx.TE_MULTILINE)
             dlg.SetValue("")
             dlg.CenterOnParent()
-            if wx.ID_OK != dlg.ShowModal(): return
-            args = dlg.GetValue(), copy.deepcopy(self._coldata), self._rowdata, self
+            with dlg:
+                dlg_result, dlg_value = dlg.ShowModal(), dlg.GetValue()
+            if wx.ID_OK != dlg_result: return
+            args = dlg_value, copy.deepcopy(self._coldata), self._rowdata, self
             try:
                 arity = util.get_arity(target)
                 result = target(*args[:None if arity < 0 else arity])
@@ -10667,7 +10674,7 @@ class ColumnDialog(wx.Dialog):
                                          style=wx.OK | wx.TE_MULTILINE)
                 dlg.SetValue(value)
                 dlg.CenterOnParent()
-                dlg.ShowModal()
+                with dlg: dlg.ShowModal()
             except Exception as e:
                 wx.MessageBox("Error running user function:\n\n%s" % e, "Error",
                               wx.ICON_WARNING | wx.OK)

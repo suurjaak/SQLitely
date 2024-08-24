@@ -3792,9 +3792,11 @@ class DatabasePage(wx.Panel):
                     conf.Title, value=name, style=wx.OK | wx.CANCEL
                 )
                 dlg.CenterOnParent()
-                if wx.ID_OK != dlg.ShowModal(): return
+                with dlg:
+                    dlg_result, dlg_value = dlg.ShowModal(), dlg.GetValue()
+                if wx.ID_OK != dlg_result: return
 
-                name2 = dlg.GetValue().strip()
+                name2 = dlg_value.strip()
                 if not name2 or name2 == name: return
 
             duplicate = next((vv.get(name2) for vv in self.db.schema.values()), None) \
@@ -3865,9 +3867,11 @@ class DatabasePage(wx.Panel):
                     conf.Title, value=name, style=wx.OK | wx.CANCEL
                 )
                 dlg.CenterOnParent()
-                if wx.ID_OK != dlg.ShowModal(): return
+                with dlg:
+                    dlg_result, dlg_value = dlg.ShowModal(), dlg.GetValue()
+                if wx.ID_OK != dlg_result: return
 
-                name2 = dlg.GetValue().strip()
+                name2 = dlg_value.strip()
                 if not name2 or name2 == name: return
 
             duplicate = next((v for v in item["columns"] if util.lceq(name2, v["name"])), None) \
@@ -3921,9 +3925,11 @@ class DatabasePage(wx.Panel):
                 conf.Title, value=name2, style=wx.OK | wx.CANCEL
             )
             dlg.CenterOnParent()
-            if wx.ID_OK != dlg.ShowModal(): return
+            with dlg:
+                dlg_result, dlg_value = dlg.ShowModal(), dlg.GetValue()
+            if wx.ID_OK != dlg_result: return
 
-            name2 = dlg.GetValue().strip()
+            name2 = dlg_value.strip()
             if not name2 or name2.lower() == name.lower(): return
 
             qname, qname2 = (grammar.quote(n, force=True) for n in (name, name2))
@@ -5616,8 +5622,10 @@ class DatabasePage(wx.Panel):
         def on_rename(event=None):
             name = nb.GetPageText(nb.GetPageIndex(page))
             dlg = wx.TextEntryDialog(self, "Enter new name for tab:", conf.Title, name)
-            if wx.ID_OK != dlg.ShowModal(): return
-            name2 = dlg.GetValue().strip()
+            with dlg:
+                dlg_result, dlg_value = dlg.ShowModal(), dlg.GetValue()
+            if wx.ID_OK != dlg_result: return
+            name2 = dlg_value.strip()
             if not name2 or name2 == name: return
             self.sql_pages.pop(name)
             name2 = util.make_unique(name2, self.sql_pages, " (%s)")
@@ -6532,8 +6540,10 @@ class DatabasePage(wx.Panel):
                                   "name": fmt_entity(name), "name2": fmt_entity(name2),
                                   "entryheader": entryheader, "samefooter": samefooter}
                 dlg = wx.TextEntryDialog(self, msg, conf.Title, value=value)
-                if wx.ID_OK != dlg.ShowModal(): return
-                value = dlg.GetValue().strip()
+                with dlg:
+                    dlg_result, dlg_value = dlg.ShowModal(), dlg.GetValue()
+                if wx.ID_OK != dlg_result: return
+                value = dlg_value.strip()
 
                 if not value:
                     export_items[category].pop(name)
