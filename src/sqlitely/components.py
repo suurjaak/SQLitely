@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.08.2024
+@modified    25.08.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -8238,7 +8238,7 @@ class DataDialog(wx.Dialog):
                 _, (ch, bh) = zip(edit.GetTextExtent("X"),
                                   getattr(edit, "DoGetBorderSize", edit.GetWindowBorderSize)())
                 if not hasattr(edit, "DoGetBorderSize"): bh //= 2.
-                edit.Size = edit.MinSize = (-1, ch + 2 * bh)
+                edit.Size = edit.MinSize = (-1, max(21, ch + 2 * bh))
                 rw = controls.ResizeWidget(panel, direction=wx.VERTICAL)
                 rw.SetManagedChild(edit)
             sizer_columns.Add(label, flag=wx.GROW)
