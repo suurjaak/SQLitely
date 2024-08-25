@@ -12,6 +12,7 @@ CHANGELOG
 - add ANY as possible column type if SQLite version supports STRICT
 - improve converting changed values in table grids to original type for untyped columns
 - tweak initial size of resizable text controls in data grid row dialog
+- re-hide hidden columns on refreshing data grid
 - fix compatibility issues with Python 3.6
 - fix compatibility issues with Python 3.10+
 - fix opening third-party license link in snaps

@@ -2184,7 +2184,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         if restore and isinstance(self._grid.Table, SQLiteGridBase):
             scrollpos = list(map(self._grid.GetScrollPos, [wx.HORIZONTAL, wx.VERTICAL]))
             cursorpos = [self._grid.GridCursorRow, self._grid.GridCursorCol]
-            state = self._grid.Table and self._grid.Table.GetFilterSort()
+            hidden_columns = [c for c in range(self._grid.NumberCols) if not self._grid.IsColShown(c)]
+            sortfilter_state = self._grid.Table.GetFilterSort() if self._grid.Table else {}
 
         self._grid.Freeze()
         self._tbgrid.EnableTool(wx.ID_INDEX, False)
@@ -2240,7 +2241,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
                 maxrow = max(scrollpos[1] * self.SCROLLPOS_ROW_RATIO, cursorpos[0])
                 seekrow = (maxrow // conf.SeekLength + 1) * conf.SeekLength - 1
                 self._grid.Table.SeekToRow(seekrow)
-                self._grid.Table.SetFilterSort(state)
+                self._grid.Table.SetFilterSort(sortfilter_state)
+                for c in hidden_columns: self._grid.Table.ShowColumn(c, False)
                 maxpos = self._grid.GetNumberRows() - 1, self._grid.GetNumberCols() - 1
                 cursorpos = [max(0, min(x)) for x in zip(cursorpos, maxpos)]
                 self._grid.SetGridCursor(*cursorpos)
@@ -3195,7 +3197,8 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
 
         scrollpos = list(map(self._grid.GetScrollPos, [wx.HORIZONTAL, wx.VERTICAL]))
         cursorpos = [self._grid.GridCursorRow, self._grid.GridCursorCol]
-        state = self._grid.Table.GetFilterSort()
+        hidden_columns = [c for c in range(self._grid.NumberCols) if not self._grid.IsColShown(c)]
+        sortfilter_state = self._grid.Table.GetFilterSort()
         self._grid.Freeze()
         try:
             self._grid.Table = None # Reset grid data to empty
@@ -3204,7 +3207,8 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
             if restore: self._grid.Table.SetChanges(self._backup)
             else: self._backup = None
 
-            self._grid.Table.SetFilterSort(state)
+            self._grid.Table.SetFilterSort(sortfilter_state)
+            for c in hidden_columns: self._grid.Table.ShowColumn(c, False)
 
             self._grid.Scroll(*scrollpos)
             maxpos = self._grid.GetNumberRows() - 1, self._grid.GetNumberCols() - 1
