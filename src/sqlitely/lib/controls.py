@@ -241,6 +241,17 @@ class BusyPanel(wx.Window):
         timer.Start(self.REFRESH_INTERVAL)
 
 
+    def __enter__(self):
+        """Context manager entry, returns self."""
+        return self
+
+
+    def __exit__(self, exc_type, exc_val, exc_trace):
+        """Context manager exit, destroys panel."""
+        self.Close()
+        return exc_type is None
+
+
     def _OnDestroy(self, event):
         event.Skip()
         try: self._timer.Stop()
@@ -249,7 +260,7 @@ class BusyPanel(wx.Window):
 
 
     def Close(self):
-        try: self.Destroy(); self.Parent.Refresh()
+        try: self and self.Destroy(); self.Parent.Refresh()
         except Exception: pass
 
 
