@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.4, 2024-08-25
+2.4, 2024-08-26
 ---------------
 - add support for generated columns
 - add find/replace dialog to data grids and column editors and database schema text
@@ -13,6 +13,7 @@ CHANGELOG
 - improve converting changed values in table grids to original type for untyped columns
 - tweak initial size of resizable text controls in data grid row dialog
 - re-hide hidden columns on refreshing data grid
+- use hourglass cursor while showing busy message
 - fix compatibility issues with Python 3.6
 - fix compatibility issues with Python 3.10+
 - fix opening third-party license link in snaps

@@ -236,6 +236,7 @@ class BusyPanel(wx.Window):
         self.CenterOnParent()
         self.Show()
         parent.Refresh()
+        wx.BeginBusyCursor()
         wx.SafeYield()
         timer.Start(self.REFRESH_INTERVAL)
 
@@ -244,6 +245,7 @@ class BusyPanel(wx.Window):
         event.Skip()
         try: self._timer.Stop()
         except Exception: pass
+        wx.EndBusyCursor()
 
 
     def Close(self):
