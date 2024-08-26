@@ -1028,10 +1028,9 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 return
             if new_filter["filtered"]:
                 text = self.GetColFilterText(col, sql=False, name=False, ellipsis=10)
-                busy = controls.BusyPanel(self.View, 'Filtering column %s by "%s".' % (label, text))
-                try: self.AddFilter(col, new_filter["value"],
-                                    new_filter["exact"], new_filter["inverted"])
-                finally: busy.Close()
+                with controls.BusyPanel(self.View, 'Filtering column %s by "%s".' % (label, text)):
+                    self.AddFilter(col, new_filter["value"],
+                                   new_filter["exact"], new_filter["inverted"])
             else:
                 if self.filters.get(col, {}).get("filtered"):
                     self.RemoveFilter(col)
@@ -1715,9 +1714,8 @@ class SQLiteGridBaseMixin(object):
             row, col = max(0, self._grid.GridCursorRow), max(0, self._grid.GridCursorCol)
             rows_present = self._grid.Table.GetNumberRows(present=True) - 1
             seekrow = (rows_present // conf.SeekLeapLength + 1) * conf.SeekLeapLength
-            busy = controls.BusyPanel(self, "Seeking..")
-            try: self._grid.Table.SeekToRow(seekrow // self.SEEKAHEAD_POS_RATIO - 1)
-            finally: busy.Close()
+            with controls.BusyPanel(self, "Seeking.."):
+                self._grid.Table.SeekToRow(seekrow // self.SEEKAHEAD_POS_RATIO - 1)
             row2 = min(seekrow, self._grid.Table.GetNumberRows(present=True)) - 1
             self._grid.GoToCell(row2, col)
             if event.ShiftDown():

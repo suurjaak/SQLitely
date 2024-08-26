@@ -3773,8 +3773,7 @@ class DatabasePage(wx.Panel):
 
             sql = "REINDEX" if not names else \
                   "\n\n".join("REINDEX main.%s;" % grammar.quote(x) for x in targets)
-            busy = controls.BusyPanel(self, "Re-creating %s.." % label)
-            try:
+            with controls.BusyPanel(self, "Re-creating %s.." % label) as busy:
                 logger.info("Running REINDEX on %s in %s.", label, self.db)
                 self.db.executescript(sql, name="REINDEX")
                 busy.Close()
@@ -3782,7 +3781,6 @@ class DatabasePage(wx.Panel):
                 self.on_update_statistics()
                 wx.MessageBox("Re-created %s." % util.plural("index", indexes),
                               conf.Title, wx.ICON_INFORMATION)
-            finally: busy.Close()
         elif "rename" == cmd:
             category, name, name2 = (list(args) + [None])[:3]
             if name not in self.db.schema.get(category) or {}: return
@@ -3945,8 +3943,7 @@ class DatabasePage(wx.Panel):
                 )
                 return
 
-            busy = controls.BusyPanel(self, "Cloning %s.." % category)
-            try:
+            with controls.BusyPanel(self, "Cloning %s.." % category) as busy:
                 allnames.append(name2)
                 renames = {category: {name: name2}}
                 rels = self.db.get_related(category, name, own=True)
@@ -4005,8 +4002,6 @@ class DatabasePage(wx.Panel):
                 if errors: wx.MessageBox("Errors were encountered during cloning:\n\n%s"
                                          % "\n\n".join(errors), conf.Title,
                                          wx.OK | wx.ICON_WARNING)
-            finally:
-                busy.Close()
 
         elif "refresh" == cmd:
             self.reload_schema(count=True)
@@ -4983,7 +4978,7 @@ class DatabasePage(wx.Panel):
             errors = self.db.check_integrity()
         except Exception as e:
             errors = e.args[:]
-        busy.Close()
+        finally: busy.Close()
         guibase.status("")
         if not errors:
             wx.MessageBox("No database errors detected.",
@@ -5016,11 +5011,8 @@ class DatabasePage(wx.Panel):
             guibase.status("Recovering data from %s to %s.",
                            self.db.filename, newfile)
             m = "Recovering data from %s\nto %s."
-            busy = controls.BusyPanel(self, m % (self.db, newfile))
-            try:
+            with controls.BusyPanel(self, m % (self.db, newfile)):
                 copyerrors = self.db.recover_data(newfile)
-            finally:
-                busy.Close()
             err = ("\n\nErrors occurred during the recovery, "
                   "more details in log window:\n\n- "
                   + "\n- ".join(copyerrors)) if copyerrors else ""
@@ -5052,7 +5044,7 @@ class DatabasePage(wx.Panel):
             self.db.executeaction("VACUUM", name="VACUUM")
         except Exception as e:
             errors = e.args[:]
-        busy.Close()
+        finally: busy.Close()
         guibase.status("")
         for page in pages: page.Reload(force=True)
         if errors:
@@ -6757,8 +6749,7 @@ class DatabasePage(wx.Panel):
                                        conf.Title, wx.OK | wx.ICON_WARNING)
 
         sqls, count = [], 0
-        busy = controls.BusyPanel(self, "Truncating tables..")
-        try:
+        with controls.BusyPanel(self, "Truncating tables..") as busy:
             for name in names:
                 page = pages[name]
                 if page: page.CloseCursor(), page.Rollback(force=True)
@@ -6769,7 +6760,6 @@ class DatabasePage(wx.Panel):
                 self.db.schema["table"][name].pop("is_count_estimated", None)
                 sqls.append(sql)
                 if page: page.Reload(force=True)
-        finally:
             busy.Close()
             if sqls:
                 self.db.log_query("TRUNCATE", sqls)
