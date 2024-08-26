@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.08.2024
+@modified    26.08.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -2396,7 +2396,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
     def _OnColumnFilter(self, event):
         """Handler for opening column filters dialog."""
-        wx.Yield() # Allow toolbar icon time to toggle back
+        wx.SafeYield() # Allow toolbar icon time to toggle back
         wx.CallAfter(self._grid.Table.OnColumnFilters)
 
 
@@ -2525,7 +2525,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         """Handler for clicking to open data form for row."""
         if not isinstance(self._grid.Table, SQLiteGridBase) or not self._grid.NumberRows:
             return
-        wx.Yield() # Allow toolbar icon time to toggle back
+        wx.SafeYield() # Allow toolbar icon time to toggle back
         row = self._grid.GridCursorRow
         wx.CallAfter(DataDialog(self, self._grid.Table, row).ShowModal)
         wx.CallAfter(self.Refresh) # Refresh grid labels enabled-status
@@ -2535,7 +2535,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         """Handler for clicking to open column dialog for column."""
         if not isinstance(self._grid.Table, SQLiteGridBase) or not self._grid.NumberRows:
             return
-        wx.Yield() # Allow toolbar icon time to toggle back
+        wx.SafeYield() # Allow toolbar icon time to toggle back
         row, col = self._grid.GridCursorRow, self._grid.GridCursorCol
         wx.CallAfter(self.Refresh) # Refresh grid labels enabled-status
         wx.CallAfter(ColumnDialog(self, self._grid.Table, row, col).ShowModal)
@@ -3132,7 +3132,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
     def _OnOpenColumnForm(self, event=None):
         """Handler for clicking to open column dialog for column."""
         if not self._grid.NumberRows: return
-        wx.Yield() # Allow toolbar icon time to toggle back
+        wx.SafeYield() # Allow toolbar icon time to toggle back
         row, col = self._grid.GridCursorRow, self._grid.GridCursorCol
         wx.CallAfter(ColumnDialog(self, self._grid.Table, row, col).ShowModal)
         wx.CallAfter(self.Refresh) # Refresh grid labels enabled-status
@@ -3220,7 +3220,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
 
     def _OnColumnFilter(self, event):
         """Handler for opening column filters dialog."""
-        wx.Yield() # Allow toolbar icon time to toggle back
+        wx.SafeYield() # Allow toolbar icon time to toggle back
         wx.CallAfter(self._grid.Table.OnColumnFilters)
 
 

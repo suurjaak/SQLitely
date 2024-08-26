@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.08.2024
+@modified    26.08.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1626,7 +1626,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if wx.ID_OK != dialog.ShowModal(): return
 
         path = dialog.GetPath() if len(filenames) > 1 else controls.get_dialog_path(dialog)
-        wx.YieldIfNeeded() # Allow dialog to disappear
+        wx.SafeYield() # Allow dialog to disappear
 
         new_filenames = []
         for filename in filenames:
@@ -5017,7 +5017,6 @@ class DatabasePage(wx.Panel):
                            self.db.filename, newfile)
             m = "Recovering data from %s\nto %s."
             busy = controls.BusyPanel(self, m % (self.db, newfile))
-            wx.YieldIfNeeded()
             try:
                 copyerrors = self.db.recover_data(newfile)
             finally:
@@ -5048,7 +5047,6 @@ class DatabasePage(wx.Panel):
         msg = "Vacuuming %s." % self.db.name
         guibase.status(msg, log=True)
         busy = controls.BusyPanel(self, msg)
-        wx.YieldIfNeeded()
         errors = []
         try:
             self.db.executeaction("VACUUM", name="VACUUM")
@@ -5342,7 +5340,7 @@ class DatabasePage(wx.Panel):
                 return self.notebook.SetSelection(self.pageorder[page])
             if tree.FindAndActivateItem(match):
                 self.notebook.SetSelection(self.pageorder[page])
-                wx.YieldIfNeeded()
+                wx.SafeYield()
                 if row: # Scroll to matching row
                     p = self.data_pages[category].get(item["name"])
                     if p: p.ScrollToRow(row)
@@ -5768,7 +5766,7 @@ class DatabasePage(wx.Panel):
         controls.set_dialog_filter(dialog, ext=conf.LastExportType, exts=importexport.EXPORT_EXTS)
         if wx.ID_OK != dialog.ShowModal(): return
 
-        wx.YieldIfNeeded() # Allow dialog to disappear
+        wx.SafeYield() # Allow dialog to disappear
         self.notebook.SetSelection(self.pageorder[self.page_data])
         extname = importexport.EXPORT_EXTS[dialog.FilterIndex]
         conf.LastExportType = extname
@@ -6345,7 +6343,7 @@ class DatabasePage(wx.Panel):
         controls.set_dialog_filter(dialog, ext=conf.LastExportType, exts=importexport.EXPORT_EXTS)
         if wx.ID_OK != dialog.ShowModal(): return
 
-        wx.YieldIfNeeded() # Allow dialog to disappear
+        wx.SafeYield() # Allow dialog to disappear
         extname = importexport.EXPORT_EXTS[dialog.FilterIndex]
         conf.LastExportType = extname
         path = controls.get_dialog_path(dialog)
@@ -6433,7 +6431,7 @@ class DatabasePage(wx.Panel):
             wildcard=wildcard, style=wx.FD_SAVE | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
-        wx.YieldIfNeeded() # Allow dialog to disappear
+        wx.SafeYield() # Allow dialog to disappear
 
         filename2 = controls.get_dialog_path(dialog)
         is_samefile = util.lceq(self.db.filename, filename2)

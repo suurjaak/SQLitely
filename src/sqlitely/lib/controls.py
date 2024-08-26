@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    24.08.2024
+@modified    26.08.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -236,7 +236,7 @@ class BusyPanel(wx.Window):
         self.CenterOnParent()
         self.Show()
         parent.Refresh()
-        wx.Yield()
+        wx.SafeYield()
         timer.Start(self.REFRESH_INTERVAL)
 
 
