@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    26.08.2024
+@modified    27.08.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -5082,78 +5082,71 @@ SelectionEvent,     EVT_SELECT    = wx.lib.newevent.NewCommandEvent()
 
 class HexByteCommand(wx.Command):
     """Undoable-redoable action for HexTextCtrl/ByteTextCtrl undo-redo."""
-    ATTRS = ["_bytes", "_bytes0"]
 
     def __init__(self, ctrl):
         """Takes snapshot of current control state for do."""
         super(HexByteCommand, self).__init__(canUndo=True)
         self._ctrl   = ctrl
         self._done   = False
-        self._state1 = copy.deepcopy({k: getattr(ctrl, k) for k in self.ATTRS})
+        self._state1 = ctrl._GetValueState()
         self._state1["Selection"] = ctrl.GetSelection()
         self._state2 = None
 
-    def Store(self, value=None):
+    def Store(self):
         """
-        Takes snapshot of current control state for undo,
-        stores command in command processor.
+        Takes snapshot of current control state for undo, stores command in command processor;
+        updates mirror if any.
         """
-        self._state2 = self._GetState(value)
+        self._state2 = self._ctrl._GetValueState()
+        self._state2["Selection"] = self._ctrl.GetSelection()
         self._ctrl._undoredo.Store(self)
         self._done = True
         self._UpdateMirror(self._state2)
 
-    def Submit(self, value=None, value0=None, selection=None, mirror=False):
+    def Submit(self, *new_value, **kwargs):
         """
-        Takes snapshot of current control state for undo,
-        stores command in command processor and carries out do.
+        Takes snapshot of current control state for undo, or uses value argument for new state,
+        stores command in command processor and carries out do; optionally updates mirror if any.
+
+        @param   new_value  single value for new state if not using control state
+        @param   mirror     optional keyword argument to update mirror control
         """
-        self._state2 = self._GetState(value, value0, selection)
+        self._state2 = self._ctrl._GetValueState(*new_value)
+        self._state2["Selection"] = (0, 0) if new_value else self._ctrl.GetSelection()
         self._ctrl._undoredo.Submit(self)
         self._done = True
-        if mirror: self._UpdateMirror(self._state2)
+        if kwargs.get("mirror"): self._UpdateMirror(self._state2)
 
     def Do(self, mirror=False):
-        """Applies control do-action."""
+        """Applies control do-action (wx.Command override)."""
         result = self._Apply(self._state2)
         if self._done and result and self._ctrl.Mirror and mirror:
             self._ctrl.Mirror.Redo()
         return result
 
     def Undo(self, mirror=False):
-        """Applies control undo-action."""
+        """Applies control undo-action (wx.Command override)."""
         result = self._Apply(self._state1)
         if result and self._ctrl.Mirror and mirror:
             self._ctrl.Mirror.Undo()
         return result
 
-    def _GetState(self, value=None, value0=None, selection=None):
-        """Returns current control state."""
-        state = {k: getattr(self._ctrl, k) for k in self.ATTRS}
-        state["Selection"] = selection or self._ctrl.GetSelection()
-        if value is not None:
-            state["_bytes"] = bytearray(value)
-            if value0 is not None:
-                state["_bytes0"] = value0
-            else:
-                diff = len(state["_bytes0"]) - len(state["_bytes"])
-                if diff < 0: state["_bytes0"] = state["_bytes0"] + [None] * abs(diff)
-                elif diff:   state["_bytes0"] = state["_bytes0"][:len(state["_bytes0"]) - diff]
-        return copy.deepcopy(state)
+    def _Apply(self, state):
+        """Populates control with state, returns False if control invalid else True."""
+        if not self._ctrl: return False
+        for k in state:
+            if "Selection" != k: setattr(self._ctrl, k, state[k])
+        self._ctrl._Populate()
+        self._ctrl.SetSelection(*state["Selection"])
+        return True
 
     def _UpdateMirror(self, state):
         """Updates linked control, if any."""
         if not self._ctrl.Mirror: return
-        v, v0, sel = (state[k] for k in self.ATTRS + ["Selection"])
-        HexByteCommand(self._ctrl.Mirror).Submit(v, v0, sel)
-
-    def _Apply(self, state):
-        """Applies state to control and populates it."""
-        if not self._ctrl: return False
-        for k in self.ATTRS: setattr(self._ctrl, k, state[k])
-        self._ctrl._Populate()
-        self._ctrl.SetSelection(*state["Selection"])
-        return True
+        mirrorcmd = HexByteCommand(self._ctrl.Mirror)
+        mirrorcmd._state2 = {k: copy.deepcopy(state[k]) for k in ("_bytes", "_bytes0", "Selection")}
+        mirrorcmd._ctrl._undoredo.Submit(mirrorcmd)
+        mirrorcmd._done = True
 
 
 class HexByteCommandProcessor(wx.CommandProcessor):
@@ -5164,12 +5157,14 @@ class HexByteCommandProcessor(wx.CommandProcessor):
         self._ctrl = ctrl
 
     def Redo(self, mirror=False):
+        """Redoes the current command (wx.CommandProcessor override)."""
         result = super(HexByteCommandProcessor, self).Redo()
         if result and mirror and self._ctrl.Mirror:
             self._ctrl.Mirror.Redo(mirror=False)
         return result
 
     def Undo(self, mirror=False):
+        """Undoes the last command executed (wx.CommandProcessor override)."""
         result = super(HexByteCommandProcessor, self).Undo()
         if result and mirror and self._ctrl.Mirror:
             self._ctrl.Mirror.Undo(mirror=False)
@@ -5322,6 +5317,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
     def SetValue(self, value):
         """Set current content as typed value (string or number), clears undo."""
         self._SetValue(value)
+        self._undoredo.ClearCommands()
         self._Populate()
 
     Value = property(GetValue, SetValue)
@@ -5333,7 +5329,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
     def UpdateValue(self, value, mirror=False):
         """Update current content as typed value (string or number)."""
-        HexByteCommand(self).Submit(self._AdaptValue(value), mirror=mirror)
+        HexByteCommand(self).Submit(value, mirror=mirror)
 
 
     def GetAnchor(self):
@@ -5457,6 +5453,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         super(HexTextCtrl, self).ChangeValue("\n".join(lines))
         self._Restyle()
         self._Remargin()
+        if self._fixed and not self.Overtype: self.SetOvertype(True)
 
 
     def _Restyle(self):
@@ -5489,17 +5486,36 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         finally: self.SetModEventMask(eventmask0)
 
 
+    def _GetValueState(self, *value):
+        """Returns value type and data dict, from current content or given value."""
+        if not value:
+            state = {k: getattr(self, k) for k in ("_bytes", "_bytes0", "_fixed", "_type")}
+            return copy.deepcopy(state)
+        value = value[0]
+        if isinstance(value, bool): value = int(value)
+        bytesvalue = self._AdaptValue(value)
+        state = {
+            "_bytes":  bytearray(bytesvalue),
+            "_bytes0": [x if isinstance(x, int) else ord(x) for x in bytesvalue],
+            "_fixed":  is_fixed(value) or value is None,
+            "_type":   type(value) if is_fixed(value) or isinstance(value, string_types) else str,
+        }
+        diff = len(state["_bytes0"]) - len(state["_bytes"])
+        if diff < 0: state["_bytes0"] = state["_bytes0"] + [None] * abs(diff)
+        elif diff:   state["_bytes0"] = state["_bytes0"][:len(state["_bytes0"]) - diff]
+        return state
+
+
     def _SetValue(self, value):
         """Set current content as typed value (string or number), clears undo."""
-        is_long = is_fixed_long(value)
+        if isinstance(value, bool): value = int(value)
         v = self._AdaptValue(value)
 
-        self._type      = type(value) if is_long or not is_long_long(value) else str
-        self._fixed     = is_long or value is None or is_fixed(value)
+        self._type      = type(value) if is_fixed(value) or isinstance(value, string_types) else str
+        self._fixed     = is_fixed(value) or value is None
         self._bytes0[:] = [x if isinstance(x, int) else ord(x) for x in v]
         self._bytes[:]  = v
-        if self._fixed: self.SetOvertype(True)
-        self._undoredo.ClearCommands()
+        if self._fixed and not self.Overtype: self.SetOvertype(True)
 
 
     def OnFocus(self, event):
@@ -5690,9 +5706,9 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
     def _AdaptValue(self, value):
         """Returns the value as bytes() for hex representation."""
-        is_long = is_fixed_long(value) and not is_long_long(value)
+        is_long, is_int = is_fixed_long(value), isinstance(value, int) and is_fixed(value)
         if is_long:                    v = struct.pack(">q", value)
-        elif isinstance(value, int):   v = struct.pack(">l", value)
+        elif is_int:                   v = struct.pack(">l", value)
         elif isinstance(value, float): v = struct.pack(">f", value)
         elif value is None:            v = b""
         elif isinstance(value, text_type):
@@ -5864,7 +5880,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
 
     def UpdateValue(self, value, mirror=False):
         """Update current content as typed value (string or number), retaining history."""
-        HexByteCommand(self).Submit(self._AdaptValue(value), mirror=mirror)
+        HexByteCommand(self).Submit(value, mirror=mirror)
 
 
     def UpdateBytes(self, value):
@@ -5941,6 +5957,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         if super(ByteTextCtrl, self).Text != fulltext:
             super(ByteTextCtrl, self).ChangeValue(fulltext)
         self._Restyle()
+        if self._fixed and not self.Overtype: self.SetOvertype(True)
 
 
     def _Restyle(self):
@@ -5960,17 +5977,37 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         finally: self.SetModEventMask(eventmask0)
 
 
+    def _GetValueState(self, *value):
+        """Returns value type and data dict, from current content or given value."""
+        if not value:
+            state = {k: getattr(self, k) for k in ("_bytes", "_bytes0", "_fixed", "_type")}
+            return copy.deepcopy(state)
+        value = value[0]
+        if isinstance(value, bool): value = int(value)
+        bytesvalue = self._AdaptValue(value)
+        state = {
+            "_bytes":  bytearray(bytesvalue),
+            "_bytes0": [x if isinstance(x, int) else ord(x) for x in bytesvalue],
+            "_fixed":  is_fixed(value) or value is None,
+            "_type":   type(value) if is_fixed(value) or isinstance(value, string_types) else str,
+        }
+        diff = len(state["_bytes0"]) - len(state["_bytes"])
+        if diff < 0: state["_bytes0"] = state["_bytes0"] + [None] * abs(diff)
+        elif diff:   state["_bytes0"] = state["_bytes0"][:len(state["_bytes0"]) - diff]
+        return state
+
+
     def _SetValue(self, value, noreset=False):
         """Set current content as typed value (string or number)."""
-        is_long = is_fixed_long(value)
+        if isinstance(value, bool): value = int(value)
         v = self._AdaptValue(value)
 
         self._bytes[:] = v
         if not noreset:
-            self._type      = type(value) if is_long or not is_long_long(value) else str
-            self._fixed     = is_long or value is None or is_fixed(value)
+            self._type  = type(value) if is_fixed(value) or isinstance(value, string_types) else str
+            self._fixed = is_fixed(value) or value is None
             self._bytes0[:] = [x if isinstance(x, int) else ord(x) for x in v]
-        if self._fixed: self.SetOvertype(True)
+        if self._fixed and not self.Overtype: self.SetOvertype(True)
 
 
     def OnFocus(self, event):
@@ -6166,9 +6203,9 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
 
     def _AdaptValue(self, value):
         """Returns the value as str for byte representation."""
-        is_long = is_fixed_long(value) and not is_long_long(value)
+        is_long, is_int = is_fixed_long(value), isinstance(value, int) and is_fixed(value)
         if is_long:                    v = struct.pack(">q", value)
-        elif isinstance(value, int):   v = struct.pack(">l", value)
+        elif is_int:                   v = struct.pack(">l", value)
         elif isinstance(value, float): v = struct.pack(">f", value)
         elif value is None:            v = b""
         elif isinstance(value, text_type):
@@ -7912,7 +7949,7 @@ def is_fixed(value):
 
 def is_fixed_long(value, bytevalue=None):
     """
-    Returns whether value is integer smaller than 64 bits.
+    Returns whether value is integer between 32 and 64 bits.
     In Python2, checks also that value is not int.
 
     @param   bytevalue  optional value buffer to check for length
@@ -7924,11 +7961,6 @@ def is_fixed_long(value, bytevalue=None):
     if bytevalue is not None:
         return len(bytevalue) == 8
     return not (-2**31 <= value < 2**31) and -2**63 <= value < 2**63
-
-
-def is_long_long(value):
-    """Returns whether value is integer larger than 64 bits."""
-    return isinstance(value, integer_types) and not (-2**63 <= value < 2**63)
 
 
 def resize_img(img, size, aspect_ratio=True, bg=(-1, -1, -1)):
