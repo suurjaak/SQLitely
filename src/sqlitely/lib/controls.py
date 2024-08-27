@@ -5308,7 +5308,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         if v == b"" and self._type in integer_types + (float, ): v = None
         elif is_fixed_long(self._type(), v): v = struct.unpack(">q", v)[0]
         elif self._type is     int:          v = struct.unpack(">l", v)[0]
-        elif self._type is   float:          v = struct.unpack(">f", v)[0]
+        elif self._type is   float:          v = struct.unpack(">d", v)[0]
         elif self._type is text_type:
             try: v = v.decode("utf-8")
             except Exception: v = v.decode("latin1")
@@ -5709,7 +5709,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         is_long, is_int = is_fixed_long(value), isinstance(value, int) and is_fixed(value)
         if is_long:                    v = struct.pack(">q", value)
         elif is_int:                   v = struct.pack(">l", value)
-        elif isinstance(value, float): v = struct.pack(">f", value)
+        elif isinstance(value, float): v = struct.pack(">d", value)
         elif value is None:            v = b""
         elif isinstance(value, text_type):
             try: v = value.encode("latin1")
@@ -5859,7 +5859,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         if v == b"" and self._type in integer_types + (float, ): v = None
         elif is_fixed_long(self._type(), v): v = struct.unpack(">q", v)[0]
         elif self._type is     int:          v = struct.unpack(">l", v)[0]
-        elif self._type is   float:          v = struct.unpack(">f", v)[0]
+        elif self._type is   float:          v = struct.unpack(">d", v)[0]
         elif self._type is text_type:
             try: v = v.decode("utf-8")
             except Exception: v = v.decode("latin1")
@@ -6206,7 +6206,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         is_long, is_int = is_fixed_long(value), isinstance(value, int) and is_fixed(value)
         if is_long:                    v = struct.pack(">q", value)
         elif is_int:                   v = struct.pack(">l", value)
-        elif isinstance(value, float): v = struct.pack(">f", value)
+        elif isinstance(value, float): v = struct.pack(">d", value)
         elif value is None:            v = b""
         elif isinstance(value, text_type):
             try: v = value.encode("latin1")

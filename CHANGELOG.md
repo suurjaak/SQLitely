@@ -13,6 +13,7 @@ CHANGELOG
 - improve converting changed values in table grids to original type for untyped columns
 - tweak initial size of resizable text controls in data grid row dialog
 - re-hide hidden columns on refreshing data grid
+- use double precision for floating-point values in column editor
 - use hourglass cursor while showing busy message
 - fix representing very large integers in column editor hex view
 - fix compatibility issues with Python 3.6
