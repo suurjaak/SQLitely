@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.07.2024
+@modified    02.09.2024
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -342,7 +342,7 @@ HTML export template for multiple items.
 
 @param   db           database.Database instance
 @param   title        export title, as string or a sequence of strings
-@param   files        files to embed content from, as {file name: {name, title}}
+@param   files        files to embed content from, as {file name: {name, title, count}}
 @param   ?info        additional metadata for export, as {title: text or {label: text}}
 @param   ?combined    whether not doing single item export
 @param   ?progress    callback() returning whether to cancel, if any
@@ -633,7 +633,7 @@ if progress: progress(name=name, count=i)
 """
 JSON export template for multiple items.
 
-@param   files      files to embed content from, as {file name: {name, title}}
+@param   files      files to embed content from, as {file name: {name}}
 @param   ?progress  callback() returning whether to cancel, if any
 """
 DATA_JSON_MULTIPLE = """<%
@@ -715,7 +715,7 @@ for i, chunk in enumerate(data_buffer):
 TXT SQL insert statements export template for multiple items.
 
 @param   db          database.Database instance
-@param   files       files to embed content from, as {file name: {name, title}}
+@param   files       files to embed content from, as {file name: ..}
 @param   ?info        additional metadata for export, as {title: text or {label: text}}
 @param   ?progress   callback() returning whether to cancel, if any
 """
@@ -919,7 +919,7 @@ for i, chunk in enumerate(data_buffer):
 TXT export template for multiple items.
 
 @param   db           database.Database instance
-@param   files        files to embed content from, as {file name: {..}}
+@param   files        files to embed content from, as {file name: ..}
 @param   ?info        additional metadata for export, as {title: text or {label: text}}
 @param   ?progress    callback() returning whether to cancel, if any
 """
@@ -1167,7 +1167,7 @@ YAML export template for multiple items.
 
 @param   db           database.Database instance
 @param   title        export title, as string or a sequence of strings
-@param   files        files to embed content from, as {file name: {..}}
+@param   files        files to embed content from, as {file name: ..}
 @param   ?info        additional metadata for export, as {title: text or {label: text}}
 @param   ?progress    callback() returning whether to cancel, if any
 """
