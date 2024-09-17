@@ -9,82 +9,44 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     24.06.2024
-@modified    07.07.2024
+@modified    17.09.2024
 ------------------------------------------------------------------------------
 """
-import csv
 import glob
+import io
 import json
 import logging
 import os
 import re
-import shutil
 import sqlite3
 import string
 import subprocess
 import sys
-import tempfile
 import unittest
 
 try: import xlsxwriter
 except ImportError: xlsxwriter = None
 try: import yaml
 except ImportError: yaml = None
-try: text_type = basestring       # Py2
-except Exception: text_type = str # Py3
+
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from test.common import COLUMNS, SCHEMA, DATA, IMPORT_FORMATS, OUTPUT_FORMATS
+from test.common import PRINTABLE_FORMATS, MULTISHEET_FORMATS, SPREADSHEET_FORMATS, STATS_FORMATS
+from test.common import FileTest, intify, populate_database, populate_datafile, text_type
 
 
 logger = logging.getLogger()
 
 
-TEXT_VALUES = ["a this that B", "a these two B"]
-
-ROWCOUNT = 10
-
-
-class TestCLI(unittest.TestCase):
-    """Tests the command-line interface.."""
-
-
-    FORMATS = ["db", "csv", xlsxwriter and "xlsx", "html", "json", "sql", "txt", yaml and "yaml"]
-    FORMATS = list(filter(bool, FORMATS))
-
-    PRINTABLE_FORMATS = [x for x in FORMATS if x not in ("db", "html", "xlsx")]
-
-    IMPORT_FORMATS = [xlsxwriter and "xlsx", "csv", "json", yaml and "yaml"]
-    IMPORT_FORMATS = list(filter(bool, IMPORT_FORMATS))
-
-    STATS_FORMATS = ["html", "sql", "txt"]
-
-    SCHEMA = {
-        "empty":   ["id"],
-        "parent":  ["id", "value"],
-        "related": ["id", "value", "fk"],
-    }
-
-    SCHEMA_SQL = ["CREATE TABLE empty (id)",
-                  "CREATE TABLE parent (id, value)",
-                  "CREATE TABLE related (id, value, fk REFERENCES parent (id))",
-                  "CREATE INDEX parent_idx ON parent (id)",
-                  "CREATE TRIGGER on_insert_empty AFTER INSERT ON empty\n"
-                  "BEGIN\nSELECT 'on' FROM empty;\nEND;"]
-
-    DATA = {
-        "empty":   [],
-        "parent":  [{"id": i, "value": TEXT_VALUES[i % 2]} for i in range(ROWCOUNT)],
-        "related": [{"id": i, "value": TEXT_VALUES[i % 2], "fk": ROWCOUNT - i}
-                     for i in range(ROWCOUNT)],
-    }
+class TestCLI(FileTest):
+    """Tests the command-line interface."""
 
 
     def __init__(self, *args, **kwargs):
         super(TestCLI, self).__init__(*args, **kwargs)
-        self.maxDiff = None  # Full diff on assert failure
-        try: unittest.util._MAX_LENGTH = 100000
-        except Exception: pass
         self._proc   = None  # subprocess.Popen instance
         self._dbname = None  # Path to source database
-        self._paths  = []    # [path to temporary test file, ]
 
 
     def setUp(self):
@@ -97,57 +59,7 @@ class TestCLI(unittest.TestCase):
         """Deletes temoorary files and folders, closes subprocess if any."""
         try: self._proc and self._proc.terminate()
         except Exception: pass
-        for path in self._paths:
-            try: (shutil.rmtree if os.path.isdir(path) else os.remove)(path)
-            except Exception: pass
         super(TestCLI, self).tearDown()
-
-
-    def populate_db(self, filename):
-        """Populates an SQLite database with schema and data."""
-        logger.debug("Populating test database %r with %s tables and %s rows.",
-                     filename, len(self.DATA), sum(map(len, self.DATA.values())))
-        with sqlite3.connect(filename) as db:
-            db.executescript(";\n\n".join(self.SCHEMA_SQL))
-            for item_name, data in self.DATA.items():
-                if not data: continue # for
-                rowstr = "(%s)" % ", ".join("?" * len(self.SCHEMA[item_name]))
-                paramstr = ", ".join([rowstr] * len(self.DATA[item_name]))
-                params = [r[c] for r in data for c in self.SCHEMA[item_name]]
-                db.execute("INSERT INTO %s VALUES %s" % (item_name, paramstr), params)
-
-
-    def populate_datafile(self, filename, format, data, schema, combined=False, header=True):
-        """Populates file with data as given format."""
-        logger.debug("Populating %s data in %s with %s tables and %s rows.",
-                     format.upper(), filename, len(schema), sum(map(len, data.values())))
-        if "xlsx" == format:
-            wb = xlsxwriter.Workbook(filename)
-            for item_name in schema:
-                sheet = wb.add_worksheet(item_name)
-                for j, col_name in enumerate(schema[item_name]) if header else ():
-                    sheet.write(0, j, col_name)
-                for i, row in enumerate(data[item_name]):
-                    for j, col_name in enumerate(schema[item_name]):
-                        sheet.write(i + int(bool(header)), j, row[col_name])
-            wb.close()
-        elif "csv" == format:
-            with open(filename, "w") as f:
-                prefix = [""] if combined else []
-                writer = csv.writer(f, csv.excel, delimiter=";", lineterminator="\n")
-                for item_name in schema:
-                    if combined: writer.writerow([item_name])
-                    if header: writer.writerow(prefix + schema[item_name])
-                    for row in data[item_name]:
-                        writer.writerow(prefix + [str(row[k]) for k in schema[item_name]])
-        elif "json" == format:
-            obj = data if combined else next(data[k] for k in schema)
-            with open(filename, "w") as f:
-                json.dump(obj, f)
-        elif "yaml" == format:
-            obj = data if combined else next(data[k] for k in schema)
-            with open(filename, "w") as f:
-                yaml.safe_dump(obj, f)
 
 
     def run_cmd(self, command, *args):
@@ -180,7 +92,7 @@ class TestCLI(unittest.TestCase):
     def test_export(self):
         """Tests 'export' command in command-line interface."""
         logger.info("Testing 'export' command.")
-        self.populate_db(self._dbname)
+        populate_database(self._dbname, SCHEMA, COLUMNS, DATA)
 
         self.verify_export_formats()
         self.verify_export_selections()
@@ -205,7 +117,7 @@ class TestCLI(unittest.TestCase):
     def test_parse(self):
         """Tests 'parse' command in command-line interface."""
         logger.info("Testing 'parse' command.")
-        self.populate_db(self._dbname)
+        populate_database(self._dbname, SCHEMA, COLUMNS, DATA)
 
         self.verify_parse_full()
         self.verify_parse_search()
@@ -215,7 +127,7 @@ class TestCLI(unittest.TestCase):
     def test_pragma(self):
         """Tests 'pragma' command in command-line interface."""
         logger.info("Testing 'pragma' command.")
-        self.populate_db(self._dbname)
+        populate_database(self._dbname, SCHEMA, COLUMNS, DATA)
 
         self.verify_pragma_full()
         self.verify_pragma_search()
@@ -224,7 +136,7 @@ class TestCLI(unittest.TestCase):
     def test_search(self):
         """Tests 'search' command in command-line interface."""
         logger.info("Testing 'search' command.")
-        self.populate_db(self._dbname)
+        populate_database(self._dbname, SCHEMA, COLUMNS, DATA)
 
         self.verify_search_formats()
         self.verify_search_limits()
@@ -234,7 +146,7 @@ class TestCLI(unittest.TestCase):
     def test_stats(self):
         """Tests 'stats' command in command-line interface."""
         logger.info("Testing 'stats' command.")
-        self.populate_db(self._dbname)
+        populate_database(self._dbname, SCHEMA, COLUMNS, DATA)
 
         self.verify_stats_formats()
         self.verify_stats_flags()
@@ -345,13 +257,13 @@ class TestCLI(unittest.TestCase):
     def verify_execute_formats(self):
         """Tests 'execute': output to console and file in different formats."""
         logger.info("Testing query export in all formats.")
-        for fmt in self.PRINTABLE_FORMATS:
+        for fmt in PRINTABLE_FORMATS:
             logger.info("Testing query export as %s.", fmt.upper())
             res, out, err = self.run_cmd("execute", self._dbname, "SELECT * FROM foo", "-f", fmt)
             self.assertFalse(res, "Unexpected failure from SELECT query.")
             self.assertTrue(out, "Unexpected lack of output from SELECT query.")
 
-        for fmt in self.FORMATS:
+        for fmt in OUTPUT_FORMATS:
             logger.info("Testing query export to file as %s.", fmt.upper())
             outfile = self.mktemp("." + fmt)
             res, out, err = self.run_cmd("execute", self._dbname, "SELECT * FROM foo", "-o", outfile)
@@ -388,13 +300,13 @@ class TestCLI(unittest.TestCase):
         """Tests 'export': output to console and file in different formats."""
         logger.info("Testing export in all formats.")
 
-        for fmt in self.PRINTABLE_FORMATS:
+        for fmt in PRINTABLE_FORMATS:
             logger.info("Testing export as %s.", fmt.upper())
             res, out, err = self.run_cmd("export", self._dbname, "-f", fmt)
             self.assertFalse(res, "Unexpected failure from export.")
             self.assertTrue(out, "Unexpected lack of output from export.")
 
-        for fmt in self.FORMATS:
+        for fmt in OUTPUT_FORMATS:
             logger.info("Testing export to file as combined %s.", fmt.upper())
             outfile = self.mktemp("." + fmt)
             res, out, err = self.run_cmd("export", self._dbname, "-o", outfile, "--combine")
@@ -402,10 +314,9 @@ class TestCLI(unittest.TestCase):
             self.assertTrue(os.path.isfile(outfile), "Output file not created in export.")
             self.assertTrue(os.path.getsize(outfile), "Output file has no content in export.")
 
-        for fmt in self.FORMATS:
+        for fmt in OUTPUT_FORMATS:
             logger.info("Testing export to separate files as %s.", fmt.upper())
-            outpath = tempfile.mkdtemp()
-            self._paths.append(outpath)
+            outpath = self.mkdtemp()
             res, out, err = self.run_cmd("export", self._dbname, "-f", fmt, "--path", outpath)
             self.assertFalse(res, "Unexpected failure from export.")
             files = glob.glob(os.path.join(outpath, "*." + fmt))
@@ -413,30 +324,31 @@ class TestCLI(unittest.TestCase):
 
 
     def verify_export_selections(self):
-        """Tests 'export': output to console with table selections."""
-        logger.info("Testing export with table selections.")
+        """Tests 'export': output to console with entity selections."""
+        logger.info("Testing export with entity selections.")
 
         res, out, err = self.run_cmd("export", self._dbname, "-f", "json", "--select", "parent")
         self.assertFalse(res, "Unexpected failure from export.")
-        self.assertEqual(json.loads(out), {"parent": self.DATA["parent"]},
+        self.assertEqual(json.loads(out), {"parent": DATA["parent"]},
                         "Unexpected output from export.")
 
-        res, out, err = self.run_cmd("export", self._dbname, "-f", "json", "--select", "~related", "~empty")
+        res, out, err = self.run_cmd("export", self._dbname, "-f", "json",
+                                     "--select", "~related", "~empty", "~myview")
         self.assertFalse(res, "Unexpected failure from export.")
-        self.assertEqual(json.loads(out), {"parent": self.DATA["parent"]},
+        self.assertEqual(json.loads(out), {"parent": DATA["parent"]},
                         "Unexpected output from export.")
 
         res, out, err = self.run_cmd("export", self._dbname, "-f", "json",
                                      "--select", "~parent", "related", "~empty")
         self.assertFalse(res, "Unexpected failure from export.")
-        self.assertEqual(json.loads(out), {"related": self.DATA["related"]},
+        self.assertEqual(json.loads(out), {"related": DATA["related"]},
                         "Unexpected output from export.")
 
         logger.info("Testing export with --include-related.")
         res, out, err = self.run_cmd("export", self._dbname, "-f", "json",
-                                     "--select", "~parent", "related", "--include-related")
+                                     "--select", "~parent", "~myview", "related", "--include-related")
         self.assertFalse(res, "Unexpected failure from export.")
-        self.assertEqual(json.loads(out), {k: self.DATA[k] for k in ("parent", "related")},
+        self.assertEqual(json.loads(out), {k: DATA[k] for k in ("parent", "related")},
                         "Unexpected output from export.")
 
 
@@ -448,45 +360,42 @@ class TestCLI(unittest.TestCase):
         res, out, err = self.run_cmd("export", self._dbname, "-f", "json",
                                      "--select", "parent", "--limit", 5)
         self.assertFalse(res, "Unexpected failure from export.")
-        self.assertEqual(json.loads(out), {"parent": self.DATA["parent"][:5]},
+        self.assertEqual(json.loads(out), {"parent": DATA["parent"][:5]},
                         "Unexpected output from export.")
 
         logger.info("Testing export with --limit --offset.")
         res, out, err = self.run_cmd("export", self._dbname, "-f", "json",
                                      "--select", "parent", "--limit", 5, "--offset", 5)
         self.assertFalse(res, "Unexpected failure from export.")
-        self.assertEqual(json.loads(out), {"parent": self.DATA["parent"][5:]},
+        self.assertEqual(json.loads(out), {"parent": DATA["parent"][5:]},
                         "Unexpected output from export.")
 
         logger.info("Testing export with --limit --max-count.")
         res, out, err = self.run_cmd("export", self._dbname, "-f", "json",
                                      "--limit", 5, "--max-count", 6)
         self.assertFalse(res, "Unexpected failure from export.")
-        self.assertEqual(json.loads(out), {"empty": [], "parent": self.DATA["parent"][:5],
-                                           "related": self.DATA["related"][:1]},
+        self.assertEqual(json.loads(out), {"empty": [], "parent": DATA["parent"][:5],
+                                           "related": DATA["related"][:1], "myview": []},
                         "Unexpected output from export.")
 
         logger.info("Testing export with --reverse.")
         res, out, err = self.run_cmd("export", self._dbname, "-f", "json", "--reverse")
         self.assertFalse(res, "Unexpected failure from export.")
-        self.assertEqual(json.loads(out), {"empty": [], "parent": self.DATA["parent"][::-1],
-                                           "related": self.DATA["related"][::-1]},
+        self.assertEqual(json.loads(out), {k: v[::-1] for k, v in DATA.items()},
                         "Unexpected output from export.")
 
 
     def verify_export_flags(self):
         """Tests 'export': various command-line flags."""
         logger.info("Testing export with --no-empty.")
-        outpath = tempfile.mkdtemp()
-        self._paths.append(outpath)
+        outpath = self.mkdtemp()
         res, out, err = self.run_cmd("export", self._dbname, "-f", "html", "--path", outpath)
         self.assertFalse(res, "Unexpected failure from export.")
         files = glob.glob(os.path.join(outpath, "*.html"))
         self.assertTrue(files, "Output files not created in export.")
         self.assertTrue(any("empty" in f for f in files), "Emtpy table not exported.")
 
-        outpath = tempfile.mkdtemp()
-        self._paths.append(outpath)
+        outpath = self.mkdtemp()
         res, out, err = self.run_cmd("export", self._dbname, "-f", "html",
                                      "--path", outpath, "--no-empty")
         self.assertFalse(res, "Unexpected failure from export.")
@@ -508,14 +417,14 @@ class TestCLI(unittest.TestCase):
     def verify_import_formats(self):
         """Tests 'import': from different formats."""
 
-        for fmt in self.IMPORT_FORMATS:
+        for fmt in IMPORT_FORMATS:
             logger.info("Testing import from %s.", fmt.upper())
-            combined = ("xlsx" == fmt)
+            combined = fmt in MULTISHEET_FORMATS
             single_name = None if combined else "parent"
-            schema = {k: self.SCHEMA[k] for k in (self.SCHEMA if combined else [single_name])}
-            data   = {k: self.DATA[k]   for k in (self.SCHEMA if combined else [single_name])}
+            schema = {k: COLUMNS[k] for k in (COLUMNS if combined else [single_name])}
+            data   = {k: DATA[k]    for k in (COLUMNS if combined else [single_name])}
             infile = self.mktemp("." + fmt)
-            self.populate_datafile(infile, fmt, data, schema, combined)
+            populate_datafile(infile, fmt, data, schema, combined)
 
             outfile = self.mktemp(".db")
             res, out, err = self.run_cmd("import", infile, outfile, "--assume-yes", "--row-header")
@@ -539,14 +448,14 @@ class TestCLI(unittest.TestCase):
         FLAGSETS = [("--limit", 3), ("--offset", 7), ("--limit", 5, "--offset", 7),
                     ("--max-count", 6), ("--max-count", 16), ("--limit", 3, "--max-count", 6)]
 
-        for fmt in self.IMPORT_FORMATS:
+        for fmt in IMPORT_FORMATS:
             logger.info("Testing import from %s.", fmt.upper())
-            combined = ("xlsx" == fmt)
+            combined = fmt in MULTISHEET_FORMATS
             single_name = None if combined else "parent"
-            schema = {k: self.SCHEMA[k] for k in (self.SCHEMA if combined else [single_name])}
-            data   = {k: self.DATA[k]   for k in (self.SCHEMA if combined else [single_name])}
+            schema = {k: COLUMNS[k] for k in (COLUMNS if combined else [single_name])}
+            data   = {k: DATA[k]    for k in (COLUMNS if combined else [single_name])}
             infile = self.mktemp("." + fmt)
-            self.populate_datafile(infile, fmt, data, schema, combined)
+            populate_datafile(infile, fmt, data, schema, combined)
 
             for flags in FLAGSETS:
                 logger.info("Testing import from %s with %s.", fmt.upper(), " ".join(map(str, flags)))
@@ -581,14 +490,14 @@ class TestCLI(unittest.TestCase):
         """Tests 'import': with --no-empty."""
         logger.info("Testing import with --no-empty.")
 
-        for fmt in self.IMPORT_FORMATS:
+        for fmt in IMPORT_FORMATS:
             logger.info("Testing import from %s with --no-empty.", fmt.upper())
-            combined = ("xlsx" == fmt)
+            combined = fmt in MULTISHEET_FORMATS
             single_name = None if combined else "parent"
-            schema = {k: self.SCHEMA[k] for k in (self.SCHEMA if combined else [single_name])}
-            data   = {k: self.DATA[k]   for k in (self.SCHEMA if combined else [single_name])}
+            schema = {k: COLUMNS[k] for k in (COLUMNS if combined else [single_name])}
+            data   = {k: DATA[k]    for k in (COLUMNS if combined else [single_name])}
             infile = self.mktemp("." + fmt)
-            self.populate_datafile(infile, fmt, data, schema, combined)
+            populate_datafile(infile, fmt, data, schema, combined)
 
             outfile = self.mktemp(".db")
             res, out, err = self.run_cmd("import", infile, outfile, "--assume-yes",
@@ -608,16 +517,16 @@ class TestCLI(unittest.TestCase):
         """Tests 'import': with --add-pk."""
         logger.info("Testing import with --add-pk.")
 
-        for i, fmt in enumerate(self.IMPORT_FORMATS):
+        for i, fmt in enumerate(IMPORT_FORMATS):
             pk = "custom" if i % 2 else None
             logger.info("Testing import from %s with --add-pk%s.",
                         fmt.upper(), " %s" % pk if pk else "")
-            combined = ("xlsx" == fmt)
+            combined = fmt in MULTISHEET_FORMATS
             single_name = None if combined else "parent"
-            schema = {k: self.SCHEMA[k] for k in (self.SCHEMA if combined else [single_name])}
-            data   = {k: self.DATA[k]   for k in (self.SCHEMA if combined else [single_name])}
+            schema = {k: COLUMNS[k] for k in (COLUMNS if combined else [single_name])}
+            data   = {k: DATA[k]    for k in (COLUMNS if combined else [single_name])}
             infile = self.mktemp("." + fmt)
-            self.populate_datafile(infile, fmt, data, schema, combined)
+            populate_datafile(infile, fmt, data, schema, combined)
 
             outfile = self.mktemp(".db")
             res, out, err = self.run_cmd("import", infile, outfile, "--assume-yes",
@@ -640,14 +549,14 @@ class TestCLI(unittest.TestCase):
         """Tests 'import': with --row-header."""
         logger.info("Testing import with --row-header.")
 
-        for fmt in (x for x in self.IMPORT_FORMATS if x in ("csv", "xlsx")):
+        for fmt in SPREADSHEET_FORMATS:
             logger.info("Testing import from %s with --row-header.", fmt.upper())
-            combined = ("xlsx" == fmt)
+            combined = fmt in MULTISHEET_FORMATS
             single_name = None if combined else "parent"
-            schema = {k: self.SCHEMA[k] for k in (self.SCHEMA if combined else [single_name])}
-            data   = {k: self.DATA[k]   for k in (self.SCHEMA if combined else [single_name])}
+            schema = {k: COLUMNS[k] for k in (COLUMNS if combined else [single_name])}
+            data   = {k: DATA[k]    for k in (COLUMNS if combined else [single_name])}
             infile = self.mktemp("." + fmt)
-            self.populate_datafile(infile, fmt, data, schema, combined, header=False)
+            populate_datafile(infile, fmt, data, schema, combined, header=False)
 
             outfile = self.mktemp(".db")
             res, out, err = self.run_cmd("import", infile, outfile, "--assume-yes")
@@ -664,7 +573,7 @@ class TestCLI(unittest.TestCase):
                     self.assertEqual(bool(table_row), bool(data[item_name]),
                                      "Unexpected result from existence check on %r." % item_name)
                     if not table_row: continue # for item_name
-                    expected = [{c: r[k] for k, c in zip(self.SCHEMA[item_name], string.ascii_uppercase)}
+                    expected = [{c: r[k] for k, c in zip(COLUMNS[item_name], string.ascii_uppercase)}
                                 for r in data[item_name]]
                     rows = db.execute("SELECT * FROM %s" % table_name).fetchall()
                     if "csv" == fmt: rows = [{k: intify(v) for k, v in r.items()} for r in rows]
@@ -677,18 +586,18 @@ class TestCLI(unittest.TestCase):
 
         SELECTSETS = ({"parent": True}, {"related": False}, {"parent": True, "related": False})
 
-        for fmt in (x for x in self.IMPORT_FORMATS if x in ("csv", "xlsx")):
+        for fmt in SPREADSHEET_FORMATS:
             logger.info("Testing import from %s with table selections.", fmt.upper())
-            combined = ("xlsx" == fmt)
+            combined = fmt in MULTISHEET_FORMATS
 
             for selectset in SELECTSETS:
                 flags = ["--select"] + [("" if v else "~") + k for k, v in selectset.items()]
-                schema = {k: self.SCHEMA[k] for k in self.SCHEMA if selectset.get(k)}
+                schema = {k: COLUMNS[k] for k in COLUMNS if selectset.get(k)}
                 if not any(selectset.values()):
-                    schema.update({k: self.SCHEMA[k] for k in self.SCHEMA if selectset.get(k, True)})
-                data   = {k: self.DATA[k] for k in schema}
+                    schema.update({k: COLUMNS[k] for k in COLUMNS if selectset.get(k, True)})
+                data   = {k: DATA[k] for k in schema}
                 infile = self.mktemp("." + fmt)
-                self.populate_datafile(infile, fmt, data, schema, combined)
+                populate_datafile(infile, fmt, data, schema, combined)
 
                 outfile = self.mktemp(".db")
                 res, out, err = self.run_cmd("import", infile, outfile, "--assume-yes", *flags)
@@ -708,25 +617,23 @@ class TestCLI(unittest.TestCase):
         """Tests 'import': with column selections."""
         logger.info("Testing import with column selections.")
 
-        COLSETS = {
-            None: ("id", "id,fk", "id,value"),
-            "csv": ("1", "1..1", "1..2", "1,2", "A..A", "A..B", "A..Z"),
-        }
-        COLSETS["xlsx"] = COLSETS["csv"]
+        COLSETS = {None: ("id", "id,fk", "id,value")}
+        for fmt in SPREADSHEET_FORMATS:
+            COLSETS[fmt] = ("1", "1..1", "1..2", "1,2", "A..A", "A..B", "A..Z")
         EXPECTEDS = {
             "id": ["id"], "id,fk": ["id", "fk"], "id,value": ["id", "value"], "1": ["id"],
             "1..1": ["id"], "1..2": ["id", "value"], "1,2": ["id", "value"],
             "A..A": ["id"], "A..B": ["id", "value"], "A..Z": ["id", "value", "fk"],
         }
 
-        for fmt in self.IMPORT_FORMATS:
+        for fmt in IMPORT_FORMATS:
             logger.info("Testing import from %s with column selections.", fmt.upper())
-            combined = ("xlsx" == fmt)
+            combined = fmt in MULTISHEET_FORMATS
             single_name = None if combined else "related"
-            schema = {k: self.SCHEMA[k] for k in (self.SCHEMA if combined else [single_name])}
-            data   = {k: self.DATA[k]   for k in (self.SCHEMA if combined else [single_name])}
+            schema = {k: COLUMNS[k] for k in (COLUMNS if combined else [single_name])}
+            data   = {k: DATA[k]    for k in (COLUMNS if combined else [single_name])}
             infile = self.mktemp("." + fmt)
-            self.populate_datafile(infile, fmt, data, schema, combined)
+            populate_datafile(infile, fmt, data, schema, combined)
 
             basename = os.path.splitext(os.path.basename(infile))[0]
             for i, colset in enumerate(COLSETS[None] + COLSETS.get(fmt, ())):
@@ -753,14 +660,14 @@ class TestCLI(unittest.TestCase):
         """Tests 'import': various command-line flags."""
 
         TABLE = "mytable"
-        for fmt in self.IMPORT_FORMATS:
+        for fmt in IMPORT_FORMATS:
             logger.info("Testing import from %s with --table-name.", fmt.upper())
-            combined = ("xlsx" == fmt)
+            combined = fmt in MULTISHEET_FORMATS
             single_name = None if combined else "related"
-            schema = {k: self.SCHEMA[k] for k in (self.SCHEMA if combined else [single_name])}
-            data   = {k: self.DATA[k]   for k in (self.SCHEMA if combined else [single_name])}
+            schema = {k: COLUMNS[k] for k in (COLUMNS if combined else [single_name])}
+            data   = {k: DATA[k]    for k in (COLUMNS if combined else [single_name])}
             infile = self.mktemp("." + fmt)
-            self.populate_datafile(infile, fmt, data, schema, combined)
+            populate_datafile(infile, fmt, data, schema, combined)
 
             outfile = self.mktemp(".db")
             res, out, err = self.run_cmd("import", infile, outfile, "--assume-yes",
@@ -811,7 +718,7 @@ class TestCLI(unittest.TestCase):
         logger.info("Testing parse command with full output to console.")
         res, out, err = self.run_cmd("parse", self._dbname)
         self.assertFalse(res, "Unexpected failure from parse.")
-        for sql in self.SCHEMA_SQL:
+        for sql in (v for d in SCHEMA.values() for v in d.values()):
             self.assertIn(sql, out, "Unexpected output in parse.")
 
         logger.info("Testing parse command with full output to file.")
@@ -819,8 +726,8 @@ class TestCLI(unittest.TestCase):
         res, out, err = self.run_cmd("parse", self._dbname, "-o", outfile)
         self.assertFalse(res, "Unexpected failure from parse.")
         self.assertTrue(os.path.isfile(outfile), "Output file not created in parse.")
-        with open(outfile, "r") as f: content = f.read()
-        for sql in self.SCHEMA_SQL:
+        with io.open(outfile, "r", encoding="utf-8") as f: content = f.read()
+        for sql in (v for d in SCHEMA.values() for v in d.values()):
             self.assertIn(sql, content, "Unexpected output in parse.")
 
         logger.info("Testing parse command output to file with --overwrite.")
@@ -848,30 +755,31 @@ class TestCLI(unittest.TestCase):
             "table:pa*t "
             "index:parent":   ["TABLE parent", "INDEX parent_idx"],
             "column:fk":      ["TABLE related"],
-            "column:id":      ["TABLE parent", "TABLE related", "TABLE empty", "INDEX parent_idx"],
+            "column:id":      ["TABLE parent", "TABLE related", "TABLE empty", "INDEX parent_idx", "VIEW myview"],
             "~column:id":     ["TRIGGER on_insert_empty"],
             "table:* "
             "~table:empty":   ["TABLE parent", "TABLE related"],
-            "~table:*":        ["INDEX parent_idx", "TRIGGER on_insert_empty"],
+            "~table:*":       ["INDEX parent_idx", "TRIGGER on_insert_empty", "VIEW myview"],
+            "view":           ["VIEW myview"],
         }
 
         for filterset, expecteds in FILTERSETS.items():
             logger.info("Testing parse command with %r.", filterset)
             res, out, err = self.run_cmd("parse", self._dbname, filterset)
             self.assertFalse(res, "Unexpected failure from parse.")
-            for sql in self.SCHEMA_SQL:
+            for sql in (v for d in SCHEMA.values() for v in d.values()):
                 action = self.assertIn if any(x in sql for x in expecteds) else self.assertNotIn
                 action(sql, out, "Unexpected output in parse for %r." % filterset)
 
         logger.info("Testing parse command with --case.")
         res, out, err = self.run_cmd("parse", self._dbname, "ON")
         self.assertFalse(res, "Unexpected failure from parse.")
-        for sql in self.SCHEMA_SQL:
+        for sql in (v for d in SCHEMA.values() for v in d.values()):
             action = self.assertIn if "on" in sql.lower() else self.assertNotIn
             action(sql, out, "Unexpected output in parse with --case.")
         res, out, err = self.run_cmd("parse", self._dbname, "ON", "--case")
         self.assertFalse(res, "Unexpected failure from parse.")
-        for sql in self.SCHEMA_SQL:
+        for sql in (v for d in SCHEMA.values() for v in d.values()):
             action = self.assertIn if "ON" in sql else self.assertNotIn
             action(sql, out, "Unexpected output in parse with --case.")
 
@@ -882,9 +790,10 @@ class TestCLI(unittest.TestCase):
         res, out, err = self.run_cmd("parse", self._dbname, "--reverse")
         self.assertFalse(res, "Unexpected failure from parse.")
 
+        CATEGORY_ORDER = ["table", "view", "index", "trigger"]
         seen = set()
         creates = [x for x in out.splitlines() if x.startswith("CREATE ")]
-        order_expected = ["table", "view", "index", "trigger"][::-1]
+        order_expected = CATEGORY_ORDER[::-1]
         order_received = [re.sub(r"CREATE (\w+)\s.+$", r"\1", x).lower() for x in creates]
         received = [x for x in order_received if x not in seen and not seen.add(x)]
         expected = [x for x in order_expected if x in received]
@@ -895,14 +804,15 @@ class TestCLI(unittest.TestCase):
         for limit, offset in LIMITS_OFFSETS:
             flags  = [] if limit  is None else ["--limit",  limit]
             flags += [] if offset is None else ["--offset", offset]
-            logger.info("Testing parse with %s." % " ".join(map(str, flags)))
-            res, out, err = self.run_cmd("parse", self._dbname, *flags)
+            logger.info("Testing parse with %s.", " ".join(map(str, flags)))
+            res, out, err = self.run_cmd("parse", self._dbname, *flags + ["--verbose"])
             self.assertFalse(res, "Unexpected failure from parse.")
             creates = [x for x in out.splitlines() if x.startswith("CREATE ")]
-            count_expected = min(len(self.SCHEMA_SQL) - (offset or 0), limit or len(self.SCHEMA_SQL))
+            sqls = [v for c in CATEGORY_ORDER for v in SCHEMA.get(c, {}).values()]
+            count_expected = min(len(sqls) - (offset or 0), limit or len(sqls))
             self.assertEqual(len(creates), count_expected,
                              "Unexpected number of items in parse with --limit.")
-            for remote, local in zip(creates, self.SCHEMA_SQL[offset or 0:]):
+            for remote, local in zip(creates, sqls[offset or 0:]):
                 received = re.sub(r"CREATE \w+ (\w+)\s.+$", r"\1", remote, flags=re.DOTALL)
                 expected = re.sub(r"CREATE \w+ (\w+)\s.+$", r"\1", local,  flags=re.DOTALL)
                 self.assertEqual(expected, received, "Unexpected items in parse with --limit.")
@@ -924,7 +834,7 @@ class TestCLI(unittest.TestCase):
         res, out, err = self.run_cmd("pragma", self._dbname, "-o", outfile)
         self.assertFalse(res, "Unexpected failure from pragma.")
         self.assertTrue(os.path.isfile(outfile), "Output file not created in pragma.")
-        with open(outfile, "r") as f: content = f.read()
+        with io.open(outfile, "r", encoding="utf-8") as f: content = f.read()
         for expected in SOME_EXPECTED:
             self.assertIn(expected, content, "Unexpected output in pragma.")
 
@@ -965,13 +875,13 @@ class TestCLI(unittest.TestCase):
         """Tests 'search': output to console and file in different formats."""
         logger.info("Testing search output in all formats.")
 
-        for fmt in self.PRINTABLE_FORMATS:
+        for fmt in PRINTABLE_FORMATS:
             logger.info("Testing search output as %s.", fmt.upper())
             res, out, err = self.run_cmd("search", self._dbname, "-f", fmt, "*")
             self.assertFalse(res, "Unexpected failure from search.")
             self.assertTrue(out, "Unexpected lack of output from search.")
 
-        for fmt in self.FORMATS:
+        for fmt in OUTPUT_FORMATS:
             logger.info("Testing search output to file as combined %s.", fmt.upper())
             outfile = self.mktemp("." + fmt)
             res, out, err = self.run_cmd("search", self._dbname, "-o", outfile, "--combine", "*")
@@ -979,16 +889,15 @@ class TestCLI(unittest.TestCase):
             self.assertTrue(os.path.isfile(outfile), "Output file not created in search.")
             self.assertTrue(os.path.getsize(outfile), "Output file has no content in search.")
 
-        for fmt in self.FORMATS:
+        for fmt in OUTPUT_FORMATS:
             logger.info("Testing search output to separate files as %s.", fmt.upper())
-            outpath = tempfile.mkdtemp()
-            self._paths.append(outpath)
+            outpath = self.mkdtemp()
             res, out, err = self.run_cmd("search", self._dbname, "-f", fmt, "--path", outpath, "*")
             self.assertFalse(res, "Unexpected failure from search.")
             files = glob.glob(os.path.join(outpath, "*." + fmt))
             self.assertTrue(files, "Output files not created in search.")
 
-        for fmt in self.FORMATS:
+        for fmt in OUTPUT_FORMATS:
             logger.info("Testing search output to file as combined %s with --overwrite.",
                         fmt.upper())
             outfile = self.mktemp("." + fmt, "custom")
@@ -1011,29 +920,28 @@ class TestCLI(unittest.TestCase):
         res, out, err = self.run_cmd("search", self._dbname, "-f", "json",
                                      "--limit", 5, "table:parent")
         self.assertFalse(res, "Unexpected failure from search.")
-        self.assertEqual(json.loads(out), {"parent": self.DATA["parent"][:5]},
+        self.assertEqual(json.loads(out), {"parent": DATA["parent"][:5]},
                         "Unexpected output from search.")
 
         logger.info("Testing search with --limit --offset.")
         res, out, err = self.run_cmd("search", self._dbname, "-f", "json",
                                      "--limit", 5, "--offset", 5, "table:parent")
         self.assertFalse(res, "Unexpected failure from search.")
-        self.assertEqual(json.loads(out), {"parent": self.DATA["parent"][5:]},
+        self.assertEqual(json.loads(out), {"parent": DATA["parent"][5:]},
                         "Unexpected output from search.")
 
         logger.info("Testing search with --limit --max-count.")
         res, out, err = self.run_cmd("search", self._dbname, "-f", "json",
                                      "--limit", 5, "--max-count", 6, "*")
         self.assertFalse(res, "Unexpected failure from search.")
-        self.assertEqual(json.loads(out), {"empty": [], "parent": self.DATA["parent"][:5],
-                                           "related": self.DATA["related"][:1]},
+        self.assertEqual(json.loads(out), {"empty": [], "parent": DATA["parent"][:5],
+                                           "related": DATA["related"][:1], "myview": []},
                         "Unexpected output from search.")
 
         logger.info("Testing search with --reverse.")
         res, out, err = self.run_cmd("search", self._dbname, "-f", "json", "--reverse", "*")
         self.assertFalse(res, "Unexpected failure from search.")
-        self.assertEqual(json.loads(out), {"empty": [], "parent": self.DATA["parent"][::-1],
-                                           "related": self.DATA["related"][::-1]},
+        self.assertEqual(json.loads(out), {k: v[::-1] for k, v in DATA.items()},
                         "Unexpected output from search.")
 
 
@@ -1045,14 +953,15 @@ class TestCLI(unittest.TestCase):
             "table:parent 2 b":               {"parent":  [2, "b"]},
             "table:parent table:related 2 b": {"parent":  [2, "b"],      "related": [2, "b"]},
             "table:*a* 2 b":                  {"parent":  [2, "b"],      "related": [2, "b"]},
-            "this OR these":                  {"parent":  [],            "related": []},
-            "~these":                         {"parent":  ["this"],      "related": ["this"]},
-            '"these two"':                    {"parent":  ["these two"], "related": ["these two"]},
-            '~"these two"':                   {"parent":  ["this"],      "related": ["this"]},
-            "~table:parent 2 b":              {"related": [2, "b"]},
+            "this OR these":                  {"parent":  [],            "related": [],            "myview": []},
+            "~these":                         {"parent":  ["this"],      "related": ["this"],      "myview": ["this"]},
+            '"these two"':                    {"parent":  ["these two"], "related": ["these two"], "myview": ["these two"]},
+            '~"these two"':                   {"parent":  ["this"],      "related": ["this"],      "myview": ["this"]},
+            "~table:parent 2 b":              {                          "related": [2, "b"],      "myview": [2, "b"]},
             "column:fk 2":                    {"related": [("fk", 2), ]},
-            "~column:fk 2":                   {"parent":  [2],           "related": [("fk", 8)]},
-            "~ignored":                       {"parent":  [],            "related": []},
+            "~column:fk 2":                   {"parent":  [2],           "related": [("fk", 8)],   "myview": [2]},
+            "~ignored":                       {"parent":  [],            "related": [],            "myview": []},
+            "view:*":                         {                                                    "myview": []},
             "nosuchthing":                    {},
         }
 
@@ -1062,27 +971,27 @@ class TestCLI(unittest.TestCase):
                                          "--no-empty", filterset)
             self.assertFalse(res, "Unexpected failure from search.")
             received, expected = json.loads(out or "{}"), {}
-            for table, tfilters in filters.items():
+            for name, tfilters in filters.items():
                 if not tfilters:
-                    expected[table] = self.DATA[table]
-                    continue # for table, tfilters
+                    expected[name] = DATA[name]
+                    continue # for name, tfilters
                 rows = []
                 for v in tfilters:
                     if isinstance(v, tuple):
-                        rows.extend(i for i, r in enumerate(self.DATA[table]) if r[v[0]] == v[1])
+                        rows.extend(i for i, r in enumerate(DATA[name]) if r[v[0]] == v[1])
                     elif isinstance(v, text_type):
-                        rows.extend(i for i, r in enumerate(self.DATA[table])
+                        rows.extend(i for i, r in enumerate(DATA[name])
                                     if any(v in x for x in r.values() if isinstance(x, text_type)))
                     else:
-                        rows.extend(i for i, r in enumerate(self.DATA[table])
+                        rows.extend(i for i, r in enumerate(DATA[name])
                                     if any(v == x for x in r.values()))
-                expected[table] = [self.DATA[table][i] for i in sorted(set(rows))]
+                expected[name] = [DATA[name][i] for i in sorted(set(rows))]
             self.assertEqual(received, expected, "Unexpected output in search for %r" % filterset)
 
         logger.info("Testing search command with --case.")
         res, out, err = self.run_cmd("search", self._dbname, "-f", "json", "--no-empty", "b")
         self.assertFalse(res, "Unexpected failure from search.")
-        self.assertEqual(json.loads(out or "{}"), {k: self.DATA[k] for k in ("parent", "related")},
+        self.assertEqual(json.loads(out or "{}"), {k: DATA[k] for k in ("parent", "related", "myview")},
                          "Unexpected output in search.")
         res, out, err = self.run_cmd("search", self._dbname, "-f", "json", "--no-empty",
                                      "--case", "b")
@@ -1090,20 +999,20 @@ class TestCLI(unittest.TestCase):
         self.assertEqual(json.loads(out or "{}"), {}, "Unexpected output in search.")
         res, out, err = self.run_cmd("search", self._dbname, "-f", "json", "--case", "B")
         self.assertFalse(res, "Unexpected failure from search.")
-        self.assertEqual(json.loads(out or "{}"), self.DATA, "Unexpected output in search.")
+        self.assertEqual(json.loads(out or "{}"), DATA, "Unexpected output in search.")
 
 
     def verify_stats_formats(self):
         """Tests 'stats': output to console and file in different formats."""
         logger.info("Testing stats output in all formats.")
 
-        for fmt in (x for x in self.STATS_FORMATS if x != "html"):
+        for fmt in (x for x in STATS_FORMATS if x != "html"):
             logger.info("Testing stats output as %s.", fmt.upper())
             res, out, err = self.run_cmd("stats", self._dbname, "-f", fmt)
             self.assertFalse(res, "Unexpected failure from stats.")
             self.assertTrue(out, "Unexpected lack of output from stats.") if "html" != fmt else None
 
-        for fmt in self.STATS_FORMATS:
+        for fmt in STATS_FORMATS:
             logger.info("Testing stats output to file as combined %s.", fmt.upper())
             outfile = self.mktemp("." + fmt)
             res, out, err = self.run_cmd("stats", self._dbname, "-o", outfile)
@@ -1111,7 +1020,7 @@ class TestCLI(unittest.TestCase):
             self.assertTrue(os.path.isfile(outfile), "Output file not created in stats.")
             self.assertTrue(os.path.getsize(outfile), "Output file has no content in stats.")
 
-        for fmt in self.STATS_FORMATS:
+        for fmt in STATS_FORMATS:
             logger.info("Testing stats output to file as %s with --overwrite.", fmt.upper())
             outfile = self.mktemp("." + fmt, "custom")
             res, out, err = self.run_cmd("stats", self._dbname, "-o", outfile)
@@ -1127,23 +1036,23 @@ class TestCLI(unittest.TestCase):
         """Tests 'stats': output with --disk-usage."""
         logger.info("Testing stats output with --disk-usage.")
 
-        for fmt in (x for x in self.STATS_FORMATS if x != "sql"):
+        for fmt in (x for x in STATS_FORMATS if x != "sql"):
             logger.info("Testing stats output as %s without --disk-usage.", fmt.upper())
             outfile = self.mktemp("." + fmt)
             res, out, err = self.run_cmd("stats", self._dbname, "-o", outfile)
             self.assertFalse(res, "Unexpected failure from stats.")
             self.assertTrue(os.path.getsize(outfile), "Output file has no content in stats.")
-            with open(outfile, "r") as f: content = f.read()
+            with io.open(outfile, "r", encoding="utf-8") as f: content = f.read()
             for text in ("sizes", "sizes with indexes", "index sizes"):
                 self.assertNotIn(text, content, "Unexpected disk usage in stats output.")
 
-        for fmt in (x for x in self.STATS_FORMATS if x != "sql"):
+        for fmt in (x for x in STATS_FORMATS if x != "sql"):
             logger.info("Testing stats output as %s with --disk-usage.", fmt.upper())
             outfile = self.mktemp("." + fmt)
             res, out, err = self.run_cmd("stats", self._dbname, "-o", outfile, "--disk-usage")
             self.assertFalse(res, "Unexpected failure from stats.")
             self.assertTrue(os.path.getsize(outfile), "Output file has no content in stats.")
-            with open(outfile, "r") as f: content = f.read()
+            with io.open(outfile, "r", encoding="utf-8") as f: content = f.read()
             for text in ("sizes", "sizes with indexes", "index sizes"):
                 self.assertIn(text, content, "Unexpected disk usage in stats output.")
 
@@ -1152,27 +1061,15 @@ class TestCLI(unittest.TestCase):
         res, out, err = self.run_cmd("stats", self._dbname, "-o", outfile)
         self.assertFalse(res, "Unexpected failure from stats.")
         self.assertTrue(os.path.getsize(outfile), "Output file has no content in stats.")
-        with open(outfile, "r") as f: content = f.read()
+        with io.open(outfile, "r", encoding="utf-8") as f: content = f.read()
         testfile = self.mktemp(".db")
         with sqlite3.connect(testfile) as db:
             db.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
             db.executescript(content)
             received = set(r["name"] for r in db.execute("SELECT name FROM space_used").fetchall())
-            expected = set(self.SCHEMA) | set(["parent_idx", "sqlite_master"])
+            received -= set(["sqlite_master", "sqlite_schema"])
+            expected = set(SCHEMA["table"]) | set(SCHEMA["index"])
             self.assertEqual(received, expected, "Unexpected output in stats.")
-
-
-    def mktemp(self, suffix=None, content=None):
-        """Returns path of a new temporary file, optionally retained on disk with given content."""
-        with tempfile.NamedTemporaryFile(suffix=suffix, delete=not content) as f:
-            if content: f.write(content.encode("utf-8"))
-            self._paths.append(f.name)
-            return f.name
-
-
-def intify(v):
-    """Returns value as integer if numeric string."""
-    return int(v) if isinstance(v, text_type) and v.isdigit() else v
 
 
 if "__main__" == __name__:
