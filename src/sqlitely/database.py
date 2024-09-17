@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.08.2024
+@modified    15.09.2024
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -697,7 +697,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         @param   key       any hashable to identify lock by
         @param   label     an informational label for lock
         """
-        category, name = (x.lower() if x else x is not None for x in (category, name))
+        category, name = (x.lower() if x is not None else x for x in (category, name))
         if name is not None and name not in self.schema.get(category, {}): return            
         self.locks[category][name].add(key)
         self.locklabels[key] = label
@@ -882,8 +882,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
         if maxcount is not None:
             counts = [totals] if isinstance(totals, six.integer_types) else totals.values() \
                      if isinstance(totals, dict) else [x.get("count", 0) for x in totals]
-            mylimit = [max(0, min(limit if limit > 0 else maxcount, maxcount - sum(counts)))] + \
-                      ([offset] if offset > 0 else [])
+            mylimit = [max(0, min(limit if limit >= 0 else maxcount, maxcount - sum(counts)))]
+            if offset > 0: mylimit.append(offset)
         return (" " +
             " ".join(" ".join(x) for x in zip(("LIMIT", "OFFSET"), map(str, mylimit)))
         ) if mylimit else ""
