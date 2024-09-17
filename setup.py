@@ -8,9 +8,10 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.07.2024
+@modified    17.09.2024
 ------------------------------------------------------------------------------
 """
+import io
 import os
 import re
 import sys
@@ -31,7 +32,7 @@ def readfile(path):
     """Returns contents of path, relative to current file."""
     root = os.path.dirname(os.path.abspath(__file__))
     try:
-        with open(os.path.join(root, path)) as f: return f.read()
+        with io.open(os.path.join(root, path), encoding="utf-8") as f: return f.read()
     except UnicodeError:
         with open(os.path.join(root, path), "rb") as f:
             return f.read().decode(errors="backslashreplace")
@@ -60,11 +61,12 @@ setuptools.setup(
     platforms            = ["any"],
     keywords             = "sqlite database",
 
-    install_requires     = ["appdirs", "chardet", "openpyxl", "Pillow", "pyparsing", "pytz",
+    install_requires     = ["appdirs", "chardet", "openpyxl", "Pillow", "pyparsing", "pytz", "pyyaml",
                             "six", "step-template>=0.0.4", "wxPython>=4.0", "xlrd", "XlsxWriter"],
     extras_require       = {
         ':python_version < "3"': ["antlr4-python2-runtime==4.13.0"],
         ':python_version > "3"': ["antlr4-python3-runtime==4.13.0"],
+        "tests":                 ["xlwt"]
     },
     entry_points         = {"gui_scripts": ["{0} = {0}.main:run".format(PACKAGE)]},
 
