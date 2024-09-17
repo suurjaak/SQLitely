@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.09.2024
+@modified    17.09.2024
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -342,7 +342,7 @@ HTML export template for multiple items.
 
 @param   db           database.Database instance
 @param   title        export title, as string or a sequence of strings
-@param   files        files to embed content from, as {file name: {name, title, count}}
+@param   files        files to embed content from, as {file name: {title, count}}
 @param   ?info        additional metadata for export, as {title: text or {label: text}}
 @param   ?combined    whether not doing single item export
 @param   ?progress    callback() returning whether to cancel, if any
@@ -488,11 +488,10 @@ for i, chunk in enumerate(data_buffer):
 """
 HTML data export template for the rows part.
 
-@param   rows       iterable
-@param   columns    [{name}, ]
-@param   name       table name
-@param   namespace  {"row_count"}
-@param   ?progress  callback(name, count) returning whether to cancel, if any
+@param   rows        iterable
+@param   columns     [{name}, ]
+@param   name        table name
+@param   ?progress   callback(name, count) returning whether to cancel, if any
 """
 DATA_ROWS_HTML = """
 <%
@@ -501,7 +500,6 @@ progress = get("progress")
 %>
 %for i, row in enumerate(rows, 1):
 <%
-namespace["row_count"] += 1
 %><tr>
   <td class="index">{{ i }}</td>
 %for c in columns:
@@ -603,7 +601,6 @@ JSON export template for the rows part.
 @param   rows        iterable
 @param   columns     [{name}, ]
 @param   name        table name
-@param   ?namespace  {"row_count"}
 @param   ?combined   whether doing multiple item export (uses leading indentation)
 @param   ?progress   callback(name, count) returning whether to cancel, if any
 """
@@ -616,7 +613,6 @@ progress = get("progress")
 rows = iter(rows)
 i, row, nextrow = 0, next(rows, None), next(rows, None)
 while row:
-    if get("namespace"): namespace["row_count"] += 1
     data = collections.OrderedDict(((c["name"], row[c["name"]]) for c in columns))
     text = json.dumps(data, indent=2)
     indent = " " * (2 + margin)
@@ -688,7 +684,7 @@ progress = get("progress")
 {{! Template(templates.DATA_INFO_PART, strip=False).expand(info=info, format="sql").strip() }}
 %endif
 -- {{ templates.export_comment() }}
--- {{ row_count }} {{ util.plural("row", row_count, numbers=False) }}.
+-- {{ util.plural("row", row_count) }}.
 %if get("sql"):
 --
 -- SQL: {{ sql.replace("\\n", "\\n--      ") }};
@@ -735,7 +731,7 @@ progress = get("progress")
 
 
 <%
-for i, (filename, item) in enumerate(files.items()):
+for i, filename in enumerate(files):
     if progress and not progress():
         break # for i,
 
@@ -767,7 +763,7 @@ from sqlitely import conf, templates
 
 progress = get("progress")
 %>-- {{ "\\n-- ".join(util.tuplefy(title)) }}.
--- {{ row_count }} {{ util.plural("row", row_count, numbers=False) }}.
+-- {{ util.plural("row", row_count) }}.
 %if get("sql"):
 --
 -- SQL: {{ sql.replace("\\n", "\\n--      ") }};
@@ -796,7 +792,6 @@ TXT SQL insert statements export template for the rows part.
 @param   rows        iterable
 @param   columns     [{name, ?type}, ]
 @param   name        table name
-@param   ?namespace  {"row_count"}
 @param   ?progress   callback(name, count) returning whether to cancel, if any
 """
 DATA_ROWS_SQL = """<%
@@ -808,7 +803,6 @@ i = 0
 %>
 %for i, row in enumerate(rows, 1):
 <%
-if get("namespace"): namespace["row_count"] += 1
 values = [grammar.format(row[c["name"]], c) for c in columns]
 %>
 INSERT INTO {{ grammar.quote(name) }} ({{ str_cols }}) VALUES ({{ ", ".join(values) }});
@@ -880,7 +874,7 @@ Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
 {{! Template(templates.DATA_INFO_PART, strip=False).expand(info=info, format="txt").strip() }}
 %endif
 {{ templates.export_comment() }}
-{{ row_count }} {{ util.plural("row", row_count, numbers=False) }}.
+{{ util.plural("row", row_count) }}.
 %if get("sql"):
 
 SQL: {{ sql }}
@@ -974,7 +968,7 @@ from sqlitely import grammar
 
 progress = get("progress")
 %>{{ "\\n".join(util.tuplefy(title)) }}.
-{{ row_count }} {{ util.plural("row", row_count, numbers=False) }}.
+{{ util.plural("row", row_count) }}.
 %if get("sql"):
 
 SQL: {{ sql }}
@@ -1016,7 +1010,6 @@ TXT data export template for the rows part.
 @param   columnjusts   {col name: ljust or rjust}
 @param   columnwidths  {col name: character width}
 @param   name          table name
-@param   ?namespace    {"row_count"}
 @param   ?progress     callback(name, count) returning whether to cancel, if any
 """
 DATA_ROWS_TXT = """<%
@@ -1029,7 +1022,6 @@ i = 0
 %for i, row in enumerate(rows, 1):
 <%
 values = []
-if get("namespace"): namespace["row_count"] += 1
 %>
     %for c in columns:
 <%
@@ -1111,7 +1103,7 @@ progress = get("progress")
 {{! Template(templates.DATA_INFO_PART, strip=False).expand(info=info, format="yaml").strip() }}
 %endif
 # {{ templates.export_comment() }}
-# {{ row_count }} {{ util.plural("row", row_count, numbers=False) }}.
+# {{ util.plural("row", row_count) }}.
 %if get("sql"):
 #
 # SQL: {{ sql.replace("\\n", "\\n#      ") }};
@@ -1137,11 +1129,10 @@ for i, chunk in enumerate(data_buffer):
 """
 YAML export template for the rows part.
 
-@param   rows          iterable
-@param   columns       [{name}, ]
-@param   name          table name
-@param   ?namespace    {"row_count"}
-@param   ?progress     callback(name, count) returning whether to cancel, if any
+@param   rows        iterable
+@param   columns     [{name}, ]
+@param   name        table name
+@param   ?progress   callback(name, count) returning whether to cancel, if any
 """
 DATA_ROWS_YAML = """<%
 import yaml
@@ -1149,7 +1140,6 @@ import yaml
 progress = get("progress")
 i = 0
 for i, row in enumerate(rows, 1):
-    if get("namespace"): namespace["row_count"] += 1
     for j, c in enumerate(columns):
         data = {c["name"]: row[c["name"]]}
         value = yaml.safe_dump([data], default_flow_style=False, width=1000)
@@ -1221,7 +1211,7 @@ from sqlitely.lib import util
 progress = get("progress")
 %>
 # {{ "\\n# ".join(util.tuplefy(title)) }}
-# {{ row_count }} {{ util.plural("row", row_count, numbers=False) }}.
+# {{ util.plural("row", row_count) }}.
 %if get("sql"):
 #
 # SQL: {{ sql.replace("\\n", "\\n#      ") }};

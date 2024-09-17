@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.07.2024
+@modified    17.09.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -21,6 +21,7 @@ import copy
 import errno
 import functools
 import glob
+import io
 import itertools
 import locale
 import logging
@@ -612,7 +613,7 @@ def make_progress(action, entities, args, results=None, **ns):
     def progress(result=None, **kwargs):
         """Prints out progress texts, registers counts."""
         result = result or kwargs
-        itemname = result.get("source" if "import" == action else "name")
+        itemname = result.get("section" if "import" == action else "name")
         item = entities.get(itemname)
         itemindex = next((i for i, n in enumerate(entities) if util.lceq(n, itemname)), None)
 
@@ -771,7 +772,7 @@ def prepare_args(action, args):
         args.OUTFILE = util.unique_path(args.OUTFILE)
 
 
-def validate_args(action, args, infile=None):
+def validate_args(action, args):
     """
     Populates format and outfile and limits and defaults of command-line arguments in-place.
 
@@ -781,7 +782,6 @@ def validate_args(action, args, infile=None):
 
     @param   action  name like "export" or "search"
     @param   args    argparse.Namespace
-    @param   infile  input filename if any
     """
     prepare_args(action, args)
     if action in ("parse", "search") and 0 in (args.limit, getattr(args, "maxcount", None)):
@@ -921,9 +921,11 @@ def run_execute(dbname, args):
 
     def cast(v):
         """Returns value cast to float or integer if convertable else value."""
-        for ctor in (int, float, None):
-            try: return ctor(v) if ctor and re.match(r"-?\d+\.?\d*$", v) else v
+        for ctor in (int, float):
+            try:
+                if re.match(r"-?\d+\.?\d*$", v): return ctor(v)
             except Exception: pass
+        return v
 
     def run_sql_params(db, sql, params):
         """Executes SQL statement with parameters, handling parameter conversion, returns cursor."""
@@ -967,12 +969,12 @@ def run_execute(dbname, args):
     infostream = sys.stdout if args.OUTFILE else sys.stderr
     infoput = lambda s="", *a, **kw: output(s, *a, file=infostream, **kw)
 
-    validate_args("execute", args, dbname)
+    validate_args("execute", args)
     if os.path.isfile(args.SQL):
         infoput("Reading SQL file %r (%s).",
                 args.SQL, util.format_bytes(os.path.getsize(args.SQL), max_units=False))
         try:
-            with open(args.SQL, "r") as f:
+            with io.open(args.SQL, "r", encoding="utf-8") as f:
                 sql = f.read().strip()
         except Exception as e:
             sys.exit("Error reading SQL file %r\n\n%s" % (args.SQL, e))
@@ -1039,8 +1041,9 @@ def run_execute(dbname, args):
             allnames = util.CaselessDict((n, True) for nn in db.schema.values() for n in nn)
             table = util.make_unique(table, allnames) if table in allnames else table
             item.update(name=table, title="table %s" % grammar.quote(table))
-            result = importexport.export_query_to_db(db, args.OUTFILE, table, args.SQL,
-                                                     cursor=make_iterable(), progress=progress)
+
+            sink = importexport.DatabaseSink(db, args.OUTFILE, progress)
+            result = sink.export_query(table, args.SQL, cursor=make_iterable())
             db.close()
             files["execute"] = args.OUTFILE
             return result
@@ -1050,19 +1053,17 @@ def run_execute(dbname, args):
     elif args.OUTFILE:
         def do_export():
             title = "SQL query"
-            result = importexport.export_data(db, args.OUTFILE, args.format, make_iterable,
-                title, item["columns"], query=args.SQL, name=item["name"], progress=progress,
-                info={"Command": " ".join(cli_args)} if cli_args else None
-            )
+            sink = importexport.FileDataSink(db, args.OUTFILE, args.format, progress)
+            result = sink.export_query(args.SQL, make_iterable, title, title, item["columns"],
+                                       info={"Command": " ".join(cli_args)} if cli_args else None)
             files["query"] = args.OUTFILE
             return result
 
         func = do_export
 
     else: # Print to console
-        func = importexport.export_to_console
-        posargs = [args.format, make_iterables]
-        kwargs.update(output=output, progress=progress)
+        func = importexport.ConsoleSink(args.format, output, progress).write
+        posargs = [make_iterables]
 
     try: do_output("execute", args, functools.partial(func, *posargs, **kwargs), entities, files)
     finally: util.try_ignore(db.close)
@@ -1090,7 +1091,7 @@ def run_export(dbname, args):
                related      include related entities, like data dependencies or index/trigger items
                progress     show progress bar
     """
-    validate_args("export", args, dbname)
+    validate_args("export", args)
     entity_rgx = util.filters_to_regex(args.select) if args.select else None
 
     db = database.Database(dbname)
@@ -1161,7 +1162,7 @@ def run_export(dbname, args):
     maxrow, fromrow, schema_only = args.limit, args.offset, 0 in (args.limit, args.maxcount)
     limit = (maxrow, fromrow) if (fromrow > 0) else (maxrow, ) if (maxrow >= 0) else ()
     progress = make_progress("export", entities, args)
-    func, posargs, kwargs = None, [], dict(progress=progress)
+    func, posargs, kwargs = None, [], {}
 
     def make_iterables():
         """Yields pairs of ({item}, callable returning iterable cursor)."""
@@ -1176,20 +1177,24 @@ def run_export(dbname, args):
             yield item, make_iterable
 
     if "db" == args.format:
-        func, posargs = importexport.export_to_db, [db, args.OUTFILE, schema]
-        kwargs.update(data=not schema_only, limit=limit, maxcount=args.maxcount,
-                      empty=not args.no_empty, renames=renames, reverse=args.reverse)
+        sink = importexport.DatabaseSink(db, args.OUTFILE, progress)
+        sink.configure(limit=limit, maxcount=args.maxcount, allow_empty=not args.no_empty,
+                       data=not schema_only, reverse=args.reverse)
+        func, posargs = sink.export_entities, [schema, renames]
 
     elif args.OUTFILE and args.combine and "sql" == args.format:
-        func, posargs = importexport.export_dump, [db, args.OUTFILE, schema]
-        kwargs.update(data=not schema_only, pragma=not args.select, limit=limit,
-                      maxcount=args.maxcount, empty=not args.no_empty, reverse=args.reverse,
-                      info={"Command": " ".join(cli_args)} if cli_args else None)
+        info = {"Command": " ".join(cli_args)} if cli_args else None
+        sink = importexport.DumpSink(db, args.OUTFILE, progress)
+        sink.configure(limit=limit, maxcount=args.maxcount, allow_empty=not args.no_empty,
+                       pragma=not args.select, data=not schema_only, reverse=args.reverse)
+        func, posargs = sink.dump_database, [schema, info]
 
     elif args.OUTFILE and args.combine:
         title = "Export from %s" % os.path.basename(dbname)
-        func, posargs = importexport.export_data_combined, [db, args.OUTFILE, args.format, title]
-        kwargs.update(empty=not args.no_empty, maxcount=args.maxcount, make_iterables=make_iterables,
+        sink = importexport.FileDataSink(db, args.OUTFILE, args.format, progress)
+        sink.configure(maxcount=args.maxcount, allow_empty=not args.no_empty)
+        func, posargs = sink.export_combined, [title]
+        kwargs.update(make_iterables=make_iterables,
                       info={"Command": " ".join(cli_args)} if cli_args else None)
 
     elif args.OUTFILE:
@@ -1205,9 +1210,9 @@ def run_export(dbname, args):
                 if not args.overwrite: filename = util.unique_path(filename)
 
                 title = util.cap(item["title"])
-                result = importexport.export_data(db, filename, args.format, make_iterable, title,
-                    item["columns"], category=item["type"], name=item["name"],
-                    info={"Command": " ".join(cli_args)} if cli_args else None, progress=progress
+                sink = importexport.FileDataSink(db, filename, args.format, progress)
+                result = sink.export_entity(item["type"], item["name"], make_iterable, title,
+                    item["columns"], info={"Command": " ".join(cli_args)} if cli_args else None
                 )
                 if not result or args.no_empty and not item["count"]:
                     util.try_ignore(os.unlink, filename)
@@ -1216,12 +1221,11 @@ def run_export(dbname, args):
             return result
 
         func = do_export
-        kwargs.clear()
 
     else: # Print to console
-        func = importexport.export_to_console
-        posargs = [args.format, make_iterables]
-        kwargs.update(output=output, combined=True, empty=not args.no_empty, progress=progress)
+        sink = importexport.ConsoleSink(args.format, output, progress)
+        sink.configure(allow_empty=not args.no_empty, combined=True)
+        func, posargs = sink.write, [make_iterables]
 
     try: do_output("export", args, functools.partial(func, *posargs, **kwargs), entities, files)
     finally: util.try_ignore(db.close)
@@ -1314,7 +1318,7 @@ def run_import(infile, args):
             if not existing_ok: items[tname] = item
 
     columns0 = args.columns
-    validate_args("import", args, infile)
+    validate_args("import", args)
     entity_rgx = util.filters_to_regex(args.select) if args.select else None
     dbname, file_existed, total = args.OUTFILE, os.path.isfile(args.OUTFILE), 0
     db = database.Database(dbname)
@@ -1325,16 +1329,16 @@ def run_import(infile, args):
     try:
         args.progress and bar.start()
         bar.update(afterword=" Examining data")
-        info = importexport.get_import_file_data(infile)
+        info = importexport.FileDataSource(infile).get_file_info()
         if args.progress: bar.pause, _ = True, output()
         has_sheets = "xls" in info["format"]
         has_dicts = info["format"] in ["json", "yaml"]
         has_names = args.row_header or has_dicts
         output()
         output("Import from: %s (%s%s)", info["name"], util.format_bytes(info["size"]),
-               ", %s" % util.plural("sheet", info["sheets"]) if has_sheets else "")
+               ", %s" % util.plural("sheet", info["sections"]) if has_sheets else "")
 
-        sheets = info["sheets"]
+        sheets = info["sections"]
         if entity_rgx and has_sheets: sheets = [x for x in sheets if entity_rgx.match(x["name"])]
         if not sheets:
             extra = "" if has_sheets and not args.select else \
@@ -1388,14 +1392,16 @@ def run_import(infile, args):
 
         entities = util.CaselessDict(((x["name"], x) for x in sheets), insertorder=True)
         reports = []
-        tables = [{"name": x["table"], "source": x["name"], "pk": x.get("tablepk"),
+        tables = [{"name": x["table"], "section": x["name"], "pk": x.get("tablepk"),
                    "columns": x["tablecolumns"]} for x in sheets]
         progress = make_progress("import", entities, args, reports=reports)
         limit = None if (args.limit < 0 and not args.offset) else (args.limit, ) \
                 if not args.offset else (args.limit, args.offset)
         maxcount = args.maxcount
         bar.update(afterword=" Importing")
-        importexport.import_data(db, infile, tables, args.row_header, limit, maxcount, progress)
+        source = importexport.FileDataSource(infile, db, progress)
+        source.configure(has_header=args.row_header, limit=limit, maxcount=maxcount)
+        source.import_data(tables)
 
     except Exception:
         _, e, tb = sys.exc_info()
@@ -1463,7 +1469,9 @@ def run_parse(dbname, args):
 
     errput = lambda s="", *a, **kw: output(s, *a, file=sys.stderr, **kw)
     infoput = errput if args.OUTFILE else output
-    _, _, words, kws = searchparser.SearchQueryParser("~").Parse(args.FILTER, args.case)
+    words, kws = [], {}
+    if args.FILTER:
+        _, _, words, kws = searchparser.SearchQueryParser("~").Parse(args.FILTER, args.case)
 
     counts = collections.defaultdict(int) # {category: count}
     matches = [] # [SQL, ]
@@ -1499,7 +1507,7 @@ def run_parse(dbname, args):
 
         headers = make_search_title(args)
         if args.OUTFILE:
-            importexport.export_sql(db, args.OUTFILE, ";\n\n".join(matches) + ";", headers)
+            importexport.InfoSink(db, args.OUTFILE).write_sql(";\n\n".join(matches) + ";", headers)
     except Exception:
         _, e, tb = sys.exc_info()
         if args.OUTFILE and not file_existed:
@@ -1542,7 +1550,7 @@ def run_pragma(dbname, args):
                OUTFILE      path of output file, if any
                overwrite    overwrite existing output file instead of creating unique name
     """
-    validate_args("pragma", args, dbname)
+    validate_args("pragma", args)
 
     infostream = sys.stdout if args.OUTFILE else sys.stderr
     infoput = lambda s="", *a, **kw: output(s, *a, file=infostream, **kw)
@@ -1567,7 +1575,7 @@ def run_pragma(dbname, args):
     content = step.Template(templates.PRAGMA_SQL, strip=False).expand(pragma=pragmas, db=db)
 
     if args.OUTFILE:
-        with open(args.OUTFILE, "w") as f:
+        with io.open(args.OUTFILE, "w", encoding="utf-8") as f:
             f.write(content)
         infoput("Wrote %s to %r (%s).", util.plural("pragma", pragmas), args.OUTFILE,
                 util.format_bytes(os.path.getsize(args.OUTFILE)))
@@ -1597,7 +1605,7 @@ def run_search(dbname, args):
                maxcount     maximum total number of rows to export over all tables and views
                no_empty     skip empty tables and views from data output altogether
     """
-    validate_args("search", args, dbname)
+    validate_args("search", args)
 
     db = database.Database(dbname)
     queryparser = searchparser.SearchQueryParser("~")
@@ -1647,9 +1655,9 @@ def run_search(dbname, args):
 
                 sql, params = item["query"], item["params"]
                 create_sql = item["sql"] if "table" == item["type"] else None
-                res = importexport.export_query_to_db(db, args.OUTFILE, item["name"],
-                    sql, params, create_sql=create_sql, empty=not args.no_empty, progress=progress
-                )
+                sink = importexport.DatabaseSink(db, args.OUTFILE, progress)
+                sink.configure(allow_empty=not args.no_empty)
+                res = sink.export_query(item["name"], sql, params, create_sql=create_sql)
                 result = res or result
                 if res is None: break # for item
             return result
@@ -1657,9 +1665,11 @@ def run_search(dbname, args):
         func = output_to_db
 
     elif args.OUTFILE and args.combine:
-        func = importexport.export_data_combined
-        posargs.extend((db, args.OUTFILE, args.format, make_search_title(args)))
-        kwargs.update(empty=not args.no_empty, make_iterables=make_iterables, progress=progress,
+        sink = importexport.FileDataSink(db, args.OUTFILE, args.format, progress)
+        sink.configure(allow_empty=not args.no_empty)
+        func = sink.export_combined
+        posargs = [make_search_title(args)]
+        kwargs.update(make_iterables=make_iterables,
                       info={"Command": " ".join(cli_args)} if cli_args else None)
 
     elif args.OUTFILE:
@@ -1676,9 +1686,9 @@ def run_search(dbname, args):
                 if not args.overwrite: filename = util.unique_path(filename)
 
                 title = [util.cap(item["title"])] + make_search_title(args)
-                result = importexport.export_data(db, filename, args.format, make_iterable, title,
-                    item["columns"], category=category, name=name, progress=progress,
-                    info={"Command": " ".join(cli_args)} if cli_args else None
+                sink = importexport.FileDataSink(db, filename, args.format, progress)
+                result = sink.export_entity(category, name, make_iterable, title,
+                    item["columns"], info={"Command": " ".join(cli_args)} if cli_args else None
                 )
                 if result and (item["count"] or not args.no_empty): files[name] = filename
                 else: util.try_ignore(os.unlink, filename)
@@ -1688,9 +1698,9 @@ def run_search(dbname, args):
         func = do_export
 
     else: # Print to console
-        func = importexport.export_to_console
-        posargs = [args.format, make_iterables, make_search_title(args)]
-        kwargs.update(output=output, combined=True, progress=progress, empty=not args.no_empty)
+        sink = importexport.ConsoleSink(args.format, output, progress)
+        sink.configure(combined=True, allow_empty=not args.no_empty)
+        func, posargs = sink.write, [make_iterables, make_search_title(args)]
 
     try: do_output("search", args, functools.partial(func, *posargs, **kwargs), entities, files)
     finally: util.try_ignore(db.close)
@@ -1711,7 +1721,7 @@ def run_stats(dbname, args):
     """
     outfile0 = args.OUTFILE
     file_existed = args.OUTFILE and not args.overwrite and os.path.isfile(args.OUTFILE)
-    validate_args("stats", args, dbname)
+    validate_args("stats", args)
 
     db = database.Database(os.path.abspath(dbname))
     stats = {}
@@ -1740,7 +1750,7 @@ def run_stats(dbname, args):
         diagrams = None
         if "html" == args.format:
             bar.update(afterword=" Generating diagram")
-            a = MainApp() if is_gui_possible else None
+            if is_gui_possible: _ = MainApp()
             layout = scheme.SchemaPlacement(db)
             layout.SetFonts("Verdana",
                             ("Open Sans", conf.FontDiagramSize,
@@ -1751,7 +1761,7 @@ def run_stats(dbname, args):
             svg = layout.MakeTemplate("SVG", embed=True)
             diagrams = {"bmp": bmp, "svg": svg}
         bar.update(afterword=" Writing output")
-        importexport.export_stats(db, args.OUTFILE, args.format, stats, diagrams)
+        importexport.InfoSink(db, args.OUTFILE).write_stats(args.format, stats, diagrams)
         bar.stop()
         output()
     except Exception:
@@ -1768,7 +1778,7 @@ def run_stats(dbname, args):
         if outfile0 is None and args.format in importexport.PRINTABLE_EXTS:
             output()
             try:
-                with open(args.OUTFILE) as f:
+                with io.open(args.OUTFILE, "r", encoding="utf-8") as f:
                     output(f.read())
             finally:
                 util.try_ignore(os.unlink, args.OUTFILE)

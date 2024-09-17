@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.08.2024
+@modified    16.09.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -2354,16 +2354,16 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             columns = [x for i, x in enumerate(self._grid.Table.columns)
                        if self._grid.Table.IsColumnShown(i)] or self._grid.Table.columns
             info = self._grid.Table.GetSettingsInfo(partial_hidden=True)
-            args = {"make_iterable": make_iterable, "filename": filename, "format": extname,
-                    "db": self._db, "columns": columns, "query": self._grid.Table.sql,
-                    "info": {"Export options": info} if info else None,
-                    "name": name, "title": title}
+            args = {"make_iterable": make_iterable, "columns": columns,
+                    "query": self._grid.Table.sql, "name": name, "title": title,
+                    "info": {"Export options": info} if info else None}
+            sink = importexport.FileDataSink(self._db, filename, extname)
             self.Freeze()
             try:
                 self._dialog_find_grid.Hide()
                 for x in self._panel2.Children: x.Hide()
                 self._export.Show()
-                opts = {"callable": functools.partial(importexport.export_data, **args),
+                opts = {"callable": functools.partial(sink.export_query, **args),
                         "filename": filename}
                 self._export.Run(opts)
                 self._panel2.Layout()
@@ -2595,7 +2595,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
         filename = controls.get_dialog_path(dialog)
         try:
-            importexport.export_sql(self._db, filename, self._stc.Text, "SQL window.")
+            importexport.InfoSink(self.db, filename).write_sql(self._stc.Text, "SQL window.")
             util.start_file(filename)
         except Exception as e:
             msg = "Error saving SQL to %s." % filename
@@ -2895,6 +2895,14 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
                       fmt_entity(self.Name)), conf.Title)
 
 
+    def OnProgress(self, **kwargs):
+        """
+        Handler for export progress report, updates progress bars.
+        Returns true if export should continue.
+        """
+        return self._export.OnProgress(**kwargs)
+
+
     def _Populate(self):
         """Loads data to grid."""
         grid_data = SQLiteGridBase(self._db, category=self._category, name=self._item["name"])
@@ -3041,12 +3049,12 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
             columns = [x for i, x in enumerate(grid.columns) if grid.IsColumnShown(i)] \
                       or grid.columns
             info = self._grid.Table.GetSettingsInfo(partial_hidden=True)
-            args = {"make_iterable": grid.GetRowIterator, "filename": filename, "format": extname,
-                    "title": util.unprint(title), "db": self._db, "columns": columns,
-                    "category": self._category, "name": self._item["name"],
+            args = {"make_iterable": grid.GetRowIterator, "title": util.unprint(title),
+                    "columns": columns, "category": self._category, "name": self._item["name"],
                     "info": {"Export options": info} if info else None}
+            sink = importexport.FileDataSink(self._db, filename, extname, self.OnProgress)
             opts = {"filename": filename,
-                    "callable": functools.partial(importexport.export_data, **args)}
+                    "callable": functools.partial(sink.export_entity, **args)}
             if grid.IsComplete() and not grid.IsChanged():
                 opts.update({"total": grid.GetNumberRows()})
             elif "filter" not in grid.GetFilterSort(active=True): opts.update({
@@ -6095,7 +6103,7 @@ class SchemaObjectPage(wx.Panel):
         title = " ".join(filter(bool, (category, util.unprint(grammar.quote(name)))))
         if self._show_alter: title = " ".join((action, title))
         try:
-            importexport.export_sql(self._db, filename, self._ctrls["sql"].Text, title)
+            importexport.InfoSink(self._db, filename).write_sql(self._ctrls["sql"].Text, title)
             util.start_file(filename)
         except Exception as e:
             msg = "Error saving SQL to %s." % filename
@@ -6593,6 +6601,61 @@ class ExportProgressPanel(wx.Panel):
         self._current = None
 
 
+    def OnProgress(self, count=None, name=None, error=None, **_):
+        """
+        Handler for task progress report, updates progress bar.
+        Returns true if task should continue.
+        """
+        if not self or not self._tasks or self._current is None: return
+
+        opts, ctrls = (x[self._current] for x in (self._tasks, self._ctrls))
+
+        def after(name, count, error):
+            if not self or not ctrls["text"]: return
+
+            ctrls["text"].Parent.Freeze()
+            total, subopts = count, None
+            if name and opts.get("multi"): subopts = opts["subtasks"].setdefault(name, {})
+
+            if subopts is not None and count is not None:
+                subopts["count"] = count
+                subpercent, subtext = self._FormatPercent(subopts, opts.get("unit"))
+                subtitle = "Processing %s." % " ".join(filter(bool,
+                           (self._category, fmt_entity(name, force=False))))
+                if subpercent is not None: ctrls["subgauge"].Value = subpercent
+                ctrls["subtext"].Label  = subtext
+                ctrls["subtitle"].Label = subtitle
+                total = sum(x.get("count", 0) for x in opts["subtasks"].values())
+            if error is not None:
+                if subopts is not None:
+                    subopts.update(error=error)
+                    myerror = "Failed to export %s. %s." % (grammar.quote(name, force=True), error)
+                    ctrls["subgauge"].Value = ctrls["subgauge"].Value # Stop pulse
+                else:
+                    opts["error"] = error
+                    myerror = "Export failed. %s." % error
+                    wx.CallAfter(self.Stop)
+                ctrls["errtext"].Label += ("\n" if ctrls["errtext"].Label else "") + myerror
+                ctrls["errtext"].Show()
+            elif subopts is not None:
+                if "error" not in subopts: subopts["result"] = True
+
+            if total is not None:
+                opts["count"] = total
+                percent, text = self._FormatPercent(opts)
+                if percent is not None: ctrls["gauge"].Value = percent
+                ctrls["text"].Label = text
+
+            ctrls["text"].Parent.Thaw()
+            if count is not None or error is not None:
+                self._panel.Layout()
+
+        if opts["pending"] and any(x is not None for x in (name, count, error)):
+            wx.CallAfter(after, name, count, error)
+        wx.YieldIfNeeded()
+        return opts["pending"]
+
+
     def _FormatPercent(self, opts, unit=None):
         """Returns (integer, "x% (y of z units)") or (None, "y units")."""
         count, total = opts.get("count"), opts.get("total")
@@ -6702,9 +6765,7 @@ class ExportProgressPanel(wx.Panel):
             self._ctrls[index]["subgauge"].Pulse()
         self.Layout()
         self.Thaw()
-        progress = functools.partial(self._OnProgress, index)
-        callable = functools.partial(opts["callable"], progress=progress)
-        self._worker.work(callable, index=index)
+        self._worker.work(opts["callable"], index=index)
 
 
     def _OnClose(self, event):
@@ -6748,61 +6809,6 @@ class ExportProgressPanel(wx.Panel):
         myresult = {k: opts[k] for k in ("result", "error", "count", "subtasks")
                     if opts.get(k) is not None}
         opts.pop("on_complete")(result=myresult) # Avoid calling more than once
-
-
-    def _OnProgress(self, index=0, count=None, name=None, error=None, **_):
-        """
-        Handler for task progress report, updates progress bar.
-        Returns true if task should continue.
-        """
-        if not self or not self._tasks: return
-
-        opts, ctrls = (x[index] for x in (self._tasks, self._ctrls))
-
-        def after(name, count, error):
-            if not self or not ctrls["text"]: return
-
-            ctrls["text"].Parent.Freeze()
-            total, subopts = count, None
-            if name and opts.get("multi"): subopts = opts["subtasks"].setdefault(name, {})
-
-            if subopts is not None and count is not None:
-                subopts["count"] = count
-                subpercent, subtext = self._FormatPercent(subopts, opts.get("unit"))
-                subtitle = "Processing %s." % " ".join(filter(bool,
-                           (self._category, fmt_entity(name, force=False))))
-                if subpercent is not None: ctrls["subgauge"].Value = subpercent
-                ctrls["subtext"].Label  = subtext
-                ctrls["subtitle"].Label = subtitle
-                total = sum(x.get("count", 0) for x in opts["subtasks"].values())
-            if error is not None:
-                if subopts is not None:
-                    subopts.update(error=error)
-                    myerror = "Failed to export %s. %s." % (grammar.quote(name, force=True), error)
-                    ctrls["subgauge"].Value = ctrls["subgauge"].Value # Stop pulse
-                else:
-                    opts["error"] = error
-                    myerror = "Export failed. %s." % error
-                    wx.CallAfter(self.Stop)
-                ctrls["errtext"].Label += ("\n" if ctrls["errtext"].Label else "") + myerror
-                ctrls["errtext"].Show()
-            elif subopts is not None:
-                if "error" not in subopts: subopts["result"] = True
-
-            if total is not None:
-                opts["count"] = total
-                percent, text = self._FormatPercent(opts)
-                if percent is not None: ctrls["gauge"].Value = percent
-                ctrls["text"].Label = text
-
-            ctrls["text"].Parent.Thaw()
-            if count is not None or error is not None:
-                self._panel.Layout()
-
-        if opts["pending"] and any(x is not None for x in (name, count, error)):
-            wx.CallAfter(after, name, count, error)
-        wx.YieldIfNeeded()
-        return opts["pending"]
 
 
     def _OnResult(self, result, index=None):
@@ -7298,7 +7304,7 @@ class ImportDialog(wx.Dialog):
         self._gauge.Pulse()
 
         progress = lambda *_, **__: bool(self) and self._worker_read.is_working()
-        callable = functools.partial(importexport.get_import_file_data, filename, progress)
+        callable = importexport.FileDataSource(filename, progress=progress).get_file_info
         self._worker_read.work(callable, filename=filename)
 
 
@@ -7311,8 +7317,8 @@ class ImportDialog(wx.Dialog):
         """
         self._data  = data
 
-        idx = next((i for i, x in enumerate(data["sheets"]) if x["columns"]), 0)
-        self._sheet = data["sheets"][idx]
+        idx = next((i for i, x in enumerate(data["sections"]) if x["columns"]), 0)
+        self._sheet = data["sections"][idx]
 
         self._cols1 = [{"name": x, "index": i, "skip": bool(self._cols2 and i >= len(self._cols2))}
                        for i, x in enumerate(self._sheet["columns"])]
@@ -7324,7 +7330,7 @@ class ImportDialog(wx.Dialog):
             data["name"],
             util.format_bytes(data["size"]),
             util.format_bytes(data["size"], max_units=False),
-            ("\nWorksheets: %s." % len(data["sheets"])) if has_sheets else "",
+            ("\nWorksheets: %s." % len(data["sections"])) if has_sheets else "",
         )
         self._info_file.Label = info
 
@@ -7335,7 +7341,7 @@ class ImportDialog(wx.Dialog):
             x["name"], util.plural("column", x["columns"]),
             "rows: file too large to count" if x["rows"] < 0
             else util.plural("row", x["rows"]),
-        ) for x in data["sheets"]])
+        ) for x in data["sections"]])
         self._combo_sheet.Select(idx)
         self._label_sheet.Label = "&Source %s:" % ("data" if "json" == data["format"]
                                                    else "worksheet")
@@ -7693,10 +7699,13 @@ class ImportDialog(wx.Dialog):
         has_names = self._data["format"] in ("json", "yaml")
         columns = OrderedDict((a["name" if has_names else "index"], b["name"])
                               for a, b in zip(self._cols1, self._cols2))
-        tables = [{"name": self._table["name"], "source": self._sheet.get("name"),
+        tables = [{"name": self._table["name"], "section": self._sheet.get("name"),
                    "columns": columns, "pk": self._table.get("pk")}]
-        callable = functools.partial(importexport.import_data, self._db, self._data["name"], tables,
-                                     self._has_header, progress=self._OnProgressCallback)
+
+
+        source = importexport.FileDataSource(self._data["name"], self._db, self._OnProgressCallback)
+        source.configure(has_header=self._has_header)
+        callable = functools.partial(source.import_data, tables)
         self._worker_import.work(callable)
 
 
@@ -8087,9 +8096,9 @@ class ImportDialog(wx.Dialog):
 
     def _OnSheet(self, event):
         """Handler for selecting sheet, refreshes columns."""
-        if self._sheet == self._data["sheets"][event.Selection]: return
+        if self._sheet == self._data["sections"][event.Selection]: return
 
-        self._sheet = self._data["sheets"][event.Selection]
+        self._sheet = self._data["sections"][event.Selection]
         self._cols1 = [{"name": x, "index": i, "skip": False}
                         for i, x in enumerate(self._sheet["columns"])]
         for i, c in enumerate(self._cols2):
@@ -11899,7 +11908,7 @@ class ImportWizard(wx.adv.Wizard):
             super(ImportWizard.InputPage, self).__init__(parent, prev, next, bitmap)
 
             self.filename   = None
-            self.filedata   = {} # {name, size, format, sheets: [{name, rows, columns}]}
+            self.filedata   = {} # {name, size, format, sections: [{name, rows, columns}]}
             self.use_header = True
             self.worker = workers.WorkerThread(self.OnWorkerRead)
 
@@ -11970,7 +11979,7 @@ class ImportWizard(wx.adv.Wizard):
             """Enables Next-button if ready."""
             enabled = bool(self.filename) and (self.cb_all.Value
                           or any(self.listbox.IsChecked(i) for i in range(self.listbox.Count))
-                      ) and any(x["columns"] and x["rows"] for x in self.filedata.get("sheets", []))
+                      ) and any(x["columns"] and x["rows"] for x in self.filedata.get("sections", []))
             self.FindWindowById(wx.ID_FORWARD).Enable(enabled)
 
 
@@ -11993,7 +12002,7 @@ class ImportWizard(wx.adv.Wizard):
             self.Layout()
 
             progress = lambda *_, **__: bool(self) and self.worker.is_working()
-            callable = functools.partial(importexport.get_import_file_data, filename, progress)
+            callable = importexport.FileDataSource(filename, progress=progress).get_file_info
             self.worker.work(callable, filename=filename)
 
 
@@ -12024,23 +12033,23 @@ class ImportWizard(wx.adv.Wizard):
                     info = "Size: %s (%s).%s" % (
                         util.format_bytes(data["size"]),
                         util.format_bytes(data["size"], max_units=False),
-                        (" Worksheets: %s." % len(data["sheets"])) if has_sheets else "",
+                        (" Worksheets: %s." % len(data["sections"])) if has_sheets else "",
                     )
 
                     self.button_file.SetValue(filename, callBack=False)
                     self.label_info.Label = info
-                    for i, sheet in enumerate(data["sheets"]):
+                    for i, sheet in enumerate(data["sections"]):
                         label = "%s (%s%s)" % (sheet["name"],
                             util.plural("column", sheet["columns"]),
                             (", file too large to count rows" if not i else "")
                             if sheet["rows"] < 0 else ", " + util.plural("row", sheet["rows"]))
                         self.listbox.Append(label, i)
                         self.listbox.Check(i)
-                    self.cb_all.Enable(has_sheets and len(data["sheets"]) > 1)
+                    self.cb_all.Enable(has_sheets and len(data["sections"]) > 1)
                     self.cb_all.Value = True
-                    self.label_count.Label = ("%s selected" % len(data["sheets"])) if has_sheets else ""
+                    self.label_count.Label = ("%s selected" % len(data["sections"])) if has_sheets else ""
                     self.cb_header.Enabled = self.cb_header.Value = self.use_header = has_sheets
-                    self.listbox.Enable(has_sheets and len(data["sheets"]) > 1)
+                    self.listbox.Enable(has_sheets and len(data["sections"]) > 1)
                     self.panel.Show()
                     self.Layout()
                     self.UpdateButtons()
@@ -12062,7 +12071,7 @@ class ImportWizard(wx.adv.Wizard):
                     return
 
             data = {}
-            try: data = importexport.get_import_file_data(self.filename)
+            try: data = importexport.FileDataSource(self.filename).get_file_info()
             except Exception: pass
 
             self.filedata = data
@@ -12073,22 +12082,22 @@ class ImportWizard(wx.adv.Wizard):
             info = "Size: %s (%s).%s" % (
                 util.format_bytes(data["size"]),
                 util.format_bytes(data["size"], max_units=False),
-                (" Worksheets: %s." % len(data["sheets"])) if has_sheets else "",
+                (" Worksheets: %s." % len(data["sections"])) if has_sheets else "",
             ) if data else ""
 
             self.label_info.Label = info
-            for i, sheet in enumerate(data["sheets"]) if data else ():
+            for i, sheet in enumerate(data["sections"]) if data else ():
                 label = "%s (%s%s)" % (sheet["name"],
                     util.plural("column", sheet["columns"]),
                     (", rows: file too large to count" if not i else "")
                     if sheet["rows"] < 0 else ", " + util.plural("row", sheet["rows"]))
                 self.listbox.Append(label, i)
                 self.listbox.Check(i)
-            self.cb_all.Enable(has_sheets and len(data["sheets"]) > 1)
+            self.cb_all.Enable(has_sheets and len(data["sections"]) > 1)
             self.cb_all.Value = True
-            self.label_count.Label = ("%s selected" % len(data["sheets"])) if has_sheets else ""
+            self.label_count.Label = ("%s selected" % len(data["sections"])) if has_sheets else ""
             self.cb_header.Enabled = self.cb_header.Value = has_sheets
-            self.listbox.Enable(has_sheets and len(data["sheets"]) > 1)
+            self.listbox.Enable(has_sheets and len(data["sections"]) > 1)
 
 
         def OnCheckAll(self, event):
@@ -12414,7 +12423,7 @@ class ImportWizard(wx.adv.Wizard):
         """
         if event.Page is self.page1 and event.Direction:
             info, pkinfo = "source file content", "the created table"
-            if len(self.page1.filedata["sheets"]) > 1:
+            if len(self.page1.filedata["sections"]) > 1:
                 info, pkinfo = "each source worksheet", "created tables"
             self.page2.label_info.Label = "A new table will be created for %s." % info
             self.page2.cb_pk.Label = "Add auto-increment &primary key to %s" % pkinfo
@@ -12447,7 +12456,7 @@ class ImportWizard(wx.adv.Wizard):
 
         itemnames = sum((list(x) for x in self.db.schema.values()), [])
         has_names = self.page1.filedata["format"] in ("json", "yaml")
-        for i, sheet in enumerate(self.page1.filedata["sheets"]):
+        for i, sheet in enumerate(self.page1.filedata["sections"]):
             if not sheet["rows"] or not sheet["columns"] \
             or not self.page1.listbox.IsChecked(i):
                 continue # for sheet
@@ -12472,11 +12481,12 @@ class ImportWizard(wx.adv.Wizard):
 
             self.items[i] = item
 
-        tables = [{"name": x["tname"], "source": x["name"], "pk": x.get("pk"), "columns": OrderedDict(
+        tables = [{"name": x["tname"], "section": x["name"], "pk": x.get("pk"), "columns": OrderedDict(
             (a if has_names else i, b) for i, (a, b) in enumerate(zip(x["columns"], x["tcolumns"]))
         )} for _, x in sorted(self.items.items())]
-        callable = functools.partial(importexport.import_data, self.db, self.page1.filename, tables,
-                                     self.page1.use_header, progress=self.OnProgressCallback)
+        source = importexport.FileDataSource(self.page1.filename, self.db, self.OnProgressCallback)
+        source.configure(has_header=self.page1.use_header)
+        callable = functools.partial(source.import_data, tables)
         self.db.close()
         try: not self.page2.file_existed and os.unlink(self.db.filename)
         except Exception: pass

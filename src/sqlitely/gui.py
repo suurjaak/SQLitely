@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.08.2024
+@modified    16.09.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4316,7 +4316,7 @@ class DatabasePage(wx.Panel):
                 layout.Redraw(wx.Rect(0, 0, *conf.Defaults["WindowSize"]), layout.LAYOUT_GRID)
                 diagrams = {"bmp": layout.MakeBitmap(),
                             "svg": layout.MakeTemplate("SVG", embed=True)}
-            importexport.export_stats(self.db, filename, extname, data, diagrams)
+            importexport.InfoSink(self.db, filename).write_stats(extname, data, diagrams)
             guibase.status('Exported to "%s".', filename, log=True)
             util.start_file(filename)
         except Exception as e:
@@ -5555,7 +5555,7 @@ class DatabasePage(wx.Panel):
         try:
             title = "PRAGMA settings." if "PRAGMA" == title else \
                     "Database %s." % (title or "schema")
-            importexport.export_sql(self.db, filename, sql, title)
+            importexport.InfoSink(self.db, filename).write_sql(sql, title)
             guibase.status('Exported to "%s".', filename, log=True)
             util.start_file(filename)
         except Exception as e:
@@ -5705,10 +5705,10 @@ class DatabasePage(wx.Panel):
         if wx.ID_OK != dialog.ShowModal(): return
 
         filename = controls.get_dialog_path(dialog)
-        args = {"filename": filename, "db": self.db}
+        sink = importexport.DumpSink(self.db, filename, self.panel_data_export.OnProgress)
         opts = {"filename": filename, "multi": True,
                 "name":     "database dump",
-                "callable": functools.partial(importexport.export_dump, **args),
+                "callable": sink.configure(data=True).dump_database,
                 "subtotals": {t: {
                     "total": topts.get("count"),
                     "is_total_estimated": topts.get("is_count_estimated")
@@ -5764,11 +5764,11 @@ class DatabasePage(wx.Panel):
         conf.LastExportType = extname
 
         filename = controls.get_dialog_path(dialog)
-        args = {"filename": filename, "format": extname, "db": self.db, "title": title,
-                "category": category, "names": names}
+        sink = importexport.FileDataSink(self.db, filename, extname,
+                                         self.panel_data_export.OnProgress)
         opts = {"filename": filename, "multi": True,
                 "name": "%s%s to single file" % ("" if names else "all ", categorylabel),
-                "callable": functools.partial(importexport.export_data_combined, **args)}
+                "callable": functools.partial(sink.export_combined, title, category, names)}
         if "table" in categories:
             opts["subtotals"] = {t: {
                     "total": topts.get("count"),
@@ -6356,8 +6356,11 @@ class DatabasePage(wx.Panel):
                 conf.Title, wx.YES | wx.NO | wx.ICON_WARNING
             ): return
 
-        exports = []
+        exports, page = [], None
         self.notebook.SetSelection(self.pageorder[self.page_data])
+        if isinstance(item, six.string_types): # Chose one specific table to export
+            page = self.data_pages[category].get(item) or \
+                   self.add_data_page(self.db.get_category(category, item))
         for name, filename in zip(items, filenames):
             if not filename.lower().endswith(".%s" % extname):
                 filename += ".%s" % extname
@@ -6365,22 +6368,21 @@ class DatabasePage(wx.Panel):
             data = self.db.get_category(mycategory, name)
             sql = "SELECT * FROM %s" % grammar.quote(name)
             make_iterable = functools.partial(self.db.execute, sql)
-            args = {"make_iterable": make_iterable, "filename": filename, "format": extname,
+            args = {"make_iterable": make_iterable,
                     "title": "%s %s" % (mycategory.capitalize(),
                                         grammar.quote(name, force=True)),
-                    "db": self.db, "columns": data["columns"],
-                    "category": mycategory, "name": name}
+                    "columns": data["columns"], "category": mycategory, "name": name}
+            progress = page.OnProgress if page else self.panel_data_export.OnProgress
+            sink = importexport.FileDataSink(self.db, filename, extname, progress)
             exports.append({
                 "filename": filename, "category": mycategory,
                 "name": "all %s to file" % util.plural(mycategory),
-                "callable": functools.partial(importexport.export_data, **args),
+                "callable": functools.partial(sink.export_entity, **args),
                 "total": data.get("count"),
                 "is_total_estimated": data.get("is_count_estimated")
             })
 
-        if isinstance(item, six.string_types): # Chose one specific table to export
-            page = self.data_pages[category].get(item) or \
-                   self.add_data_page(self.db.get_category(category, item))
+        if page:
             page.Export(exports)
             return
 
@@ -6515,7 +6517,7 @@ class DatabasePage(wx.Panel):
                    "Enter new name for %(name)s in target database.\n\n" \
                    "NB! Leaving name %(samefooter)sblank will skip exporting this %(category)s."
         samefooter = "" if is_samefile else \
-                   "unchanged will overwrite the existing %(category2)s,\nand setting it "
+                   "unchanged will overwrite the existing %s,\nand setting it "
         for category, name in ((c, n) for c, n in display_order if n in export_items.get(c, {})) \
                               if file_exists else ():
             if not any(name in xx for xx in schema2.values()):
@@ -6528,7 +6530,8 @@ class DatabasePage(wx.Panel):
                 category2 = next(c for c, xx in schema2.items() if name2 in xx)
                 msg = entrymsg % {"category": category, "category2": category2,
                                   "name": fmt_entity(name), "name2": fmt_entity(name2),
-                                  "entryheader": entryheader, "samefooter": samefooter}
+                                  "entryheader": entryheader,
+                                  "samefooter": samefooter % category2 if samefooter else ""}
                 dlg = wx.TextEntryDialog(self, msg, conf.Title, value=value)
                 with dlg:
                     dlg_result, dlg_value = dlg.ShowModal(), dlg.GetValue()
@@ -6621,8 +6624,7 @@ class DatabasePage(wx.Panel):
                 wx.PostEvent(self, OpenDatabaseEvent(self.Id, file=filename2))
 
 
-        args = {"db": self.db, "filename": filename2, "schema": schema,
-                "renames": renames, "data": data, "selects": selects}
+        args = {"schema": schema, "renames": renames, "selects": selects}
 
         if not data:
             # Purely structure export: do not open export panel
@@ -6648,12 +6650,13 @@ class DatabasePage(wx.Panel):
                 if result or name is not None or error: wx.CallAfter(after, result, name, error)
                 return True
 
-            func = functools.partial(importexport.export_to_db, progress=progress, **args)
-            workers.WorkerThread(progress).work(func)
+            sink = importexport.DatabaseSink(self.db, filename2, progress)
+            workers.WorkerThread(progress).work(functools.partial(sink.export_entities, **args))
             return
 
+        sink = importexport.DatabaseSink(self.db, filename2, self.panel_data_export.OnProgress)
         opts = {"filename": filename2, "multi": True, "name": "export to db",
-                "callable": functools.partial(importexport.export_to_db, **args),
+                "callable": functools.partial(sink.configure(data=True).export_entities, **args),
                 "on_complete": on_complete, "open": False}
         self.Freeze()
         try:
