@@ -24,7 +24,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    12.07.2024
+@modified    08.09.2024
 ------------------------------------------------------------------------------
 """
 
@@ -571,7 +571,7 @@ INDEX
   IF NOT EXISTS
 %endif
 
-{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) if data.get("name") else "" }}
+{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) if data.get("name") is not None else "" }}
 {{ LF() if data.get("exists") and data.get("schema") else "" }}
 ON {{ Q(data["table"]) if "table" in data else "" }}{{ WS(" ") }}
 
@@ -602,7 +602,7 @@ TABLE
     %if data.get("exists"):
   IF NOT EXISTS
     %endif
-{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) if data.get("name") else "" }}{{ WS(" ") if data.get("schema") or data.get("name") else "" }}(
+{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) if data.get("name") is not None else "" }}{{ WS(" ") if data.get("schema") or data.get("name") is not None else "" }}(
 {{ LF() or GLUE() }}
 
 %for i, c in enumerate(data.get("columns") or []):
@@ -650,7 +650,7 @@ TRIGGER
   IF NOT EXISTS
 %endif
 
-{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) if data.get("name") else "" }}
+{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) if data.get("name") is not None else "" }}
 
 %if data.get("upon"):
   {{ data["upon"] }}
@@ -666,7 +666,7 @@ TRIGGER
 %endif
 
 ON
-{{ Q(data["table"]) if data.get("table") else "" }}
+{{ Q(data["table"]) if data.get("table") is not None else "" }}
 
 %if data.get("for"):
   FOR EACH ROW
@@ -699,7 +699,7 @@ VIEW
   IF NOT EXISTS
 %endif
 
-{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) if data.get("name") else "" }}
+{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) if data.get("name") is not None else "" }}
 
 %if data.get("columns"):
   {{ GLUE() }}{{ WS(" ") }}(
@@ -799,7 +799,7 @@ else: cmpath = ["constraints", i]
     %endfor
   )
 
-  REFERENCES  {{ Q(data["table"]) if data.get("table") else "" }}
+  REFERENCES  {{ Q(data["table"]) if data.get("table") is not None else "" }}
     %if data.get("key"):
   {{ GLUE() }}{{ WS(" ") }}
   (
