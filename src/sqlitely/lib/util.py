@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.07.2024
+@modified    09.09.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -890,6 +890,16 @@ def is_os_64bit():
 def is_python_64bit():
     """Returns whether Python is 64-bit."""
     return (struct.calcsize("P") * 8) == 64
+
+
+def is_samepath(path1, path2):
+    """Returns whether the two paths point to the same file."""
+    if six.PY3:
+        try: return os.stat(path1) == os.stat(path2)
+        except Exception: pass
+    path1, path2 = os.path.realpath(path1), os.path.realpath(path2)
+    if "nt" == os.name: path1, path2 = path1.lower(), path2.lower()
+    return path1 == path2
 
 
 def join(sep, iterable, last=", and "):
