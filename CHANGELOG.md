@@ -16,10 +16,11 @@ CHANGELOG
 - use double precision for floating-point values in column editor
 - use hourglass cursor while showing busy message
 - fix representing very large integers in column editor hex view
+- fix pasting text into column editor hex view
 - fix compatibility issues with Python 3.6
 - fix compatibility issues with Python 3.10+
 - fix opening third-party license link in snaps
-- fix accounting for relation lines in schema diagram zoom to fit 
+- fix accounting for relation lines in schema diagram zoom to fit
 - refactor import-export functionality to classes
 
 

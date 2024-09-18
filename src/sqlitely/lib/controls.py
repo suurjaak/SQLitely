@@ -5368,7 +5368,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
 
     def InsertInto(self, text):
-        """Inserts string at current insertion point."""
+        """Inserts string at current insertion point, interpreted as hex text if possible."""
         pos = self.InsertionPoint
         if self._fixed and not self._bytes: return # NULL number
         if pos == self.GetLastPosition() and self._fixed: pass
@@ -5381,10 +5381,10 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
             del self._bytes [selection[0]:selection[1] + 1]
             del self._bytes0[selection[0]:selection[1] + 1]
 
+        value = self._AdaptValue(text)
+        try: v = bytearray.fromhex(value.decode("latin1")) # Interpret as hex text if possible
+        except Exception: v = bytearray(value) # Fall back to raw bytes
         bpos = pos // 3 + (pos == self.GetLastPosition())
-        text = re.sub("[^0-9a-fA-F]", "", self._AdaptValue(text))
-        text = text[:len(text) - len(text) % 2]
-        v = bytearray.fromhex(text)
         maxlen = min(len(v), len(self._bytes) - bpos) if self._fixed else len(v)
         v = v[:maxlen]
 
