@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.09.2024
+@modified    18.09.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4143,7 +4143,7 @@ class DatabasePage(wx.Panel):
                 wx.MessageBox("No statistics to save, database is empty.", conf.Title, wx.ICON_NONE)
             elif "diagram" == arg:
                 self.diagram.SaveFile(items=args[1:], selections=False,
-                                      opts=scheme.SchemaPlacement.DEFAULT_OPTIONS)
+                                      opts=scheme.SchemaDiagram.DEFAULT_OPTIONS)
             elif "dump" == arg:
                 self.on_dump()
 
@@ -4308,12 +4308,12 @@ class DatabasePage(wx.Panel):
         try:
             data, diagrams = self.statistics.get("data") or {}, None
             if "HTML" == extname.upper():
-                layout = scheme.SchemaPlacement(self.db)
+                layout = scheme.SchemaDiagram(self.db)
                 layout.SetFonts("Verdana",
                                 ("Open Sans", conf.FontDiagramSize,
                                  conf.FontDiagramFile, conf.FontDiagramBoldFile))
                 layout.Populate({"stats": True})
-                layout.Redraw(wx.Rect(0, 0, *conf.Defaults["WindowSize"]), layout.LAYOUT_GRID)
+                layout.Redraw(wx.Rect(0, 0, *conf.Defaults["WindowSize"]), scheme.LayoutStyle.GRID)
                 diagrams = {"bmp": layout.MakeBitmap(),
                             "svg": layout.MakeTemplate("SVG", embed=True)}
             importexport.InfoSink(self.db, filename).write_stats(extname, data, diagrams)
@@ -4408,8 +4408,8 @@ class DatabasePage(wx.Panel):
         self.tb_diagram.EnableTool(wx.ID_ZOOM_100, self.diagram.Enabled and self.diagram.Zoom != self.diagram.ZOOM_DEFAULT)
         self.combo_diagram_zoom.Value = "%s%%" % util.round_float(100 * self.diagram.Zoom, 2)
         self.tb_diagram.ToggleTool(wx.ID_APPLY,   self.diagram.Enabled)
-        self.tb_diagram.ToggleTool(wx.ID_STATIC,  self.diagram.LAYOUT_GRID  == self.diagram.Layout)
-        self.tb_diagram.ToggleTool(wx.ID_NETWORK, self.diagram.LAYOUT_GRAPH == self.diagram.Layout)
+        self.tb_diagram.ToggleTool(wx.ID_STATIC,  scheme.LayoutStyle.GRID  == self.diagram.Layout)
+        self.tb_diagram.ToggleTool(wx.ID_NETWORK, scheme.LayoutStyle.GRAPH == self.diagram.Layout)
         self.tb_diagram_opts.ToggleTool(wx.ID_FILE1, self.diagram.ShowColumns)
         self.tb_diagram_opts.ToggleTool(wx.ID_FILE2, self.diagram.ShowKeyColumns)
         self.tb_diagram_opts.ToggleTool(wx.ID_FILE3, self.diagram.ShowNulls)
@@ -4595,11 +4595,11 @@ class DatabasePage(wx.Panel):
         was_grid = not self.tb_diagram.GetToolState(wx.ID_STATIC)
         self.tb_diagram.ToggleTool(wx.ID_NETWORK, False)
         self.tb_diagram.ToggleTool(wx.ID_STATIC,  True)
-        if not was_grid: return self.diagram.SetLayout(self.diagram.LAYOUT_GRID)
+        if not was_grid: return self.diagram.SetLayout(scheme.LayoutStyle.GRID)
 
 
         def set_option(**kws):
-            self.diagram.SetLayout(self.diagram.LAYOUT_GRID, kws)
+            self.diagram.SetLayout(scheme.LayoutStyle.GRID, kws)
 
         menu = wx.Menu()
         item_vertical   = wx.MenuItem(menu, -1, "Items in &columns",   kind=wx.ITEM_CHECK)
@@ -4624,7 +4624,7 @@ class DatabasePage(wx.Panel):
         submenu.AppendSeparator()
         submenu.Append(item_reverse)
 
-        opts = self.diagram.GetLayoutOptions(self.diagram.LAYOUT_GRID)
+        opts = self.diagram.GetLayoutOptions()
         item_vertical.Check  (bool(opts.get("vertical")))
         item_horizontal.Check(not opts.get("vertical"))
         item_name.Check   (opts.get("order") == "name")
@@ -4649,7 +4649,7 @@ class DatabasePage(wx.Panel):
 
     def on_diagram_graph(self, event):
         """Handler for choosing diagram graph layout, toggles grid layout off."""
-        self.diagram.SetLayout(self.diagram.LAYOUT_GRAPH)
+        self.diagram.SetLayout(scheme.LayoutStyle.GRAPH)
         self.tb_diagram.ToggleTool(wx.ID_NETWORK, True)
         self.tb_diagram.ToggleTool(wx.ID_STATIC,  False)
 

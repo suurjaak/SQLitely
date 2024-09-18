@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.09.2024
+@modified    18.09.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -10752,9 +10752,6 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         0xFFFF:              "SVG",
     }
 
-    LAYOUT_GRID  = scheme.SchemaPlacement.LAYOUT_GRID
-    LAYOUT_GRAPH = scheme.SchemaPlacement.LAYOUT_GRAPH
-
     VIRTUALSZ = 2000, 2000 # Default virtual size
 
     MOVE_STEP =  10 # Pixels to move item on arrow key
@@ -10765,18 +10762,18 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
 
     TOOLTIP_DELAY = 500 # Milliseconds before showing hover tooltip
 
-    ZOOM_STEP    = scheme.SchemaPlacement.ZOOM_STEP
-    ZOOM_MIN     = scheme.SchemaPlacement.ZOOM_MIN
-    ZOOM_MAX     = scheme.SchemaPlacement.ZOOM_MAX
-    ZOOM_DEFAULT = scheme.SchemaPlacement.ZOOM_DEFAULT
+    ZOOM_STEP    = scheme.SchemaDiagram.ZOOM_STEP
+    ZOOM_MIN     = scheme.SchemaDiagram.ZOOM_MIN
+    ZOOM_MAX     = scheme.SchemaDiagram.ZOOM_MAX
+    ZOOM_DEFAULT = scheme.SchemaDiagram.ZOOM_DEFAULT
 
     def __init__(self, parent, db, *args, **kwargs):
         super(SchemaDiagramWindow, self).__init__(parent, *args, **kwargs)
         self._db     = db   # database.Database instance
         self._page   = None # gui.DatabasePage instance
-        self._layout = scheme.SchemaPlacement(db, self.VIRTUALSZ)
-        self._layout.SetFonts("Verdana",
-                              ("Open Sans", 9, conf.FontDiagramFile, conf.FontDiagramBoldFile))
+        self._diagram = scheme.SchemaDiagram(db, self.VIRTUALSZ)
+        self._diagram.SetFonts("Verdana",
+                               ("Open Sans", 9, conf.FontDiagramFile, conf.FontDiagramBoldFile))
 
         self._enabled  = True
         self._dragpos  = None  # (x, y) of last drag event, in viewport coodinates
@@ -10818,28 +10815,28 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         self.Bind(wx.EVT_WINDOW_DESTROY, self._OnDestroy, self)
 
 
-    def GetBorderColour(self):         return self._layout.BorderColour
-    def SetBorderColour(self, colour): self._layout.BorderColour = colour
+    def GetBorderColour(self):         return self._diagram.BorderColour
+    def SetBorderColour(self, colour): self._diagram.BorderColour = colour
     BorderColour = property(GetBorderColour, SetBorderColour)
 
 
-    def GetLineColour(self):         return self._layout.LineColour
-    def SetLineColour(self, colour): self._layout.LineColour = colour
+    def GetLineColour(self):         return self._diagram.LineColour
+    def SetLineColour(self, colour): self._diagram.LineColour = colour
     LineColour = property(GetLineColour, SetLineColour)
 
 
-    def GetSelectionColour(self):         return self._layout.SelectionColour
-    def SetSelectionColour(self, colour): self._layout.SelectionColour = colour
+    def GetSelectionColour(self):         return self._diagram.SelectionColour
+    def SetSelectionColour(self, colour): self._diagram.SelectionColour = colour
     SelectionColour = property(GetSelectionColour, SetSelectionColour)
 
 
-    def GetGradientStartColour(self):         return self._layout.GradientStartColour
-    def SetGradientStartColour(self, colour): self._layout.GradientStartColour = colour
+    def GetGradientStartColour(self):         return self._diagram.GradientStartColour
+    def SetGradientStartColour(self, colour): self._diagram.GradientStartColour = colour
     GradientStartColour = property(GetGradientStartColour, SetGradientStartColour)
 
 
-    def GetGradientEndColour(self):         return self._layout.GradientEndColour
-    def SetGradientEndColour(self, colour): self._layout.GradientEndColour = colour
+    def GetGradientEndColour(self):         return self._diagram.GradientEndColour
+    def SetGradientEndColour(self, colour): self._diagram.GradientEndColour = colour
     GradientEndColour = property(GetGradientEndColour, SetGradientEndColour)
 
 
@@ -10848,12 +10845,12 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
     DatabasePage = property(GetDatabasePage, SetDatabasePage)
 
 
-    def GetItems(self): return self._layout.GetItems()
+    def GetItems(self): return self._diagram.GetItems()
     Items = property(GetItems)
 
 
     """Returns current zoom level, 1 being 100% and .5 being 50%."""
-    def GetZoom(self): return self._layout.Zoom
+    def GetZoom(self): return self._diagram.Zoom
     def SetZoom(self, zoom, remake=True, refresh=True, focus=None):
         """
         Sets current zoom scale.
@@ -10865,10 +10862,10 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
                           defaults to current viewport top left
         @return           whether zoom was changed
         """
-        zoom0, self._layout.Zoom = self._layout.Zoom, zoom
-        if zoom0 == self._layout.Zoom: return False
+        zoom0, self._diagram.Zoom = self._diagram.Zoom, zoom
+        if zoom0 == self._diagram.Zoom: return False
 
-        zoom, viewport0 = self._layout.Zoom, self.GetViewPort()
+        zoom, viewport0 = self._diagram.Zoom, self.GetViewPort()
         self.MOVE_STEP = int(math.ceil(type(self).MOVE_STEP * zoom))
 
         def after():
@@ -10902,18 +10899,18 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         try:
             self.SetZoom(self.ZOOM_DEFAULT, remake=False, refresh=False)
 
-            names = list(self._layout.Items)
+            names = list(self._diagram.Items)
             if self.ShowLines:
-                names += list(self._layout.Lines)
-            bounds, bounder = wx.Rect(), self._layout.GetObjectBounds
+                names += list(self._diagram.Lines)
+            bounds, bounder = wx.Rect(), self._diagram.GetObjectBounds
             if names: bounds = sum(map(bounder, names[1:]), bounder(names[0]))
             bounds.Left, bounds.Top = max(0, bounds.Left), max(0, bounds.Top)
             zoom, bounds0 = self.Zoom, wx.Rect(bounds)
             bounds.Inflate(5, 5)
 
-            while zoom > self._layout.ZOOM_MIN and (bounds.Width > self.ClientSize.Width
+            while zoom > self._diagram.ZOOM_MIN and (bounds.Width > self.ClientSize.Width
             or bounds.Height > self.ClientSize.Height):
-                zoom -= self._layout.ZOOM_STEP
+                zoom -= self._diagram.ZOOM_STEP
                 bounds = wx.Rect(bounds0.Position, wx.Size(*[zoom * v for v in bounds0.Size]))
                 bounds.Inflate(5, 5)
 
@@ -10950,7 +10947,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             self._work_finalizers.clear()
             self._worker_graph.stop_work()
             self._worker_bmp.stop_work()
-            self._layout.ClearItems()
+            self._diagram.ClearItems()
             self.Refresh()
             super(SchemaDiagramWindow, self).Disable()
         self._PostEvent()
@@ -10963,12 +10960,12 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
 
     def GetShowColumns(self):
         """Returns whether columns are shown."""
-        return self._layout.ShowColumns
+        return self._diagram.ShowColumns
     def SetShowColumns(self, show=True):
         """Sets showing columns on or off. Setting on will set ShowKeyColumns off."""
         show = bool(show)
-        if show == self._layout.ShowColumns: return
-        self._layout.ShowColumns = show
+        if show == self._diagram.ShowColumns: return
+        self._diagram.ShowColumns = show
         if not self._enabled: return self._PostEvent()
 
         self.Redraw(remake=True)
@@ -10978,12 +10975,12 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
 
     def GetShowKeyColumns(self):
         """Returns whether only key columns are shown."""
-        return self._layout.ShowKeyColumns
+        return self._diagram.ShowKeyColumns
     def SetShowKeyColumns(self, show=True):
         """Sets showing only key columns on or off. Setting on will set ShowColumns off."""
         show = bool(show)
-        if show == self._layout.ShowKeyColumns: return
-        self._layout.ShowKeyColumns = show
+        if show == self._diagram.ShowKeyColumns: return
+        self._diagram.ShowKeyColumns = show
         if not self._enabled: return self._PostEvent()
 
         self.Redraw(remake=True)
@@ -10993,12 +10990,12 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
 
     def GetShowNulls(self):
         """Returns whether NULL column markers are shown."""
-        return self._layout.ShowNulls
+        return self._diagram.ShowNulls
     def SetShowNulls(self, show=True):
         """Sets showing NULL column markers on or off."""
         show = bool(show)
-        if show == self._layout.ShowNulls: return
-        self._layout.ShowNulls = show
+        if show == self._diagram.ShowNulls: return
+        self._diagram.ShowNulls = show
         if not self._enabled: return self._PostEvent()
 
         self.Redraw(remake=True)
@@ -11008,16 +11005,16 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
 
     def GetShowLines(self):
         """Returns whether foreign relation lines are shown."""
-        return self._layout.ShowLines
+        return self._diagram.ShowLines
     def SetShowLines(self, show=True):
         """Sets showing foreign relation lines on or off."""
         show = bool(show)
-        if show == self._layout.ShowLines: return
-        self._layout.ShowLines = show
+        if show == self._diagram.ShowLines: return
+        self._diagram.ShowLines = show
         if not self._enabled: return self._PostEvent()
 
         if show: self.RecordLines(remake=True); self.RecordItems()
-        else: self._layout.ClearLines()
+        else: self._diagram.ClearLines()
         self.Refresh()
         self._PostEvent()
     ShowLines = property(GetShowLines, SetShowLines)
@@ -11025,12 +11022,12 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
 
     def GetShowLineLabels(self):
         """Returns whether foreign relation line labels are shown."""
-        return self._layout.ShowLineLabels
+        return self._diagram.ShowLineLabels
     def SetShowLineLabels(self, show=True):
         """Sets showing foreign relation line labels on or off."""
         show = bool(show)
-        if show == self._layout.ShowLineLabels: return
-        self._layout.ShowLineLabels = show
+        if show == self._diagram.ShowLineLabels: return
+        self._diagram.ShowLineLabels = show
         if not self._enabled: return self._PostEvent()
 
         self.Redraw()
@@ -11040,12 +11037,12 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
 
     def GetShowStatistics(self):
         """Returns whether table statistics are shown."""
-        return self._layout.ShowStatistics
+        return self._diagram.ShowStatistics
     def SetShowStatistics(self, show=True):
         """Sets showing table statistics on or off."""
         show = bool(show)
-        if show == self._layout.ShowStatistics: return
-        self._layout.ShowStatistics = show
+        if show == self._diagram.ShowStatistics: return
+        self._diagram.ShowStatistics = show
         if not self._enabled: return self._PostEvent()
 
         if show: self.UpdateStatistics()
@@ -11058,11 +11055,11 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         """
         Returns all current diagram options,
         {zoom: float, columns: bool, keycolumns: bool, lines: bool, labels: bool, statistics: bool,
-         layout: {layout, active, ?grid: {order, reverse, vertical}}, items: {name: [x, y]},
+         layout: {style, active, ?grid: {order, reverse, vertical}}, items: {name: [x, y]},
          enabled: bool, scroll: [x, y]}.
         """
         return dict({"scroll": [self.GetScrollPos(x) for x in (wx.HORIZONTAL, wx.VERTICAL)],
-                     "enabled": self._enabled}, **self._layout.Options)
+                     "enabled": self._enabled}, **self._diagram.Options)
     def SetOptions(self, opts, refresh=True):
         """
         Sets all diagram options.
@@ -11071,9 +11068,9 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         """
         if not opts or opts == self.Options: return
 
-        remake = self._layout.SetOptions(opts)
+        remake = self._diagram.SetOptions(opts)
 
-        fullbounds = self._layout.GetFullBounds()
+        fullbounds = self._diagram.GetFullBounds()
         if fullbounds and not wx.Rect(self.VirtualSize).Contains(fullbounds):
             self.SetVirtualSize([max(a, b + self.MOVE_STEP)
                                  for a, b in zip(self.VirtualSize, fullbounds.BottomRight)])
@@ -11088,11 +11085,11 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
 
     def GetSelection(self):
         """Returns names of currently selected items."""
-        return self._layout.Selection
+        return self._diagram.Selection
     def SetSelection(self, *names):
         """Sets current selection to specified names."""
-        if set(names) == set(self._layout.Selection): return
-        self._layout.Selection = names
+        if set(names) == set(self._diagram.Selection): return
+        self._diagram.Selection = names
         self.Redraw()
     Selection = property(GetSelection, SetSelection)
 
@@ -11108,7 +11105,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         """
         if not self._enabled and not opts: return
 
-        if not self._layout.Items: return guibase.status("Empty schema, nothing to export.")
+        if not self._diagram.Items: return guibase.status("Empty schema, nothing to export.")
 
         title = os.path.splitext(os.path.basename(self._db.name))[0]
         dlg = self._dlg_save if zoom is None else self._dlg_savebmp
@@ -11118,21 +11115,21 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         filename = controls.get_dialog_path(dlg)
         filetype = os.path.splitext(filename)[-1].lstrip(".").upper()
         wxtype   = next(k for k, v in self.EXPORT_FORMATS.items() if v == filetype)
-        layout = self._layout
+        layout = self._diagram
 
         redrawopts = dict(self.Options, **copy.deepcopy(opts)) if opts else {}
         if not self._enabled or opts and self.Options != redrawopts:
-            layout = scheme.SchemaPlacement(self._db)
+            layout = scheme.SchemaDiagram(self._db)
             layout.SetFonts("Verdana",
                             ("Open Sans", conf.FontDiagramSize,
                              conf.FontDiagramFile, conf.FontDiagramBoldFile))
             layout.SetOptions(redrawopts)
-            colours = self._layout.Colours
+            colours = self._diagram.Colours
             if not self._enabled:
                 colours["Background"] = controls.ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
             layout.SetColours(colours)
             layout.Populate()
-            layout.Redraw(wx.Rect(0, 0, *conf.Defaults["WindowSize"]), layout.LAYOUT_GRID)
+            layout.Redraw(wx.Rect(0, 0, *conf.Defaults["WindowSize"]), scheme.LayoutStyle.GRID)
 
         if "SVG" == filetype:
             content = layout.MakeTemplate(filetype, title, selections=selections, items=items)
@@ -11140,7 +11137,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         else:
             layout.MakeBitmap(zoom, selections=selections, items=items).SaveFile(filename, wxtype)
             util.start_file(filename)
-        if layout is self._layout: self.Redraw()
+        if layout is self._diagram: self.Redraw()
         guibase.status('Exported schema diagram to "%s".', filename, log=True)
 
 
@@ -11153,7 +11150,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         """
         if not self or not self._enabled: return None
 
-        return self._layout.MakeBitmap(zoom, selections=not items, items=items)
+        return self._diagram.MakeBitmap(zoom, selections=not items, items=items)
 
 
     def MakeTemplate(self, filetype, title=None, embed=False, items=None):
@@ -11166,7 +11163,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         @param   items     list of entity names to include if not all
         """
         if not self or not self._enabled or "SVG" != filetype: return
-        return self._layout.MakeTemplate(filetype, title, embed, selections=not items, items=items)
+        return self._diagram.MakeTemplate(filetype, title, embed, selections=not items, items=items)
 
 
     def EnsureVisible(self, name, force=False):
@@ -11175,10 +11172,10 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
 
         @param   force  scroll viewport to item start even if already visible
         """
-        if not self._enabled or not self._layout.GetItem(name): return
+        if not self._enabled or not self._diagram.GetItem(name): return
 
-        bounds = self._layout.GetObjectBounds(name)
-        titlept = bounds.Left + bounds.Width // 2, bounds.Top + self._layout.HEADERH // 2
+        bounds = self._diagram.GetObjectBounds(name)
+        titlept = bounds.Left + bounds.Width // 2, bounds.Top + self._diagram.HEADERH // 2
         if force: self.ScrollXY(v - 10 for v in bounds.TopLeft)
         elif not self.GetViewPort().Contains(titlept):
             self.Scroll(0, 0)
@@ -11190,10 +11187,10 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
 
     def IsVisible(self, name):
         """Returns whether item with specified name is currently visible."""
-        if not self._layout.GetItem(name): return False
+        if not self._diagram.GetItem(name): return False
 
-        bounds = self._layout.GetObjectBounds(name)
-        titlept = bounds.Left + bounds.Width // 2, bounds.Top + self._layout.HEADERH // 2
+        bounds = self._diagram.GetObjectBounds(name)
+        titlept = bounds.Left + bounds.Width // 2, bounds.Top + self._diagram.HEADERH // 2
         return self.GetViewPort().Contains(titlept)
 
 
@@ -11243,7 +11240,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
                 wx.TheClipboard.SetData(wx.TextDataObject(text)), wx.TheClipboard.Close()
             if label: guibase.status("Copied %s to clipboard.", label)
 
-        if not self._layout.Selection:
+        if not self._diagram.Selection:
             submenu, keys = wx.Menu(), []
             menu.AppendSubMenu(submenu, text="Create &new ..")
             for category in self._db.CATEGORIES:
@@ -11254,14 +11251,14 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
                 menu.Bind(wx.EVT_MENU, cmd("create", category), it)
 
         else:
-            items = list(map(self._layout.GetItem, self._layout.Selection))
+            items = list(map(self._diagram.GetItem, self._diagram.Selection))
             items.sort(key=lambda o: o["name"].lower())
             names = [o["name"] for o in items]
             categories = {}
             for o in items: categories.setdefault(o["type"], []).append(o)
             title = "%s %s" % (
                         items[0]["type"].capitalize(),
-                        fmt_entity(items[0]["name"], self._layout.MAX_TEXT)
+                        fmt_entity(items[0]["name"], self._diagram.MAX_TEXT)
                     ) if len(items) == 1 else \
                     util.plural(next(iter(categories)), items) if len(categories) == 1 else \
                     util.plural("item", items)
@@ -11336,7 +11333,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
                 menu.Bind(wx.EVT_MENU, cmd("rename", next(iter(categories)), items[0]["name"]), item_rename)
 
             if not position:
-                rect = self._layout.GetObjectBounds(items[0]["name"])
+                rect = self._diagram.GetObjectBounds(items[0]["name"])
                 viewport = self.GetViewPort()
                 corners = rect.BottomRight, rect.BottomLeft, rect.TopRight, rect.TopLeft
                 position = next((p - viewport.TopLeft for p in corners if viewport.Contains(p)), None)
@@ -11353,7 +11350,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         if not self: return
 
         self.SetOptions(opts, refresh=False)
-        reset, need_remake = self._layout.Populate(opts)
+        reset, need_remake = self._diagram.Populate(opts)
         if not self._enabled: return
 
         def after():
@@ -11361,7 +11358,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             self.SetLayout(self.Layout) if reset else self.Redraw()
 
         if need_remake:
-            items = [self._layout.GetItem(n) for n in need_remake]
+            items = [self._diagram.GetItem(n) for n in need_remake]
             self._DoItemBitmaps(items, callback=("Populate", after))
         else:
             after()
@@ -11369,7 +11366,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
 
     def UpdateStatistics(self, redraw=True):
         """Updates local data structures with statistics data from database, redraws diagram."""
-        self._layout.UpdateStatistics()
+        self._diagram.UpdateStatistics()
         if redraw: self.Redraw(remake=True)
 
 
@@ -11383,7 +11380,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
 
         def after():
             if not self: return
-            self._layout.Draw(remake, remakelines, recalculate)
+            self._diagram.Draw(remake, remakelines, recalculate)
             self._EnsureVirtualSize()
             self.Refresh()
         if remake:
@@ -11395,19 +11392,19 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
     def RecordItems(self):
         """Records all schema items to DC."""
         if not self._enabled: return
-        self._layout.RecordItems()
+        self._diagram.RecordItems()
 
 
     def RecordItem(self, name, bounds=None):
         """Records a single schema item to DC."""
-        if not self._enabled or name not in self._layout.Items: return
-        self._layout.RecordItem(name, bounds=bounds)
+        if not self._enabled or name not in self._diagram.Items: return
+        self._diagram.RecordItem(name, bounds=bounds)
 
 
     def RecordDragRect(self):
         """Records selection rectangle currently being dragged."""
         if not self._enabled or not self._dragpos: return
-        self._layout.RecordDragRect()
+        self._diagram.RecordDragRect()
 
 
     def RecordLines(self, remake=False, recalculate=False, dc=None, shift=None):
@@ -11420,35 +11417,31 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         @param   shift        line coordinate shift as (dx, dy) if any
         """
         if not self._enabled or not self.ShowLines: return
-        self._layout.RecordLines(remake, recalculate, dc, shift)
+        self._diagram.RecordLines(remake, recalculate, dc, shift)
 
 
     def GetLayout(self, active=True):
-        """Returns current layout, by default active only."""
-        return self._layout.GetLayout(active=active)
-    def SetLayout(self, layout, options=None):
+        """Returns current layout style, by default active only."""
+        return self._diagram.GetLayout(active=active)
+    def SetLayout(self, style, options=None):
         """
         Sets diagram layout style.
 
-        @param   layout   LAYOUT_GRID or LAYOUT_GRAPH
-        @param   options  options for grid layout as
-                          {"order": "name", "reverse": False, "vertical": True},
-                          updates current options
+        @param   style    one of scheme.LayoutStyle
+        @param   options  options for layout,
+                          e.g. {"order": "name", "reverse": False, "vertical": True} for grid
         """
-        self._layout.SetLayout(layout, options)
+        self._diagram.SetLayout(style, options)
         self._PostEvent(layout=True)
-        if   self.Layout: self._layout.UpdateStatistics()
-        if   self._layout.LAYOUT_GRID  == self.Layout: self._PositionItemsGrid()
-        elif self._layout.LAYOUT_GRAPH == self.Layout: self._PositionItemsGraph()
+        if self.Layout:
+            self._diagram.UpdateStatistics()
+            self._PositionItems()
     Layout = property(GetLayout, SetLayout)
 
 
-    def GetLayoutOptions(self, layout=None):
-        """
-        Returns current options for specified layout, e.g. {"order": "name"} for grid,
-        or global layout options as {"layout": "grid", "active": True, "grid": {..}}.
-        """
-        return self._layout.GetLayoutOptions(layout)
+    def GetLayoutOptions(self):
+        """Returns options for current layout style, e.g. {"order": "name"} for grid."""
+        return self._diagram.GetLayoutOptions()
 
 
     def _DoItemBitmaps(self, items=None, callback=None):
@@ -11462,11 +11455,11 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         self._worker_bmp.stop_work()
         if callback: self._work_finalizers[callback[0]] = callback[1]
 
-        items = items or self._layout.Order
-        if all(self._layout.HasItemBitmaps(o) for o in items):
+        items = items or self._diagram.Order
+        if all(self._diagram.HasItemBitmaps(o) for o in items):
             for o in items:
-                bmp, bmpsel = self._layout.GetItemBitmaps(o)
-                self._layout.SetItemBitmaps(o["name"], bmp=bmp, bmpsel=bmpsel, bmparea=None)
+                bmp, bmpsel = self._diagram.GetItemBitmaps(o)
+                self._diagram.SetItemBitmaps(o["name"], bmp=bmp, bmpsel=bmpsel, bmparea=None)
             return self._OnBitmapWorkerProgress(done=True, immediate=True)
 
         self._worker_bmp.work(functools.partial(self._BitmapWorker, items))
@@ -11474,8 +11467,8 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
 
     def _EnsureVirtualSize(self):
         """Enlarge virtual size if less than full bounds."""
-        self._layout.EnsureSize()
-        self.VirtualSize = self._layout.Size
+        self._diagram.EnsureSize()
+        self.VirtualSize = self._diagram.Size
 
 
     def _OnBitmapWorkerProgress(self, done=False, index=None, count=None, immediate=False):
@@ -11498,65 +11491,62 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         """Function invoked from bitmap worker, processes items and reports progress."""
         for i, o in enumerate(items):
             if not self or not self._worker_bmp.is_working(): break # for i, o
-            (bmp, bmpsel), bmparea = self._layout.GetItemBitmaps(o), None
+            (bmp, bmpsel), bmparea = self._diagram.GetItemBitmaps(o), None
             # Non-UI threads in Linux seem unable to use custom wx fonts: draw all for uniformity
-            if "linux" in sys.platform: bmparea = self._layout.GetItemBitmaps(o, dragrect=True)
-            self._layout.SetItemBitmaps(o["name"], bmp=bmp, bmpsel=bmpsel, bmparea=bmparea)
+            if "linux" in sys.platform: bmparea = self._diagram.GetItemBitmaps(o, dragrect=True)
+            self._diagram.SetItemBitmaps(o["name"], bmp=bmp, bmpsel=bmpsel, bmparea=bmparea)
             self._OnBitmapWorkerProgress(index=i, count=len(items))
         if self: self._OnBitmapWorkerProgress(done=True)
 
 
-    def _PositionItemsGrid(self):
-        """Calculates item positions using a simple grid layout."""
-        self._worker_graph.stop_work()
-        self._layout.PositionItemsGrid(wx.Rect(self.ClientSize))
-        self._EnsureVirtualSize()
+    def _PositionItems(self):
+        """Calculates item positions using current layout."""
+        if scheme.LayoutStyle.GRID == self.Layout:
+            self._worker_graph.stop_work()
+            self._diagram.PositionItems(wx.Rect(self.ClientSize))
+            self._EnsureVirtualSize()
+            if self._enabled:
+                self.Scroll(0, 0)
+                self.Redraw(remakelines=True)
+        elif scheme.LayoutStyle.GRAPH == self.Layout:
+            if self._worker_graph.is_working(): return
 
-        if self._enabled:
-            self.Scroll(0, 0)
-            self.Redraw(remakelines=True)
+            def func():
+                progress = lambda *_, **__: self and self._worker_graph.is_working()
+                self._diagram.PositionItems(self.GetViewPort(), progress)
+                if not progress(): return
 
-
-    def _PositionItemsGraph(self):
-        """Calculates item positions using a force-directed graph."""
-        if self._worker_graph.is_working(): return
-
-        def func():
-            progress = lambda *_, **__: self and self._worker_graph.is_working()
-            self._layout.PositionItemsGraph(self.GetViewPort(), progress)
-            if not progress(): return
-
-            self.Freeze()
-            try: self.Redraw(remakelines=True)
-            finally: self.Thaw()
-            self._PostEvent()
-        self._worker_graph.work(func)
+                self.Freeze()
+                try: self.Redraw(remakelines=True)
+                finally: self.Thaw()
+                self._PostEvent()
+            self._worker_graph.work(func)
 
 
     def _UpdateSelection(self, item=None):
         """Updates selected items, redraws if necessary."""
-        fullbounds, sels, sels0 = wx.Rect(), self._layout.Selection, self._layout.Selection
+        fullbounds, sels, sels0 = wx.Rect(), self._diagram.Selection, self._diagram.Selection
         shift, ctrl = (controls.get_key_state(x) for x in (wx.WXK_SHIFT, wx.WXK_COMMAND))
         if item:
             if not shift and ctrl and item["name"] in sels0:
-                self._layout.SelectItem(item["name"], False)
-                sels = self._layout.Selection
+                self._diagram.SelectItem(item["name"], False)
+                sels = self._diagram.Selection
             else:
-                if not shift and not ctrl and item["name"] not in sels0: self._layout.Selection = []
-                self._layout.SelectItem(item["name"])
-                self._layout.ChangeOrder(item["name"], -1)
-                sels = [n for n in self._layout.Selection if n != item["name"]] + [item["name"]]
+                if not shift and not ctrl and item["name"] not in sels0: self._diagram.Selection = []
+                self._diagram.SelectItem(item["name"])
+                self._diagram.ChangeOrder(item["name"], -1)
+                sels = [n for n in self._diagram.Selection if n != item["name"]] + [item["name"]]
         elif not shift and not ctrl:
-            sels = self._layout.Selection = []
+            sels = self._diagram.Selection = []
 
         for myname in sels if sels != sels0 else ():
-            o = self._layout.GetItem(myname)
-            bounds = self._layout.GetObjectBounds(myname)
+            o = self._diagram.GetItem(myname)
+            bounds = self._diagram.GetObjectBounds(myname)
             fullbounds.Union(bounds)
-            if not self._layout.ShowLines: # No need to redraw everything
+            if not self._diagram.ShowLines: # No need to redraw everything
                 self.RecordItem(o["name"])
-        if not self._layout.ShowLines:
-            fullbounds.Inflate(2 * self._layout.BRADIUS, 2 * self._layout.BRADIUS)
+        if not self._diagram.ShowLines:
+            fullbounds.Inflate(2 * self._diagram.BRADIUS, 2 * self._diagram.BRADIUS)
             self.RefreshRect(fullbounds, eraseBackground=False)
         elif sels0 != sels: self.Redraw()
 
@@ -11576,14 +11566,14 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         hotcolour     = controls.ColourManager.GetColour(wx.SYS_COLOUR_HOTLIGHT)
 
         if defaults:
-            wincolour     = self._layout.DEFAULT_COLOURS["Background"]
-            wtextcolour   = self._layout.DEFAULT_COLOURS["Foreground"]
-            btextcolour   = self._layout.DEFAULT_COLOURS["Line"]
-            gradendcolour = self._layout.DEFAULT_COLOURS["GradientEnd"]
-            gtextcolour   = self._layout.DEFAULT_COLOURS["Border"]
-            hotcolour     = self._layout.DEFAULT_COLOURS["DragForeground"]
+            wincolour     = self._diagram.DEFAULT_COLOURS["Background"]
+            wtextcolour   = self._diagram.DEFAULT_COLOURS["Foreground"]
+            btextcolour   = self._diagram.DEFAULT_COLOURS["Line"]
+            gradendcolour = self._diagram.DEFAULT_COLOURS["GradientEnd"]
+            gtextcolour   = self._diagram.DEFAULT_COLOURS["Border"]
+            hotcolour     = self._diagram.DEFAULT_COLOURS["DragForeground"]
         elif wx.WHITE == wincolour:  # Prefer default header-footer colour if visibility ensured
-            gradendcolour = self._layout.DEFAULT_COLOURS["GradientEnd"]
+            gradendcolour = self._diagram.DEFAULT_COLOURS["GradientEnd"]
 
 
         dragbgcolour  = controls.ColourManager.Adjust(hotcolour,   wincolour, 0.6)
@@ -11592,21 +11582,21 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         self.BackgroundColour = wincolour
         self.ForegroundColour = wtextcolour
 
-        self._layout.BackgroundColour     = wincolour
-        self._layout.ForegroundColour     = wtextcolour
-        self._layout.DragBackgroundColour = dragbgcolour
-        self._layout.DragForegroundColour = hotcolour
-        self._layout.BorderColour         = gtextcolour
-        self._layout.GradientStartColour  = wincolour
-        self._layout.GradientEndColour    = gradendcolour
-        self._layout.LineColour           = btextcolour
-        self._layout.SelectionColour      = selectcolour
+        self._diagram.BackgroundColour     = wincolour
+        self._diagram.ForegroundColour     = wtextcolour
+        self._diagram.DragBackgroundColour = dragbgcolour
+        self._diagram.DragForegroundColour = hotcolour
+        self._diagram.BorderColour         = gtextcolour
+        self._diagram.GradientStartColour  = wincolour
+        self._diagram.GradientEndColour    = gradendcolour
+        self._diagram.LineColour           = btextcolour
+        self._diagram.SelectionColour      = selectcolour
 
 
     def _IsDefaultColours(self):
         """Returns whether current colours are default colours, not themed."""
-        get_current = lambda n: getattr(self._layout, "%sColour" % n)
-        return all(get_current(k) == v for k, v in self._layout.DEFAULT_COLOURS.items())
+        get_current = lambda n: getattr(self._diagram, "%sColour" % n)
+        return all(get_current(k) == v for k, v in self._diagram.DEFAULT_COLOURS.items())
 
 
     def _SetToolTip(self, tip):
@@ -11620,8 +11610,8 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         viewport = self.GetViewPort()
         x, y = (v + p for v, p in zip(event.Position, viewport.TopLeft))
 
-        item = next((o for o in self._layout.Order[::-1]
-                     if self._layout.GetObjectBounds(o["name"]).Contains(x, y)), None)
+        item = next((o for o in self._diagram.Order[::-1]
+                     if self._diagram.GetObjectBounds(o["name"]).Contains(x, y)), None)
         self.Cursor = wx.Cursor(wx.CURSOR_HAND if item else wx.CURSOR_DEFAULT)
 
         tip = ""
@@ -11642,8 +11632,8 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             event.Skip()
             if event.RightDown(): self._movepos = event.Position # Start canvas drag
             else: self._dragpos = x, y # Start item/selection drag
-            if item and event.LeftDown() and (1 == len(self._layout.Selection)
-            and item["name"] in self._layout.Selection  # Ignore left-clicks on single selected item
+            if item and event.LeftDown() and (1 == len(self._diagram.Selection)
+            and item["name"] in self._diagram.Selection # Ignore left-clicks on single selected item
             and not (controls.get_key_state(wx.WXK_SHIFT) or
                      controls.get_key_state(wx.WXK_COMMAND))): return
 
@@ -11685,7 +11675,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
                 and any(abs(v) > 50 for v in event.Position - dragpos): return
             if event.LeftUp() and self.HasCapture(): self.ReleaseMouse()
 
-            if self._layout.Selection and not event.Dragging() and self._layout.DragRect is None:
+            if self._diagram.Selection and not event.Dragging() and self._diagram.DragRect is None:
                 return
 
             if event.Dragging() and not self.HasCapture(): self.CaptureMouse()
@@ -11693,39 +11683,39 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             dx, dy = (a - b for a, b in zip((x, y), self._dragpos))
             refrect, refnames = wx.Rect(), []
 
-            if event.Dragging() and not self._layout.Selection and not self._layout.DragRect:
-                self._layout.DragRect = wx.Rect(wx.Point(self._dragpos), wx.Size())
+            if event.Dragging() and not self._diagram.Selection and not self._diagram.DragRect:
+                self._diagram.DragRect = wx.Rect(wx.Point(self._dragpos), wx.Size())
 
-            if self._layout.DragRect:
+            if self._diagram.DragRect:
                 self.Cursor = wx.Cursor(wx.CURSOR_CROSS)
-                r, r0 = self._layout.DragRect, wx.Rect(self._layout.DragRect)
+                r, r0 = self._diagram.DragRect, wx.Rect(self._diagram.DragRect)
                 if r.Left + dx < 0 or r.Right  + dx > self.VirtualSize.Width:  dx = 0
                 if r.Top  + dy < 0 or r.Bottom + dy > self.VirtualSize.Height: dy = 0
-                self._layout.DragRect = wx.Rect(r.Left, r.Top, r.Width + dx, r.Height + dy)
+                self._diagram.DragRect = wx.Rect(r.Left, r.Top, r.Width + dx, r.Height + dy)
 
-                r = wx.Rect(self._layout.DragRect)
+                r = wx.Rect(self._diagram.DragRect)
 
-                for name in self._layout.Items: # First pass: gather unselected items
-                    ro = self._layout.GetObjectBounds(name)
-                    if not self._layout.DragRectAbsolute.Contains(ro) \
-                    and name in self._layout.Selection:
+                for name in self._diagram.Items: # First pass: gather unselected items
+                    ro = self._diagram.GetObjectBounds(name)
+                    if not self._diagram.DragRectAbsolute.Contains(ro) \
+                    and name in self._diagram.Selection:
                         refnames.append(name)
-                        self._layout.SelectItem(name, False)
+                        self._diagram.SelectItem(name, False)
                         refrect.Union(ro)
 
-                for o in self._layout.Order: # Second pass: gather selected items
-                    ro = self._layout.GetObjectBounds(o["name"])
-                    if self._layout.DragRectAbsolute.Contains(ro):
-                        self._layout.SelectItem(o["name"])
+                for o in self._diagram.Order: # Second pass: gather selected items
+                    ro = self._diagram.GetObjectBounds(o["name"])
+                    if self._diagram.DragRectAbsolute.Contains(ro):
+                        self._diagram.SelectItem(o["name"])
                 r.Union(r0)
-                r.Inflate(2 * self._layout.BRADIUS, 2 * self._layout.BRADIUS)
+                r.Inflate(2 * self._diagram.BRADIUS, 2 * self._diagram.BRADIUS)
                 refrect.Union(r)
 
             is_moved = False
             # First pass: constrain dx-dy so that all dragged items remain within diagram bounds
-            for name in self._layout.Selection if self._layout.DragRect is None else ():
+            for name in self._diagram.Selection if self._diagram.DragRect is None else ():
                 is_moved = dx or dy
-                r = self._layout.GetObjectBounds(name)
+                r = self._diagram.GetObjectBounds(name)
                 r0 = wx.Rect(r)
                 r.Offset(dx, dy)
                 if r.Left < 0: dx = -r0.Left
@@ -11733,27 +11723,27 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
                 if r.Right  > self.VirtualSize.Width:  dx = self.VirtualSize.Width  - r0.Right
                 if r.Bottom > self.VirtualSize.Height: dy = self.VirtualSize.Height - r0.Bottom
 
-            for name in self._layout.Selection if self._layout.DragRect is None else ():
+            for name in self._diagram.Selection if self._diagram.DragRect is None else ():
                 # Second pass: reposition dragged item
-                r = self._layout.GetObjectBounds(name)
+                r = self._diagram.GetObjectBounds(name)
                 r0 = wx.Rect(r)
                 r.Offset(dx, dy)
-                self._layout.MoveItem(name, dx, dy)
+                self._diagram.MoveItem(name, dx, dy)
 
                 r.Union(r0)
-                r.Inflate(2 * self._layout.BRADIUS, 2 * self._layout.BRADIUS)
+                r.Inflate(2 * self._diagram.BRADIUS, 2 * self._diagram.BRADIUS)
                 refrect.Union(r)
 
             if event.LeftUp():
-                if self._layout.DragRect: self._layout.DragRect = None
-            if is_moved and self._layout.Selection:
-                self._layout.SetLayoutActive(False)
+                if self._diagram.DragRect: self._diagram.DragRect = None
+            if is_moved and self._diagram.Selection:
+                self._diagram.SetLayoutActive(False)
                 self._PostEvent(layout=False)
 
-            if self._layout.ShowLines: self.Redraw(recalculate=event.Dragging() and self._layout.Selection)
+            if self._diagram.ShowLines: self.Redraw(recalculate=event.Dragging() and self._diagram.Selection)
             else:
                 for name in refnames: self.RecordItem(name)
-                if self._layout.DragRect: self.RecordDragRect()
+                if self._diagram.DragRect: self.RecordDragRect()
                 refrect.Offset(*[-p for p in self.GetViewPort().TopLeft])
                 self.RefreshRect(refrect, eraseBackground=False)
 
@@ -11761,7 +11751,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         elif event.WheelRotation:
             # Zoom in or out on Ctrl+Wheel
             if event.CmdDown():
-                zstep = self._layout.ZOOM_STEP * (1 if event.WheelRotation > 0 else -1)
+                zstep = self._diagram.ZOOM_STEP * (1 if event.WheelRotation > 0 else -1)
                 focus = (x, y) if self.ClientRect.Contains(event.Position) else None
                 self.SetZoom(self.Zoom + zstep, focus=focus)
             else: event.Skip()
@@ -11771,11 +11761,11 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
 
     def _OnKey(self, event):
         """Handler for keypress."""
-        items = list(map(self._layout.GetItem, self._layout.Selection))
+        items = list(map(self._diagram.GetItem, self._diagram.Selection))
 
         if event.CmdDown() and event.UnicodeKey == ord('A'):
-            for name in self._layout.Items: self._layout.SelectItem(name) # Select all
-            self._layout.SortItems(key=lambda o: (o["type"], o["name"].lower()))
+            for name in self._diagram.Items: self._diagram.SelectItem(name) # Select all
+            self._diagram.SortItems(key=lambda o: (o["type"], o["name"].lower()))
             self.Redraw()
         elif event.CmdDown() and event.UnicodeKey == ord('C'):
             names = sorted(o["name"] for o in items)
@@ -11784,23 +11774,23 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             self.Zoom += self.ZOOM_STEP * (1 if event.KeyCode in controls.KEYS.PLUS else -1)
         elif event.KeyCode in controls.KEYS.MULTIPLY:
             self.Zoom = 1
-        elif event.KeyCode in controls.KEYS.TAB and self._layout.Items:
-            names = sorted(self._layout.Items, key=lambda x: self._layout.GetObjectBounds(x).TopLeft[::-1])
-            if self._layout.Selection:
-                name1 = self._layout.Selection[0]
+        elif event.KeyCode in controls.KEYS.TAB and self._diagram.Items:
+            names = sorted(self._diagram.Items, key=lambda x: self._diagram.GetObjectBounds(x).TopLeft[::-1])
+            if self._diagram.Selection:
+                name1 = self._diagram.Selection[0]
                 idx2  = names.index(name1) + (-1 if event.ShiftDown() else 1)
-                self._layout.Selection = []
-                o = self._layout.GetItem(names[idx2]) if idx2 < len(names) else None
-            else: o = None if event.ShiftDown() else self._layout.GetItem(names[0]) if names else None
+                self._diagram.Selection = []
+                o = self._diagram.GetItem(names[idx2]) if idx2 < len(names) else None
+            else: o = None if event.ShiftDown() else self._diagram.GetItem(names[0]) if names else None
             if o:
-                self._layout.SelectItem(o["name"])
-                self._layout.ChangeOrder(o["name"], -1)
+                self._diagram.SelectItem(o["name"])
+                self._diagram.ChangeOrder(o["name"], -1)
                 self.EnsureVisible(o["name"])
             else: event.Skip() # Propagate tab to next component
             self.Redraw()
         elif event.KeyCode in controls.KEYS.ESCAPE and items:
-            self._layout.Selection = [] # Select none
-            self._layout.SortItems(key=lambda o: (o["type"], o["name"].lower()))
+            self._diagram.Selection = [] # Select none
+            self._diagram.SortItems(key=lambda o: (o["type"], o["name"].lower()))
             self.Redraw()
         elif event.KeyCode in controls.KEYS.DELETE and items and self._page:
             self._page.handle_command("drop", None, *[o["name"] for o in items])
@@ -11831,7 +11821,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
 
             # First pass: constrain dx-dy so that all items remain within diagram bounds
             for o in items:
-                r = self._layout.GetObjectBounds(o["name"])
+                r = self._diagram.GetObjectBounds(o["name"])
                 r0 = wx.Rect(r)
                 r.Offset(dx, dy)
                 if r.Left < 0: dx = -r0.Left
@@ -11840,10 +11830,10 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
                 if r.Bottom > self.VirtualSize.Height: dy = self.VirtualSize.Height - r0.Bottom
 
             # Second pass: move items
-            for o in items: self._layout.MoveItem(o["name"], dx, dy)
+            for o in items: self._diagram.MoveItem(o["name"], dx, dy)
             if items:
                 self.Redraw(recalculate=True)
-                self._layout.SetLayoutActive(False)
+                self._diagram.SetLayoutActive(False)
                 self._PostEvent(layout=False)
             else:
                 self.ScrollXY(v + d for v, d in zip(self.GetViewPort().TopLeft, (dx, dy)))
@@ -11858,13 +11848,13 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         self.DoPrepareDC(dc) # For proper scroll position
         rgn = self.GetUpdateRegion()
         rgn.Offset(self.GetViewPort().TopLeft)
-        self._layout.DrawToDC(dc, rgn.GetBox())
+        self._diagram.DrawToDC(dc, rgn.GetBox())
 
 
     def _OnSysColourChange(self, event):
         """Handler for system colour change, refreshes content."""
         event.Skip()
-        self._layout.ClearCache()
+        self._diagram.ClearCache()
         self._UpdateColours()
         wx.CallAfter(self.Redraw, remake=True)
 
@@ -11885,7 +11875,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         """Handler for window destruction, stops worker threads and clears cache."""
         self._worker_graph.stop()
         self._worker_bmp.stop()
-        self._layout = None
+        self._diagram = None
 
 
     def _PostEvent(self, **kwargs):

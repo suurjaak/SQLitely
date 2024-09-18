@@ -8,11 +8,11 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    11.07.2024
+@modified    18.07.2024
 ------------------------------------------------------------------------------
 """
 import base64
-from collections import defaultdict
+import collections
 import copy
 import io
 import logging
@@ -34,6 +34,9 @@ except ImportError: controls = None
 from . import grammar
 from . import images
 from . import templates
+
+
+logger = logging.getLogger(__name__)
 
 
 class MyColour(object):
@@ -142,10 +145,11 @@ class MyColour(object):
 Colour = wx.Colour if wx else MyColour
 
 
-logger = logging.getLogger(__name__)
+## Schema layout styles
+LayoutStyle = collections.namedtuple("_", ["GRID", "GRAPH"])(GRID="grid", GRAPH="graph")
 
 
-class SchemaPlacement(object):
+class SchemaDiagram(object):
     """
     Schema diagram visual layout logic.
 
@@ -184,9 +188,6 @@ class SchemaPlacement(object):
     STATSH    =  15      # Stats footer height
     FONT_STEP_STATS = -1 # Stats footer font size step from base font
 
-    LAYOUT_GRID  = "grid"
-    LAYOUT_GRAPH = "graph"
-
     SIZE_DEFAULT = (2000, 2000)
 
     ZOOM_STEP = 1. / FONT_SIZE
@@ -201,181 +202,10 @@ class SchemaPlacement(object):
         "labels":      True,
         "nulls":       False,
         "statistics":  False,
-        "layout":      {"layout": LAYOUT_GRID, "active": True,
-                        "grid": {"order": "name", "reverse": False, "vertical": True}},
+        "layout":      {"style": LayoutStyle.GRID, "active": True,
+                        LayoutStyle.GRID: {"order": "name", "reverse": False, "vertical": True}},
         "zoom":        ZOOM_DEFAULT,
     }
-
-    class GraphLayout(object):
-        """
-        """
-
-        DEFAULT_EDGE_WEIGHT     =    1    # attraction for relations; 10 groups better but slower
-        MAX_ITERATIONS          =  100    # maximum number of steps to stop at
-        MIN_COMPLETION_DISTANCE =    0.1  # minimum change to stop at
-        INERTIA                 =    0.1  # node speed inertia
-        REPULSION               =  400    # repulsion between all nodes
-        ATTRACTION              =    1    # attraction between connected nodes
-        MAX_DISPLACE            =   10    # node displacement limit
-        DO_FREEZE_BALANCE       = True    # whether unstable nodes are stabilized
-        FREEZE_STRENGTH         =   80    # stabilization strength
-        FREEZE_INERTIA          =    0.2  # stabilization inertia [0..1]
-        GRAVITY                 =   50    # force of attraction to graph centre, smaller values push less connected nodes more outwards
-        SPEED                   =    1    # convergence speed (>0)
-        COOLING                 =    1.0  # dampens force if >0
-        DO_OUTBOUND_ATTRACTION  = True    # whether attraction is distributed along outbound links (pushes hubs to center)
-
-
-        @classmethod
-        def layout(cls, items, links, bounds, viewport, progress=None):
-            """
-            Calculates item positions using a force-directed graph.
-
-            @param   items     [{"name", "x", "y", "size"}, ]
-            @param   links     [(name1, name2), (..)]
-            @param   bounds    graph bounds as (x, y, width, height)
-            @param   viewport  preferred viewport within bounds, as (x, y, width, height)
-            @param   progress  callback function(iteration), returning whether to stop calculations
-            @return            [{"name", "x", "y", "size"}, ]
-            """
-
-            def intersects(n1, n2):
-                (w1, h1), (w2, h2) = n1["size"], n2["size"]
-                x1, y1 = max(n1["x"], n2["x"]), max(n1["y"], n2["y"])
-                x2, y2 = min(n1["x"] + w1, n2["x"] + w2), min(n1["y"] + h1, n2["y"] + h2)
-                return x1 < x2 and y1 < y2
-
-
-            def repulsor(n1, n2, c):
-                xdist, ydist = n1["x"] - n2["x"], n1["y"] - n2["y"]
-                dist = math.sqrt(xdist ** 2 + ydist ** 2) - n1["span"] - n2["span"]
-
-                if not xdist and not ydist:
-                    if not n1["fixed"]:
-                        n1["dx"] += 0.01 * c
-                        n1["dy"] += 0.01 * c
-                    if not n2["fixed"]:
-                        n2["dx"] -= 0.01 * c
-                        n2["dy"] -= 0.01 * c
-                    return
-
-                f = 0.001 * c / dist if dist > 0 else -c
-                if intersects(n1, n2): f *= 100
-                if not n1["fixed"]:
-                    n1["dx"] += xdist / dist * f
-                    n1["dy"] += ydist / dist * f
-                if not n2["fixed"]:
-                    n2["dx"] -= xdist / dist * f
-                    n2["dy"] -= ydist / dist * f
-
-
-            def attractor(n1, n2, c):
-                xdist, ydist = n1["x"] - n2["x"], n1["y"] - n2["y"]
-                dist = math.sqrt(xdist ** 2 + ydist ** 2) - n1["span"] - n2["span"]
-                if not dist: return
-
-                f = 0.01 * -c * dist
-                if not n1["fixed"]:
-                    n1["dx"] += xdist / dist * f
-                    n1["dy"] += ydist / dist * f
-                if not n2["fixed"]:
-                    n2["dx"] -= xdist / dist * f
-                    n2["dy"] -= ydist / dist * f
-
-
-            def iteration(nodes, links):
-                """Performs one iteration, returns maximum distance shifted."""
-                result = 0
-
-                for n, o in nodes.items():
-                    o.update(dx0=o["dx"], dx=o["dx"] * cls.INERTIA,
-                             dy0=o["dy"], dy=o["dy"] * cls.INERTIA)
-                nodelist = list(nodes.values())
-
-                # repulsion
-                for i, n1 in enumerate(nodelist):
-                    for n2 in nodelist[i+1:]:
-                        c = cls.REPULSION * (1 + n1["cardinality"]) * (1 + n2["cardinality"])
-                        repulsor(n1, n2, c)
-
-                # attraction
-                for name1, name2 in links:
-                    n1, n2 = nodes[name1], nodes[name2]
-                    bonus = 100 if n1["fixed"] or n2["fixed"] else 1
-                    bonus *= cls.DEFAULT_EDGE_WEIGHT
-                    c = bonus * cls.ATTRACTION / (1. + n1["cardinality"] * cls.DO_OUTBOUND_ATTRACTION)
-                    attractor(n1, n2, c)
-
-                # gravity
-                for n in nodelist:
-                    if n["fixed"]: continue # for n
-                    d = 0.0001 + math.sqrt(node["x"] ** 2 + node["y"] ** 2)
-                    gf = 0.0001 * cls.GRAVITY * d
-                    n["dx"] -= gf * n["x"] / d
-                    n["dy"] -= gf * n["y"] / d
-
-                # speed
-                for n in nodelist:
-                    if n["fixed"]: continue # for n
-                    n["dx"] *= cls.SPEED * (10 if cls.DO_FREEZE_BALANCE else 1)
-                    n["dy"] *= cls.SPEED * (10 if cls.DO_FREEZE_BALANCE else 1)
-
-                # apply forces
-                for n in nodelist:
-                    if node["fixed"]: continue # for n
-
-                    d = 0.0001 + math.sqrt(n["dx"] ** 2 + n["dy"] ** 2)
-                    if cls.DO_FREEZE_BALANCE:
-                        ddist = math.sqrt((n["dx0"] - n["dx"]) ** 2 + (n["dy0"] - n["dy"]) ** 2)
-                        n["freeze"] = cls.FREEZE_INERTIA * n["freeze"] + \
-                                      (1 - cls.FREEZE_INERTIA) * 0.1 * cls.FREEZE_STRENGTH * math.sqrt(ddist)
-                        ratio = min(d / (d * (1 + n["freeze"])), cls.MAX_DISPLACE / d)
-                    else:
-                        ratio = min(1, cls.MAX_DISPLACE / d)
-
-                    n["dx"], n["dy"] = n["dx"] * ratio / cls.COOLING, n["dy"] * ratio / cls.COOLING
-                    x, y = n["x"] + n["dx"], n["y"] + n["dy"]
-
-                    # Bounce back from edges
-                    if x < bounds[0]: n["dx"] = bounds[0] - n["x"]
-                    elif x + n["size"][0] > bounds[0] + bounds[2]:
-                        n["dx"] = bounds[2] - n["size"][0] - n["x"]
-                    if y < bounds[1]: n["dy"] = bounds[1] - n["y"]
-                    elif y + n["size"][1] > bounds[1] + bounds[3]:
-                        n["dy"] = bounds[3] - n["size"][1] - n["y"]
-
-                    n["x"], n["y"] = n["x"] + n["dx"], n["y"] + n["dy"]
-                    result = max(result, abs(n["dx"]), abs(n["dy"]))
-
-                return result
-
-
-            nodes = util.CaselessDict() # {name: {id, size, dx, dy, freeze, fixed, cardinality}, }
-
-            for o in items:
-                node = {"x": 0, "y": 0, "size": o["size"], "name": o["name"],
-                        "dx": 0, "dy": 0, "freeze": 0, "cardinality": 0, "fixed": False}
-                node["span"] = math.sqrt(o["size"][0] ** 2 + o["size"][1] ** 2) / 2.5
-                nodes[o["name"]] = node
-
-            for name1, name2 in links:
-                if name1 != name2:
-                    for n in name1, name2: nodes[n]["cardinality"] += 1
-
-            # Start with all items in center
-            center = viewport[0] + viewport[2] / 2, viewport[1] + viewport[3] / 2
-            for n in nodes.values():
-                x, y = (c - s/2 for c, s in zip(center, n["size"]))
-                if not n["cardinality"]: x += 200 # Push solitary nodes out
-                n["x"], n["y"] = x, y
-
-
-            steps = 0
-            while not callable(progress) or progress(iteration=steps):
-                dist, steps = iteration(nodes, links), steps + 1
-                if dist < cls.MIN_COMPLETION_DISTANCE or steps >= cls.MAX_ITERATIONS:
-                    break # while
-            return {n: {"x": o["x"], "y": o["y"]} for n, o in nodes.items()}
 
 
     def __init__(self, db, size=SIZE_DEFAULT):
@@ -394,7 +224,7 @@ class SchemaPlacement(object):
         # with key as (sql, hasmeta, showcols, showkeys, shownulls, stats, dragrect),
         # image tuple as (standard bitmap, selected bitmap) and single image as dragrect highlight;
         # or {zoom: {PyEmdeddedImage: imageobject}} for scaled static images
-        self._cache = defaultdict(lambda: defaultdict(dict))
+        self._cache = collections.defaultdict(lambda: collections.defaultdict(dict))
         self._order = [] # Draw order [{obj dict}, ] selected items at end
         self._zoom  = self.DEFAULT_OPTIONS.get("zoom", self.ZOOM_DEFAULT) # Zoom scale, 1 == 100%
         self._dc    = PseudoDC()
@@ -404,16 +234,16 @@ class SchemaPlacement(object):
         self._dragrectabs = None # Selection being dragged, with non-negative dimensions
         self._dragrectid  = None # DC ops ID for selection rect
         self._use_cache   = True # Use self._cache for item bitmaps
-        self._show_cols   = self.DEFAULT_OPTIONS.get("columns",    True)
-        self._show_keys   = self.DEFAULT_OPTIONS.get("keycolumns", False)
-        self._show_nulls  = self.DEFAULT_OPTIONS.get("nulls",      False)
-        self._show_lines  = self.DEFAULT_OPTIONS.get("lines",      True)
-        self._show_labels = self.DEFAULT_OPTIONS.get("labels",     True)
-        self._show_stats  = self.DEFAULT_OPTIONS.get("stats",      False)
+        self._show_cols   = self.DEFAULT_OPTIONS["columns"]
+        self._show_keys   = self.DEFAULT_OPTIONS["keycolumns"]
+        self._show_nulls  = self.DEFAULT_OPTIONS["nulls"]
+        self._show_lines  = self.DEFAULT_OPTIONS["lines"]
+        self._show_labels = self.DEFAULT_OPTIONS["labels"]
+        self._show_stats  = self.DEFAULT_OPTIONS["statistics"]
 
-        self._layout = copy.deepcopy(self.DEFAULT_OPTIONS.get("layout")) or \
-                       {"layout": self.LAYOUT_GRID, "active": True,
-                        "grid": {"order": "name", "reverse": False, "vertical": True}}
+        self._layout = SchemaLayout(self.DEFAULT_OPTIONS["layout"]["style"])
+        if self._layout.Style in self.DEFAULT_OPTIONS["layout"]:
+            self._layout.SetOptions(**self.DEFAULT_OPTIONS["layout"][self._layout.Style])
 
         self._colour_bg     = self.DEFAULT_COLOURS["Background"]
         self._colour_fg     = self.DEFAULT_COLOURS["Foreground"]
@@ -458,7 +288,7 @@ class SchemaPlacement(object):
         itemposes = util.CaselessDict(opts.get("items") or {})
         makeitems = []
         reset = any(o["__id__"] not in (x["__id__"] for x in self._db.schema.get(o["type"], {}).values())
-                    for o in objs0) if self.LAYOUT_GRID == self.Layout else False
+                    for o in objs0) if LayoutStyle.GRID == self._layout.Style else False
         keys = {} # {table: (pks, fks)}
         for name1 in self._db.schema.get("table", {}):
             keys[name1] = self._db.get_keys(name1, pks_only=True)
@@ -501,7 +331,7 @@ class SchemaPlacement(object):
                     fullbounds.Union(rects[name])
                 else:
                     makeitems.append(name)
-                    if not o0 and self.Layout and name not in itemposes: reset = True
+                    if not o0 and self._layout.Active and name not in itemposes: reset = True
 
         # Nuke cache for objects no longer in schema
         for o0 in objs0:
@@ -669,6 +499,7 @@ class SchemaPlacement(object):
             # Scale instance constants from class constants
             v = getattr(self.__class__, k)
             setattr(self, k, int(math.ceil(v * zoom)))
+        self._layout.SetZoom(zoom)
 
         for o in self._order: # Scale all item bounds to new zoom
             r = self._dc.GetIdBounds(o["id"])
@@ -684,15 +515,17 @@ class SchemaPlacement(object):
         """
         Returns all current diagram options, as
         {zoom: float, columns: bool, keycolumns: bool, lines: bool, labels: bool, statistics: bool,
-         layout: {layout, active, ?grid: {order, reverse, vertical}}, items: {name: [x, y]}}.
+         layout: {style, active, ?grid: {order, reverse, vertical}}, items: {name: [x, y]}}.
         """
         pp = {o["name"]: list(self._dc.GetIdBounds(o["id"]).TopLeft) for o in self.Order}
+        layoutopts = {"style": self._layout.GetStyle(active=None), "active": self._layout.Active}
+        layoutopts.update(self._layout.GetAllOptions())
         return {
             "zoom":    self._zoom,        
             "lines":   self._show_lines,  "labels":     self._show_labels, 
             "columns": self._show_cols,   "keycolumns": self._show_keys,
             "nulls":   self._show_nulls,  "statistics": self._show_stats,
-            "items":   pp,                "layout": copy.deepcopy(self._layout),
+            "items":   pp,                "layout":     layoutopts,
         }
     def SetOptions(self, opts):
         """Sets all diagram options."""
@@ -722,17 +555,17 @@ class SchemaPlacement(object):
             remake = self.SetZoom(opts["zoom"]) or remake
 
         if "layout" in opts:
-            lopts = opts["layout"]
-            if "layout" in lopts and lopts["layout"] in (self.LAYOUT_GRID, self.LAYOUT_GRAPH):
-                self._layout["layout"] = lopts["layout"]
-            if "active" in lopts: self._layout["active"] = bool(lopts["active"])
-            for k, v in lopts.items():
-                if isinstance(v, dict): self._layout.setdefault(k, {}).update(v)
-        for name, (x, y) in (opts.get("items") or {}).items() if self._objs else ():
-            o = self._objs.get(name)
-            if not o:
-                self.Layout = self._layout["layout"]
-                break # for name, (x, y)
+            if opts["layout"].get("style") in LayoutStyle:
+                self._layout.SetStyle(opts["layout"]["style"])
+            if "active" in opts["layout"]: self._layout.SetActive(opts["layout"]["active"])
+            self._layout.SetAllOptions(opts["layout"])
+
+        if not self._objs or not opts.get("items"): return
+        if any(n not in self._objs for n in opts["items"]):
+            self._layout.SetActive() # Outdated items: cancel positioning override
+            return
+        for name, (x, y) in opts["items"].items():
+            o = self._objs[name]
             r = self._dc.GetIdBounds(o["id"])
             if x != r.Left or y == r.Top:
                 self._dc.TranslateId(o["id"], x - r.Left, y - r.Top)
@@ -783,6 +616,7 @@ class SchemaPlacement(object):
         @param   items       list of entity names to include if not all
         """
         if wx: return self.MakeBitmap_wx(zoom, selections, use_cache, items=items)
+        return None
 
 
     def MakeBitmap_wx(self, zoom=None, selections=True, use_cache=True, items=None):
@@ -859,7 +693,7 @@ class SchemaPlacement(object):
         @param   selections  whether currently selected items should be drawn as selected
         @param   items       list of entity names to include if not all
         """
-        if "SVG" != filetype or not self._objs: return
+        if "SVG" != filetype or not self._objs: return None
 
         zoom0 = self._zoom
         lines0, sels0 = copy.deepcopy(self._lines), copy.deepcopy(self._sels)
@@ -969,7 +803,7 @@ class SchemaPlacement(object):
 
 
         # {name2: {False: [(name1, cols) at top], True: [(name1, cols) at bottom]}}
-        vertslots = defaultdict(lambda: defaultdict(list))
+        vertslots = collections.defaultdict(lambda: collections.defaultdict(list))
         # {table name: {col name: col index on diagram with current settings}}
         tablecols = util.CaselessDict()
         for name, topts in self._db.schema["table"].items():
@@ -1128,115 +962,42 @@ class SchemaPlacement(object):
             opts.update(waylines=wlines, cardlines=clines, cornerpts=cpts, textrect=trect)
 
 
-    def PositionItemsGraph(self, viewport, progress=None):
+    def PositionItems(self, viewport, progress=None):
         """
-        Calculates item positions using a force-directed graph layout.
+        Calculates item positions using current layout style.
 
-        @param   viewport  area to fit graph into
-        @param   progress  callback function(step), if any, returning whether to stop calculations
+        @param   viewport  current viewport within placement area, as (x, y, width, height)
+        @param   progress  callback function(step), if any, returning false to stop calculations
         """
+        items = {o["name"]: self.GetItemSize(o["name"]) for o in self._objs.values()}
+        links = [(n1, n2) for n1, n2, _ in self._lines]
+        area = Rect(0, 0, *list(self._size))
 
-        nodes = [{"name": o["name"], "x": b.Left, "y": b.Top, "size": self.GetItemSize(o["name"])}
-                 for o in self._objs.values() for b in [self._dc.GetIdBounds(o["id"])]]
-        links = [(n1, n2) for n1, n2, opts in self._lines]
-        bounds = [0, 0] + list(self._size)
+        if LayoutStyle.GRID == self._layout.Style:
+            order, reverse = self._layout.Options["order"], bool(self._layout.Options["reverse"])
+            optorder = lambda c, n: 0
+            typeorder = lambda c: (c == "view") ^ (not reverse)  # Sort views always to the end
+            if "columns" == order:
+                optorder = lambda c, n: len(self._db.schema[c].get(n, {}).get("columns", []))
+            elif "rows" == order:
+                optorder = lambda c, n: self._db.schema[c].get(n, {}).get("count", 0)
+            elif "bytes" == order:
+                statmap = util.CaselessDict({x["name"]: x["size_total"] for x in self._objs.values()
+                                             if x.get("size_total") is not None})
+                optorder = lambda c, n: statmap.get(n, 0)
+            sortkey = lambda o: (typeorder(o["type"]), optorder(o["type"], o["name"]),
+                                 o["name"].lower())
+            ordered = sorted(self._order, key=sortkey, reverse=reverse)
+            items = collections.OrderedDict((o["name"], items[o["name"]]) for o in ordered)
 
-        items = self.GraphLayout.layout(nodes, links, bounds, viewport, progress)
-        for name, opts in items.items() if not progress or progress() else ():
+        positions = self._layout.PositionItems(items, links, area, viewport, progress)
+        if progress and not progress():
+            return
+        for name, (x, y) in positions.items():
             o = self._objs.get(name)
-            if not o: continue # for
-
-            bounds = self._dc.GetIdBounds(o["id"])
-            dx, dy = opts["x"] - bounds.Left, opts["y"] - bounds.Top
-            bounds.Offset(dx, dy)
-            self._dc.TranslateId(o["id"], dx, dy)
-            self._dc.SetIdBounds(o["id"], bounds)
-
-
-    def PositionItemsGrid(self, viewport):
-        """
-        Calculates item positions using a simple grid layout.
-
-        @param   viewport  area to fit grid into, on need expanded down if horizontal else right
-        """
-        MAXW = max(int(500 * self._zoom), viewport.Width)
-        MAXH = max(int(500 * self._zoom), viewport.Height)
-
-        def get_dx(rects, idx):
-            """Returns starting X for column or row."""
-            if self._layout["grid"]["vertical"]:
-                result = 0
-                for rr in filter(bool, rects[:idx]):
-                    ww = [r.Width for r in rr]
-                    median = sorted(ww)[len(rr) // 2]
-                    result += max(w for w in ww if w < 1.5 * median)
-            else:
-                result = rects[idx][-1].Right if rects[idx] else 0
-            return self.GPAD + result + (idx * self.GPAD if self._layout["grid"]["vertical"] else 0)
-
-        def get_dy(rects, idx):
-            """Returns starting Y for column or row."""
-            if self._layout["grid"]["vertical"]:
-                result = max(r.Bottom for r in rects[idx]) if rects[idx] else 0
-            else:
-                result = max(r.Bottom for r in rects[-2]) if len(rects) > 1 else 0
-            return self.GPAD + result
-
-        do_reverse = bool(self._layout["grid"]["reverse"])
-        numval = lambda o: 0
-        # Sort views always to the end
-        catval = lambda c: c.upper() if do_reverse and util.lceq(c, "view") else c.lower()
-        if "columns" == self._layout["grid"]["order"]:
-            numval = lambda o: len(self._db.schema[o["type"]].get(o["name"], {}).get("columns", []))
-        elif "rows" == self._layout["grid"]["order"]:
-            numval = lambda o: self._db.schema[o["type"]].get(o["name"], {}).get("count", 0)
-        elif "bytes" == self._layout["grid"]["order"]:
-            statmap = util.CaselessDict({x["name"]: x["size_total"] for x in self._objs.values()
-                                         if x.get("size_total") is not None})
-            numval = lambda o: statmap.get(o["name"], 0)
-        sortkey = lambda o: (catval(o["type"]), numval(o), o["name"].lower())
-        items = sorted(self._order, key=sortkey, reverse=do_reverse)
-
-        if self._layout["grid"]["vertical"]:
-            col, colrects = 0, [[]] # [[col 0 rect 0, rect 1, ], ]
-            for o in items:
-                x, y = get_dx(colrects, col), get_dy(colrects, col)
-                rect = Rect(x, y, *self.GetItemSize(o["name"]))
-
-                xrect = next((r for r in colrects[-2][::-1] if r.Intersects(rect)),
-                             None) if col else None # Overlapping rect in previous column
-                while xrect or colrects[-1] and y + rect.Height > MAXH:
-
-                    # Step lower or to next col if prev col has wide item
-                    if xrect and xrect.Bottom + self.GPAD + rect.Height > MAXH:
-                        col, colrects, y = col + 1, colrects + [[]], self.GPAD
-                    elif xrect:
-                        y = xrect.Bottom + self.GPAD
-
-                    if colrects[-1] and y + rect.Height > MAXH:
-                        col, colrects, y = col + 1, colrects + [[]], self.GPAD
-
-                    rect = Rect(get_dx(colrects, col), y, *rect.Size)
-                    xrect = next((r for r in colrects[-2][::-1] if r.Intersects(rect)),
-                                 None) if col else None
-
-                dcrect = Rect((viewport.Left + rect.Left, viewport.Top + rect.Top), rect.Size)
-                self._dc.SetIdBounds(o["id"], dcrect)
-                colrects[-1].append(rect)
-        else:
-            row, rowrects = 0, [[]] # [[row 0 rect 0, rect 1, ], ]
-            for o in items:
-                x, y = get_dx(rowrects, row), get_dy(rowrects, row)
-                rect = Rect(x, y, *self.GetItemSize(o["name"]))
-
-                if rowrects[-1] and x + rect.Width > MAXW:
-                    row, rowrects, x = row + 1, rowrects + [[]], self.GPAD
-                    rect = Rect(x, get_dy(rowrects, row), *rect.Size)
-
-                dcrect = Rect((viewport.Left + rect.Left, viewport.Top + rect.Top), rect.Size)
-                self._dc.SetIdBounds(o["id"], dcrect)
-                rowrects[-1].append(rect)
-
+            if o:
+                rect = Rect(x, y, *items[name])
+                self._dc.SetIdBounds(o["id"], rect)
         self.EnsureSize()
 
 
@@ -1267,20 +1028,19 @@ class SchemaPlacement(object):
         self.RecordItems()
 
 
-    def Redraw(self, viewport, layout):
+    def Redraw(self, viewport, style):
         """
         Redraws everything, remaking item bitmaps and applying layout.
 
         @param   viewport  area to fit diagram into
-        @param   layout    layout to apply
+        @param   style     layout style to apply
         """
         self.UpdateStatistics()
         for o in self._order:
             bmps = self.GetItemBitmaps(o)
             if bmps: o["bmp"], o["bmpsel"] = bmps
-        self.Layout = layout
-        wrk = self.PositionItemsGrid if self.LAYOUT_GRID == self.Layout else self.PositionItemsGraph
-        wrk(viewport)
+        self._layout.SetStyle(style)
+        self.PositionItems(viewport)
         self.CalculateLines(remake=True)
         self.Draw()
 
@@ -1534,6 +1294,7 @@ class SchemaPlacement(object):
         @return               (default bitmap, focused bitmap) or bitmap inside drag rectangle
         """
         if wx: return self.MakeItemBitmaps_wx(opts, statistics, dragrect)
+        return None
 
 
     def MakeItemBitmaps_wx(self, opts, statistics=None, dragrect=False):
@@ -1801,36 +1562,31 @@ class SchemaPlacement(object):
 
 
     def GetLayout(self, active=True):
-        """Returns current layout, by default active only."""
-        return self._layout["layout"] if active and self._layout["active"] else None
-    def SetLayout(self, layout, options=None):
+        """Returns current layout style, by default active only."""
+        return self._layout.GetStyle(active)
+    def SetLayout(self, style, options=None):
         """
         Sets diagram layout style.
 
-        @param   layout   one of LAYOUT_GRID, LAYOUT_GRAPH
-        @param   options  options for grid layout as
-                          {"order": "name", "reverse": False, "vertical": True},
-                          updates current options
+        @param   style    one of LayoutStyle
+        @param   options  options for layout,
+                 e.g. {"order": "name", "reverse": False, "vertical": True} for grid
         """
-        if layout in (self.LAYOUT_GRID, self.LAYOUT_GRAPH):
-            self._layout["layout"] = layout
-            self._layout["active"] = True
-        if self.LAYOUT_GRID == self.Layout and options:
-            self._layout[layout].update(options)
+        if style in LayoutStyle:
+            self._layout.SetStyle(style)
+            if isinstance(options, dict):
+                self._layout.SetOptions(**options)
     Layout = property(GetLayout, SetLayout)
 
 
-    def GetLayoutOptions(self, layout=None):
-        """
-        Returns current options for specified layout, e.g. {"order": "name"} for grid,
-        or global layout options as {"layout": "grid", "active": True, "grid": {..}}.
-        """
-        return copy.deepcopy(self._layout if layout is None else self._layout.get(layout))
+    def GetLayoutOptions(self):
+        """Returns options for current layout, e.g. {"order": "name"} for grid."""
+        return self._layout.GetOptions()
 
 
     def SetLayoutActive(self, active=True):
-        """Sets current layout as active or inactive.."""
-        self._layout["active"] = bool(active)
+        """Sets current layout as active or inactive."""
+        self._layout.SetActive(active)
 
 
     def GetSelection(self):
@@ -2020,6 +1776,342 @@ class SchemaPlacement(object):
             if hasattr(self, "%sColour" % n): setattr(self, "%sColour" % n, c)
     Colours = property(GetColours, SetColours, doc=
     """Colours as dictionary, like {"Border": wx.BLACK}.""")
+
+
+
+class SchemaLayout(object):
+    """Schema diagram layout positioning."""
+
+    def __init__(self, style, **options):
+        self._active = True
+        self._style = None  # LayoutStyle
+        self._options = {}  # {layout: {}}
+        self._grid = self.GridLayout()
+        self._graph = self.GraphLayout()
+
+        self.SetStyle(style)
+        self.SetOptions(**options)
+
+
+    def GetStyle(self, active=True):
+        """Returns current layout style, by default None if not active."""
+        return self._style if self._active or not active else None
+    def SetStyle(self, style):
+        """Sets layout style and activates it, or deactivates current layout if None."""
+        if style in LayoutStyle:
+            self._style = style
+            self._active = True
+        elif style is None:
+            self._active = False
+        else:
+            raise ValueError("Unknown layout style: %r" % (style, ))
+    Style = property(GetStyle, SetStyle)
+
+
+    def GetOptions(self):
+        """Returns current layout options dictionary."""
+        return copy.deepcopy(self._options.get(self._style, {}))
+    def SetOptions(self, **options):
+        """Sets options for current layout."""
+        self._options.setdefault(self._style, {}).update(options)
+    Options = property(GetOptions, SetOptions)
+
+
+    def GetAllOptions(self):
+        """Returns options for all layouts, as {style: {..}}."""
+        return copy.deepcopy(self._options)
+    def SetAllOptions(self, options):
+        """Sets options for all layouts, as {style: {..}}."""
+        for style, opts in options.items():
+            if style in LayoutStyle: self._options.setdefault(style, {}).update(opts)
+
+
+    def IsActive(self):
+        """Returns whether current layout style is active."""
+        return self._active
+    def SetActive(self, active=True):
+        """Sets current style as active or inactive.."""
+        self._active = bool(active)
+    Active = property(IsActive, SetActive)
+
+
+    def PositionItems(self, items, links, bounds, viewport, progress=None):
+        """
+        Returns items laid out according to current style.
+
+        @param   items     items to position as {name: (width, height)}
+        @param   links     sequence of links between items as [(name1, name2)]
+        @param   bounds    bounds to position items in, as (x, y, width, height);
+                           grid will go beyond if necessary, in vertical or horizontal direction
+        @param   viewport  preferred viewport within bounds, as (x, y, width, height)
+        @param   progress  callback function(step), returning false to stop calculations
+        @return            item coordinates as {name: (x, y)}
+        """
+        if LayoutStyle.GRAPH == self._style:
+            return self._graph.layout(items, links, bounds, viewport, progress)
+        return self._grid.layout(items, viewport, self._options[self._style].get("vertical"))
+
+
+    def SetZoom(self, zoom):
+        """Updates layout settings by zoom factor."""
+        for k, v in vars(self.GridLayout).items():
+            # Scale instance constants from class constants
+            if k.isupper() and isinstance(v, six.integer_types):
+                setattr(self._grid, k, int(math.ceil(v * zoom)))
+
+
+    class GridLayout(object):
+        """Simple horizontal or vertical grid layout."""
+
+        MIN_WIDTH  = 500 # Minimum width for grid
+        MIN_HEIGHT = 500 # Minimum height for grid
+        SPACING    =  30 # Padding between grid items
+
+
+        def layout(self, items, viewport, vertical=True):
+            """
+            Calculates item positions using a simple grid layout.
+
+            @param   items     items to position as {name: (width, height)}
+            @param   viewport  area to fit grid into as (x, y, width, height);
+                               expanded right if vertical else down
+            @param   vertical  whether vertical or horizontal layout
+            @return            item coordinates as {name: (x, y)}
+            """
+            MAXW = max(self.MIN_WIDTH,  viewport[2])
+            MAXH = max(self.MIN_HEIGHT, viewport[3])
+
+            def get_dx(rects, idx):
+                """Returns starting X for column or row."""
+                if vertical:
+                    result = 0
+                    for rr in filter(bool, rects[:idx]):
+                        ww = [r.Width for r in rr]
+                        median = sorted(ww)[len(rr) // 2]
+                        result += max(w for w in ww if w < 1.5 * median)
+                else:
+                    result = rects[idx][-1].Right if rects[idx] else 0
+                return self.SPACING + result + (idx * self.SPACING if vertical else 0)
+
+            def get_dy(rects, idx):
+                """Returns starting Y for column or row."""
+                if vertical:
+                    result = max(r.Bottom for r in rects[idx]) if rects[idx] else 0
+                else:
+                    result = max(r.Bottom for r in rects[-2]) if len(rects) > 1 else 0
+                return self.SPACING + result
+
+            result = {} # {name: (x, y)}
+            if vertical:
+                col, colrects = 0, [[]] # [[col 0 rect 0, rect 1, ], ]
+                for name, (width, height) in items.items():
+                    x, y = get_dx(colrects, col), get_dy(colrects, col)
+                    rect = Rect(x, y, width, height)
+
+                    xrect = next((r for r in colrects[-2][::-1] if r.Intersects(rect)),
+                                 None) if col else None # Overlapping rect in previous column
+                    while xrect or colrects[-1] and y + rect.Height > MAXH:
+
+                        # Step lower or to next col if prev col has wide item
+                        if xrect and xrect.Bottom + self.SPACING + rect.Height > MAXH:
+                            col, colrects, y = col + 1, colrects + [[]], self.SPACING
+                        elif xrect:
+                            y = xrect.Bottom + self.SPACING
+
+                        if colrects[-1] and y + rect.Height > MAXH:
+                            col, colrects, y = col + 1, colrects + [[]], self.SPACING
+
+                        rect = Rect(get_dx(colrects, col), y, *rect.Size)
+                        xrect = next((r for r in colrects[-2][::-1] if r.Intersects(rect)),
+                                     None) if col else None
+
+                    result[name] = (viewport[0] + rect.Left, viewport[1] + rect.Top)
+                    colrects[-1].append(rect)
+            else:
+                row, rowrects = 0, [[]] # [[row 0 rect 0, rect 1, ], ]
+                for name, (width, height) in items.items():
+                    x, y = get_dx(rowrects, row), get_dy(rowrects, row)
+                    rect = Rect(x, y, width, height)
+
+                    if rowrects[-1] and x + rect.Width > MAXW:
+                        row, rowrects, x = row + 1, rowrects + [[]], self.SPACING
+                        rect = Rect(x, get_dy(rowrects, row), *rect.Size)
+
+                    result[name] = (viewport[0] + rect.Left, viewport[1] + rect.Top)
+                    rowrects[-1].append(rect)
+
+            return result
+
+
+    class GraphLayout(object):
+        """Force-directed graph layout."""
+
+        DEFAULT_EDGE_WEIGHT     =    1    # attraction for relations; 10 groups better but slower
+        MAX_ITERATIONS          =  100    # maximum number of steps to stop at
+        MIN_COMPLETION_DISTANCE =    0.1  # minimum change to stop at
+        INERTIA                 =    0.1  # node speed inertia
+        REPULSION               =  400    # repulsion between all nodes
+        ATTRACTION              =    1    # attraction between connected nodes
+        MAX_DISPLACE            =   10    # node displacement limit
+        DO_FREEZE_BALANCE       = True    # whether unstable nodes are stabilized
+        FREEZE_STRENGTH         =   80    # stabilization strength
+        FREEZE_INERTIA          =    0.2  # stabilization inertia [0..1]
+        GRAVITY                 =   50    # force of attraction to graph centre, smaller values push less connected nodes more outwards
+        SPEED                   =    1    # convergence speed (>0)
+        COOLING                 =    1.0  # dampens force if >0
+        DO_OUTBOUND_ATTRACTION  = True    # whether attraction is distributed along outbound links (pushes hubs to center)
+
+
+        def layout(self, items, links, bounds, viewport, progress=None):
+            """
+            Calculates item positions using a force-directed graph.
+
+            @param   items     items to position as {name: (width, height)}
+            @param   links     sequence of links between items as [(name1, name2)]
+            @param   bounds    graph bounds as (x, y, width, height)
+            @param   viewport  preferred viewport within bounds, as (x, y, width, height)
+            @param   progress  callback function(step), returning false to stop calculations
+            @return            item coordinates as {name: (x, y)}
+            """
+
+            def intersects(n1, n2):
+                (w1, h1), (w2, h2) = n1["size"], n2["size"]
+                x1, y1 = max(n1["x"], n2["x"]), max(n1["y"], n2["y"])
+                x2, y2 = min(n1["x"] + w1, n2["x"] + w2), min(n1["y"] + h1, n2["y"] + h2)
+                return x1 < x2 and y1 < y2
+
+
+            def repulsor(n1, n2, c):
+                xdist, ydist = n1["x"] - n2["x"], n1["y"] - n2["y"]
+                dist = math.sqrt(xdist ** 2 + ydist ** 2) - n1["span"] - n2["span"]
+
+                if not xdist and not ydist:
+                    if not n1["fixed"]:
+                        n1["dx"] += 0.01 * c
+                        n1["dy"] += 0.01 * c
+                    if not n2["fixed"]:
+                        n2["dx"] -= 0.01 * c
+                        n2["dy"] -= 0.01 * c
+                    return
+
+                f = 0.001 * c / dist if dist > 0 else -c
+                if intersects(n1, n2): f *= 100
+                if not n1["fixed"]:
+                    n1["dx"] += xdist / dist * f
+                    n1["dy"] += ydist / dist * f
+                if not n2["fixed"]:
+                    n2["dx"] -= xdist / dist * f
+                    n2["dy"] -= ydist / dist * f
+
+
+            def attractor(n1, n2, c):
+                xdist, ydist = n1["x"] - n2["x"], n1["y"] - n2["y"]
+                dist = math.sqrt(xdist ** 2 + ydist ** 2) - n1["span"] - n2["span"]
+                if not dist: return
+
+                f = 0.01 * -c * dist
+                if not n1["fixed"]:
+                    n1["dx"] += xdist / dist * f
+                    n1["dy"] += ydist / dist * f
+                if not n2["fixed"]:
+                    n2["dx"] -= xdist / dist * f
+                    n2["dy"] -= ydist / dist * f
+
+
+            def iteration(nodes, links):
+                """Performs one iteration, returns maximum distance shifted."""
+                result = 0
+
+                for n, o in nodes.items():
+                    o.update(dx0=o["dx"], dx=o["dx"] * self.INERTIA,
+                             dy0=o["dy"], dy=o["dy"] * self.INERTIA)
+                nodelist = list(nodes.values())
+
+                # repulsion
+                for i, n1 in enumerate(nodelist):
+                    for n2 in nodelist[i+1:]:
+                        c = self.REPULSION * (1 + n1["cardinality"]) * (1 + n2["cardinality"])
+                        repulsor(n1, n2, c)
+
+                # attraction
+                for name1, name2 in links:
+                    n1, n2 = nodes[name1], nodes[name2]
+                    bonus = 100 if n1["fixed"] or n2["fixed"] else 1
+                    bonus *= self.DEFAULT_EDGE_WEIGHT
+                    c = bonus * self.ATTRACTION / (1. + n1["cardinality"] * self.DO_OUTBOUND_ATTRACTION)
+                    attractor(n1, n2, c)
+
+                # gravity
+                for n in nodelist:
+                    if n["fixed"]: continue # for n
+                    d = 0.0001 + math.sqrt(node["x"] ** 2 + node["y"] ** 2)
+                    gf = 0.0001 * self.GRAVITY * d
+                    n["dx"] -= gf * n["x"] / d
+                    n["dy"] -= gf * n["y"] / d
+
+                # speed
+                for n in nodelist:
+                    if n["fixed"]: continue # for n
+                    n["dx"] *= self.SPEED * (10 if self.DO_FREEZE_BALANCE else 1)
+                    n["dy"] *= self.SPEED * (10 if self.DO_FREEZE_BALANCE else 1)
+
+                # apply forces
+                for n in nodelist:
+                    if node["fixed"]: continue # for n
+
+                    d = 0.0001 + math.sqrt(n["dx"] ** 2 + n["dy"] ** 2)
+                    if self.DO_FREEZE_BALANCE:
+                        ddist = math.sqrt((n["dx0"] - n["dx"]) ** 2 + (n["dy0"] - n["dy"]) ** 2)
+                        factor = (1 - self.FREEZE_INERTIA) * 0.1 * self.FREEZE_STRENGTH
+                        n["freeze"] = self.FREEZE_INERTIA * n["freeze"] + factor * math.sqrt(ddist)
+                        ratio = min(d / (d * (1 + n["freeze"])), self.MAX_DISPLACE / d)
+                    else:
+                        ratio = min(1, self.MAX_DISPLACE / d)
+
+                    n["dx"], n["dy"] = n["dx"] * ratio / self.COOLING, n["dy"] * ratio / self.COOLING
+                    x, y = n["x"] + n["dx"], n["y"] + n["dy"]
+
+                    # Bounce back from edges
+                    if x < bounds[0]: n["dx"] = bounds[0] - n["x"]
+                    elif x + n["size"][0] > bounds[0] + bounds[2]:
+                        n["dx"] = bounds[2] - n["size"][0] - n["x"]
+                    if y < bounds[1]: n["dy"] = bounds[1] - n["y"]
+                    elif y + n["size"][1] > bounds[1] + bounds[3]:
+                        n["dy"] = bounds[3] - n["size"][1] - n["y"]
+
+                    n["x"], n["y"] = n["x"] + n["dx"], n["y"] + n["dy"]
+                    result = max(result, abs(n["dx"]), abs(n["dy"]))
+
+                return result
+
+
+            nodes = util.CaselessDict() # {name: {id, size, dx, dy, freeze, fixed, cardinality}, }
+
+            for name, (width, height) in items.items():
+                node = {"x": 0, "y": 0, "size": (width, height), "name": name,
+                        "dx": 0, "dy": 0, "freeze": 0, "cardinality": 0, "fixed": False}
+                node["span"] = math.sqrt(width ** 2 + height ** 2) / 2.5
+                nodes[name] = node
+
+            for name1, name2 in links:
+                if name1 != name2:
+                    for n in name1, name2: nodes[n]["cardinality"] += 1
+
+            # Start with all items in center
+            center = viewport[0] + viewport[2] / 2, viewport[1] + viewport[3] / 2
+            for n in nodes.values():
+                x, y = (c - s/2 for c, s in zip(center, n["size"]))
+                if not n["cardinality"]: x += 200 # Push solitary nodes out
+                n["x"], n["y"] = x, y
+
+
+            steps = 0
+            while not callable(progress) or progress(step=steps):
+                dist, steps = iteration(nodes, links), steps + 1
+                if dist < self.MIN_COMPLETION_DISTANCE or steps >= self.MAX_ITERATIONS:
+                    break # while
+            return {n: (o["x"], o["y"]) for n, o in nodes.items()}
+
 
 
 class MyPoint(object):

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.09.2024
+@modified    18.09.2024
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -3255,7 +3255,7 @@ import math
 try: import wx
 except ImportError: wx = None
 from sqlitely.lib import util
-from sqlitely.scheme import SchemaPlacement, Colour, Point, Rect, Size
+from sqlitely.scheme import SchemaDiagram, Colour, Point, Rect, Size
 from sqlitely import grammar, images, templates
 from sqlitely.templates import urlquote
 
@@ -3263,23 +3263,23 @@ C2S_HTML    = wx.C2S_HTML_SYNTAX if wx else Colour.C2S_HTML_SYNTAX
 CRADIUS     = 1
 MARGIN      = 10
 FKWIDTH     = images.DiagramFK.Bitmap.Width if hasattr(images.DiagramFK, "Bitmap") else 9
-wincolour   = SchemaPlacement.DEFAULT_COLOURS["Background"]
-wtextcolour = SchemaPlacement.DEFAULT_COLOURS["Foreground"]
-gtextcolour = SchemaPlacement.DEFAULT_COLOURS["Border"]
-btextcolour = SchemaPlacement.DEFAULT_COLOURS["Line"]
-gradcolour  = SchemaPlacement.DEFAULT_COLOURS["GradientEnd"]
-fontsize    = SchemaPlacement.FONT_SIZE + 3
-texth       = SchemaPlacement.FONT_SIZE + 2
+wincolour   = SchemaDiagram.DEFAULT_COLOURS["Background"]
+wtextcolour = SchemaDiagram.DEFAULT_COLOURS["Foreground"]
+gtextcolour = SchemaDiagram.DEFAULT_COLOURS["Border"]
+btextcolour = SchemaDiagram.DEFAULT_COLOURS["Line"]
+gradcolour  = SchemaDiagram.DEFAULT_COLOURS["GradientEnd"]
+fontsize    = SchemaDiagram.FONT_SIZE + 3
+texth       = SchemaDiagram.FONT_SIZE + 2
 
 bounds = None
 # Calculate item widths and heights
-MINW, MINH = SchemaPlacement.MINW, SchemaPlacement.HEADERH
+MINW, MINH = SchemaDiagram.MINW, SchemaDiagram.HEADERH
 itemcoltexts, itemcolmax = {}, {} # {item name: [[name, type], ]}, {item name: {"name", "type"}}
 for item in items:
     # Measure title width
-    ititle = util.ellipsize(util.unprint(item["name"]), SchemaPlacement.MAX_TITLE)
+    ititle = util.ellipsize(util.unprint(item["name"]), SchemaDiagram.MAX_TITLE)
     extent = get_extent(ititle, fonts["bold"])
-    w, h = max(MINW, extent[0] + 2 * SchemaPlacement.HPAD), MINH
+    w, h = max(MINW, extent[0] + 2 * SchemaDiagram.HPAD), MINH
 
     cols = item.get("columns") or []
     colmax = itemcolmax[item["name"]] = {"name": 0, "type": 0}
@@ -3288,26 +3288,26 @@ for item in items:
         coltexts.append([])
         for i, k in enumerate(["name", "type"]):
             t = c.get(k, "") if i or c.get(k) is None else util.unprint(grammar.quote(c[k], embed=True))
-            t = util.ellipsize(t, SchemaPlacement.MAX_TEXT)
+            t = util.ellipsize(t, SchemaDiagram.MAX_TEXT)
             coltexts[-1].append(t)
             if t: extent = get_extent(t)
             if t: colmax[k] = max(colmax[k], extent[0])
-    w = max(w, SchemaPlacement.LPAD + 2 * SchemaPlacement.HPAD + sum(colmax.values()))
+    w = max(w, SchemaDiagram.LPAD + 2 * SchemaDiagram.HPAD + sum(colmax.values()))
 
     statswidth = sum(get_extent(t or "")[0] for t in get_stats_texts(item.get("stats", {}), w))
-    if w - 2 * SchemaPlacement.BRADIUS < statswidth:
-        w += int(math.ceil((statswidth - (w - 2 * SchemaPlacement.BRADIUS)) / 10.) * 10)
+    if w - 2 * SchemaDiagram.BRADIUS < statswidth:
+        w += int(math.ceil((statswidth - (w - 2 * SchemaDiagram.BRADIUS)) / 10.) * 10)
     if not cols: h += 3
-    else: h += SchemaPlacement.LINEH * len(cols) + (SchemaPlacement.HEADERP + SchemaPlacement.FOOTERH)
+    else: h += SchemaDiagram.LINEH * len(cols) + (SchemaDiagram.HEADERP + SchemaDiagram.FOOTERH)
 
-    if item.get("stats"): h += SchemaPlacement.STATSH - SchemaPlacement.FOOTERH
+    if item.get("stats"): h += SchemaDiagram.STATSH - SchemaDiagram.FOOTERH
 
     item["bounds"] = Rect(item["bounds"].TopLeft, Size(w, h))
     bounds = bounds.Union(item["bounds"]) if bounds else Rect(item["bounds"])
     if item["bounds"].Right > bounds.Right:
-        bounds.Right = item["bounds"].Right + SchemaPlacement.HPAD
+        bounds.Right = item["bounds"].Right + SchemaDiagram.HPAD
     if item["bounds"].Bottom > bounds.Bottom:
-        bounds.Bottom = item["bounds"].Bottom + SchemaPlacement.HPAD
+        bounds.Bottom = item["bounds"].Bottom + SchemaDiagram.HPAD
 
 
 # Enlarge bounds by foreign lines/labels
@@ -3319,7 +3319,7 @@ for line in lines.values():
     bounds.Union(lbounds)
     if not show_labels: continue # for line
 
-    tw, th = get_extent(util.ellipsize(util.unprint(line["name"]), SchemaPlacement.MAX_TEXT))
+    tw, th = get_extent(util.ellipsize(util.unprint(line["name"]), SchemaDiagram.MAX_TEXT))
     tpt1, tpt2 = next(pts[i:i+2] for i in range(len(pts) - 1)
                       if pts[i][0] == pts[i+1][0])
     tx = tpt1[0]
@@ -3411,7 +3411,7 @@ DIAGRAM_WIDTH = (800 - 2*30 - 2*10 - 2*1)
       }
 
       .item .stats text {
-        font-size:       {{ fontsize + SchemaPlacement.FONT_STEP_STATS }}px;
+        font-size:       {{ fontsize + SchemaDiagram.FONT_STEP_STATS }}px;
       }
 
       .item .stats .size {
@@ -3483,18 +3483,18 @@ for i, pt in enumerate(pts):
 # Assemble crowfoot path in segments for consistent rendering
 to_right = pts[0][0] < pts[1][0]
 ptc1 = [pts[0][0] + 0.5, pts[0][1]]
-ptc2 = [ptc1[0] + 0.5 + SchemaPlacement.CARDINALW * (1 if to_right else -1), ptc1[1]]
+ptc2 = [ptc1[0] + 0.5 + SchemaDiagram.CARDINALW * (1 if to_right else -1), ptc1[1]]
 ptc1, ptc2 = [ptc1, ptc2][::1 if to_right else -1]
 crow1, crow2 = "", ""
-for i in range(SchemaPlacement.CARDINALW // 2):
-    pt1 = [ptc1[0] + i * 2 + (not to_right), ptc1[1] - (SchemaPlacement.CARDINALW // 2 - i if to_right else i + 1)]
+for i in range(SchemaDiagram.CARDINALW // 2):
+    pt1 = [ptc1[0] + i * 2 + (not to_right), ptc1[1] - (SchemaDiagram.CARDINALW // 2 - i if to_right else i + 1)]
     crow1 += "%sM %s,%s h2" % (("  " if i else "", ) + adjust(pt1[0], pt1[1]))
-    pt2 = [ptc1[0] + i * 2 + (not to_right), ptc1[1] + (SchemaPlacement.CARDINALW // 2 - i if to_right else i + 1)]
+    pt2 = [ptc1[0] + i * 2 + (not to_right), ptc1[1] + (SchemaDiagram.CARDINALW // 2 - i if to_right else i + 1)]
     crow2 += "%sM %s,%s h2" % (("  " if i else "", ) + adjust(pt2[0], pt2[1]))
 
 # Assemble parent-item dash
-ptd1 = [mypts[-1][0] - SchemaPlacement.DASHSIDEW - 0.5, mypts[-1][1]]
-ptd2 = [mypts[-1][0] + SchemaPlacement.DASHSIDEW + 0.5, ptd1[1]]
+ptd1 = [mypts[-1][0] - SchemaDiagram.DASHSIDEW - 0.5, mypts[-1][1]]
+ptd2 = [mypts[-1][0] + SchemaDiagram.DASHSIDEW + 0.5, ptd1[1]]
 dash = "M %s,%s L %s,%s" % (adjust(*ptd1) + adjust(*ptd2))
 
 %>
@@ -3504,7 +3504,7 @@ dash = "M %s,%s L %s,%s" % (adjust(*ptd1) + adjust(*ptd2))
       <path d="{{ crow2 }}" />
       <path d="{{ dash }}" />
     %if show_labels:
-      <text x="{{ tx }}" y="{{ ty }}" class="label">{{ util.ellipsize(util.unprint(grammar.quote(line["name"], embed=True)), SchemaPlacement.MAX_TEXT) }}</text>
+      <text x="{{ tx }}" y="{{ ty }}" class="label">{{ util.ellipsize(util.unprint(grammar.quote(line["name"], embed=True)), SchemaDiagram.MAX_TEXT) }}</text>
     %endif
     </g>
 
@@ -3521,37 +3521,37 @@ cols = item.get("columns") or []
 itemx, itemy = adjust(*item["bounds"].TopLeft)
 
 istats = item.get("stats")
-cheight = (SchemaPlacement.HEADERP + len(cols) * SchemaPlacement.LINEH) if cols else 0
-height = SchemaPlacement.HEADERH + cheight + SchemaPlacement.FOOTERH
-if istats: height += SchemaPlacement.STATSH - SchemaPlacement.FOOTERH
-if not cols and not istats: height = SchemaPlacement.HEADERH + 3
+cheight = (SchemaDiagram.HEADERP + len(cols) * SchemaDiagram.LINEH) if cols else 0
+height = SchemaDiagram.HEADERH + cheight + SchemaDiagram.FOOTERH
+if istats: height += SchemaDiagram.STATSH - SchemaDiagram.FOOTERH
+if not cols and not istats: height = SchemaDiagram.HEADERH + 3
 %>
 
     <g id="{{ util.unprint(item["name"]) }}" class="item {{ item["type"] }}">
-      <rect x="{{ itemx }}" y="{{ itemy }}" width="{{ item["bounds"].Width }}" height="{{ height }}" {{ 'rx="%s" ry="%s" ' % ((SchemaPlacement.BRADIUS, ) * 2) if "table" == item["type"] else "" }}class="box" />
+      <rect x="{{ itemx }}" y="{{ itemy }}" width="{{ item["bounds"].Width }}" height="{{ height }}" {{ 'rx="%s" ry="%s" ' % ((SchemaDiagram.BRADIUS, ) * 2) if "table" == item["type"] else "" }}class="box" />
     %if cols:
-      <rect x="{{ itemx + 1 }}" y="{{ itemy + SchemaPlacement.HEADERH }}" width="{{ item["bounds"].Width - 1.5 }}" height="{{ cheight }}" class="content" />
-      <path d="M {{ itemx }},{{ itemy + SchemaPlacement.HEADERH }} h{{ item["bounds"].Width }}" class="separator" />
+      <rect x="{{ itemx + 1 }}" y="{{ itemy + SchemaDiagram.HEADERH }}" width="{{ item["bounds"].Width - 1.5 }}" height="{{ cheight }}" class="content" />
+      <path d="M {{ itemx }},{{ itemy + SchemaDiagram.HEADERH }} h{{ item["bounds"].Width }}" class="separator" />
     %endif
 
     %if get("embed"):
       <a xlink:title="Go to {{ item["type"] }} {{ escape(grammar.quote(item["name"], force=True)) }}" xlink:href="#{{ item["type"] }}/{{! urlquote(item["name"]) }}">
     %endif
-      <text x="{{ itemx + item["bounds"].Width // 2 }}" y="{{ itemy + SchemaPlacement.HEADERH - SchemaPlacement.HEADERP }}" class="title">{{ util.ellipsize(util.unprint(item["name"]), SchemaPlacement.MAX_TEXT) }}</text>
+      <text x="{{ itemx + item["bounds"].Width // 2 }}" y="{{ itemy + SchemaDiagram.HEADERH - SchemaDiagram.HEADERP }}" class="title">{{ util.ellipsize(util.unprint(item["name"]), SchemaDiagram.MAX_TEXT) }}</text>
     %if get("embed"):
       </a>
     %endif
     %if cols:
 
-      <text x="{{ itemx }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + texth }}" class="columns">
+      <text x="{{ itemx }}" y="{{ itemy + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + texth }}" class="columns">
       %for i, col in enumerate(cols):
-        <tspan x="{{ itemx + SchemaPlacement.LPAD }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + texth + i * SchemaPlacement.LINEH }}px">{{ itemcoltexts[item["name"]][i][0] }}</tspan>
+        <tspan x="{{ itemx + SchemaDiagram.LPAD }}" y="{{ itemy + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + texth + i * SchemaDiagram.LINEH }}px">{{ itemcoltexts[item["name"]][i][0] }}</tspan>
       %endfor
       </text>
 
-      <text x="{{ itemx }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + texth }}" class="types">
+      <text x="{{ itemx }}" y="{{ itemy + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + texth }}" class="types">
       %for i, col in enumerate(cols):
-        <tspan x="{{ itemx + SchemaPlacement.LPAD + itemcolmax[item["name"]]["name"] + SchemaPlacement.HPAD }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + texth + i * SchemaPlacement.LINEH }}px">{{ itemcoltexts[item["name"]][i][1] }}</tspan>
+        <tspan x="{{ itemx + SchemaDiagram.LPAD + itemcolmax[item["name"]]["name"] + SchemaDiagram.HPAD }}" y="{{ itemy + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + texth + i * SchemaDiagram.LINEH }}px">{{ itemcoltexts[item["name"]][i][1] }}</tspan>
       %endfor
       </text>
     %endif
@@ -3560,23 +3560,23 @@ if not cols and not istats: height = SchemaPlacement.HEADERH + 3
 
 text1, text2 = get_stats_texts(istats, item["bounds"].Width)
 
-ty = itemy + height - SchemaPlacement.STATSH + texth - SchemaPlacement.FONT_STEP_STATS
+ty = itemy + height - SchemaDiagram.STATSH + texth - SchemaDiagram.FONT_STEP_STATS
 w1 = next(w for w, _ in [get_extent(text1)]) if text1 else 0
 w2 = next(w for w, _ in [get_extent(text2)]) if text2 else 0
-if w1 + w2 + 2 * SchemaPlacement.BRADIUS > item["bounds"].Width and item.get("count"):
+if w1 + w2 + 2 * SchemaDiagram.BRADIUS > item["bounds"].Width and item.get("count"):
     text1 = istats["size_maxunits"]
 
 %>
 
       <g class="stats">
         %if cols:
-        <path d="M {{ itemx }},{{ itemy + height - SchemaPlacement.STATSH }} h{{ item["bounds"].Width }}" class="separator" />
+        <path d="M {{ itemx }},{{ itemy + height - SchemaDiagram.STATSH }} h{{ item["bounds"].Width }}" class="separator" />
         %endif
         %if istats.get("rows"):
-          <text x="{{ itemx + SchemaPlacement.BRADIUS }}" y="{{ ty }}" class="rows">{{ text1 }}</text>
+          <text x="{{ itemx + SchemaDiagram.BRADIUS }}" y="{{ ty }}" class="rows">{{ text1 }}</text>
         %endif
         %if istats.get("size"):
-          <text x="{{ itemx + item["bounds"].Width - SchemaPlacement.BRADIUS }}" y="{{ ty }}" class="size">{{ text2 }}</text>
+          <text x="{{ itemx + item["bounds"].Width - SchemaDiagram.BRADIUS }}" y="{{ ty }}" class="size">{{ text2 }}</text>
         %endif
       </g>
     %endif
@@ -3585,13 +3585,13 @@ if w1 + w2 + 2 * SchemaPlacement.BRADIUS > item["bounds"].Width and item.get("co
 
         %endif
         %if any(col["name"] in x.get("name", ()) for x in pks):
-      <use xlink:href="#pk" x="{{ itemx + 3 }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + i * SchemaPlacement.LINEH }}" />
+      <use xlink:href="#pk" x="{{ itemx + 3 }}" y="{{ itemy + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + i * SchemaDiagram.LINEH }}" />
         %endif
         %if any(col["name"] in x.get("name", ()) for x in fks):
-      <use xlink:href="#fk" x="{{ itemx + item["bounds"].Width - 5 - FKWIDTH }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + i * SchemaPlacement.LINEH }}" />
+      <use xlink:href="#fk" x="{{ itemx + item["bounds"].Width - 5 - FKWIDTH }}" y="{{ itemy + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + i * SchemaDiagram.LINEH }}" />
         %endif
         %if "notnull" not in col and show_nulls:
-      <use xlink:href="#null" x="{{ itemx + 3 }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + i * SchemaPlacement.LINEH }}" />
+      <use xlink:href="#null" x="{{ itemx + 3 }}" y="{{ itemy + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + i * SchemaDiagram.LINEH }}" />
         %endif
     %endfor
     </g>
