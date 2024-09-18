@@ -7333,9 +7333,9 @@ class DatabasePage(wx.Panel):
             item_copy          = wx.MenuItem(menu, -1, "&Copy schema SQL")
             item_schema        = wx.MenuItem(exportmenu, -1, "Export &schema as SQL")
             item_dump          = wx.MenuItem(exportmenu, -1, "Export full d&ump as SQL")
-            item_database      = wx.MenuItem(exportmenu, -1, "Export all to another &database")
             item_file          = wx.MenuItem(exportmenu, -1, "Export all to &individual files")
             item_file_combined = wx.MenuItem(exportmenu, -1, "Export all to a single &file")
+            item_database      = wx.MenuItem(exportmenu, -1, "Export all to another &database")
             item_database_sql  = wx.MenuItem(exportmenu, -1, "Export all structures to another data&base")
             item_drop_schema   = wx.MenuItem(menu, -1, "Drop everything")
             for category in self.db.CATEGORIES:
@@ -7345,9 +7345,9 @@ class DatabasePage(wx.Panel):
 
             exportmenu.Append(item_schema)
             exportmenu.Append(item_dump)
-            exportmenu.Append(item_database)
             exportmenu.Append(item_file)
             exportmenu.Append(item_file_combined)
+            exportmenu.Append(item_database)
             exportmenu.Append(item_database_sql)
             menu.Append(item_copy)
             menu.AppendSubMenu(exportmenu, text="&Export ..")
@@ -7359,9 +7359,9 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, cmd("copy", "sql"), item_copy)
             menu.Bind(wx.EVT_MENU, cmd("export", "schema"), item_schema)
             menu.Bind(wx.EVT_MENU, cmd("export", "dump"), item_dump)
-            menu.Bind(wx.EVT_MENU, cmd("export", "data"), item_database)
             menu.Bind(wx.EVT_MENU, cmd("export", "tables", *names), item_file)
             menu.Bind(wx.EVT_MENU, cmd("export", "combined", None, *names), item_file_combined)
+            menu.Bind(wx.EVT_MENU, cmd("export", "data"), item_database)
             menu.Bind(wx.EVT_MENU, cmd("export", "structure"), item_database_sql)
             menu.Bind(wx.EVT_MENU, cmd("drop schema"), item_drop_schema)
             for c, it in zip(self.db.CATEGORIES, newmenu.MenuItems):
