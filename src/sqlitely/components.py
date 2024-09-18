@@ -7304,8 +7304,8 @@ class ImportDialog(wx.Dialog):
         self._gauge.Pulse()
 
         progress = lambda *_, **__: bool(self) and self._worker_read.is_working()
-        callable = importexport.FileDataSource(filename, progress=progress).get_file_info
-        self._worker_read.work(callable, filename=filename)
+        source = importexport.FileDataSource(filename, progress=progress)
+        self._worker_read.work(source.get_file_info, filename=filename)
 
 
     def SetFile(self, data):
@@ -7701,7 +7701,6 @@ class ImportDialog(wx.Dialog):
                               for a, b in zip(self._cols1, self._cols2))
         tables = [{"name": self._table["name"], "section": self._sheet.get("name"),
                    "columns": columns, "pk": self._table.get("pk")}]
-
 
         source = importexport.FileDataSource(self._data["name"], self._db, self._OnProgressCallback)
         source.configure(has_header=self._has_header)
@@ -11983,17 +11982,17 @@ class ImportWizard(wx.adv.Wizard):
                 modified = datetime.datetime.fromtimestamp(os.path.getmtime(filename))
                 if size == self.filedata["size"] and modified == self.filedata["modified"]:
                     return
+
             self.filename = ""
             self.filedata.clear()
             self.Reset(keepfile=True)
-
             for c in self.gauge, self.label_gauge: c.Show()
             self.gauge.Pulse()
             self.Layout()
 
             progress = lambda *_, **__: bool(self) and self.worker.is_working()
-            callable = importexport.FileDataSource(filename, progress=progress).get_file_info
-            self.worker.work(callable, filename=filename)
+            source = importexport.FileDataSource(filename, progress=progress)
+            self.worker.work(source.get_file_info, filename=filename)
 
 
         def OnWorkerRead(self, result, filename, **kwargs):
@@ -12443,7 +12442,6 @@ class ImportWizard(wx.adv.Wizard):
 
     def StartImport(self):
         """Starts import."""
-
         itemnames = sum((list(x) for x in self.db.schema.values()), [])
         has_names = self.page1.filedata["format"] in ("json", "yaml")
         for i, sheet in enumerate(self.page1.filedata["sections"]):

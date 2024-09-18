@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.09.2024
+@modified    18.09.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -228,9 +228,10 @@ class ConsoleSink(Sink):
         @param   progress  callback(?name, ?count, ?done) to report progress,
                            returning false if export should cancel
         """
-        super(ConsoleSink, self).__init__(progress=progress)
         if format not in PRINTABLE_EXTS:
             raise ValueError("Unknown format %r" % (format, ))
+
+        super(ConsoleSink, self).__init__(progress=progress)
         self._format = format
         self._output = output or print
         self._flags = {
@@ -968,6 +969,7 @@ class InfoSink(Sink):
         """
         if format not in self.STATS_TEMPLATES:
             raise ValueError("Unknown format %r" % (format, ))
+
         template = step.Template(self.STATS_TEMPLATES[format], postprocess=convert_lf,
                                  strip=False, escape="html" == format)
         ns = {
@@ -1018,9 +1020,10 @@ class FileDataSink(Sink):
         @param   progress  callback(name, count) to report progress,
                            returning false if export should cancel
         """
-        super(FileDataSink, self).__init__(progress=progress)
-        if format not in ["csv", "xlsx"] + list(self.SINGLE_TEMPLATES):
+        if format not in EXPORT_EXTS:
             raise ValueError("Unknown format %r" % (format, ))
+
+        super(FileDataSink, self).__init__(progress=progress)
         self._db       = db
         self._filename = filename
         self._format   = format
@@ -1434,11 +1437,15 @@ class FileDataSource(Base):
                            and None if import should rollback.
                            Returning True on error will ignore further errors.
         """
+        format = self.get_format(filename)
+        if not format:
+            raise ValueError("File format not recognized")
+
         super(FileDataSource, self).__init__(progress)
         self._filename = filename
         self._db       = db
         self._file     = None  # Opened file handle or openpyxl/xlrd workbook
-        self._format   = None
+        self._format   = format
         self._flags = {
             "seek":        True,  # skip initial empty spreadsheet rows
             "has_header":  True,  # whether spreadsheet file being imported has header rows
@@ -1461,14 +1468,6 @@ class FileDataSource(Base):
             "table":             None,   # current table being imported to
             "was_open":          False,  # whether database was open before
         }
-
-        self._format = self.get_format(filename)
-        if not os.path.isfile(filename):
-            raise ValueError("No such file.")
-        if not os.path.getsize(filename):
-            raise ValueError("File is empty.")
-        if not self._format:
-            raise ValueError("File format not recognized")
 
 
     def configure(self, has_header=True, limit=None, maxcount=None, seek=True):
@@ -1500,6 +1499,9 @@ class FileDataSource(Base):
                            OrderedDict(first row column name: value) for JSON/YAML
         ]}, or None if cancelled.
         """
+        if not os.path.isfile(self._filename) or not os.path.getsize(self._filename):
+            raise ValueError("File is empty." if os.path.isfile(self._filename) else "No such file.")
+
         logger.info("Getting import data from %s.", self._filename)
         filesize = os.path.getsize(self._filename)
         result = {"name": self._filename, "size": filesize, "format": self._format, "sections": [],
@@ -1548,6 +1550,9 @@ class FileDataSource(Base):
                          file column key is column index if spreadsheet else column name
         @return          True on success, False on failure, None on cancel
         """
+        if not os.path.isfile(self._filename) or not os.path.getsize(self._filename):
+            raise ValueError("File is empty." if os.path.isfile(self._filename) else "No such file.")
+
         result = True
         try:
             total_insert_count = 0
@@ -1579,6 +1584,9 @@ class FileDataSource(Base):
                              where key is column index if spreadsheet else column name
         @param   section     sheet name to read from, if multiple sheet format
         """
+        if not os.path.isfile(self._filename) or not os.path.getsize(self._filename):
+            raise ValueError("File is empty." if os.path.isfile(self._filename) else "No such file.")
+
         try:
             for row_index, row in self._produce_rows(columns, section):
                 yield row
