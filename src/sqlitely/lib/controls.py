@@ -5402,6 +5402,39 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         cmd.Store()
 
 
+    def Replace(self, from_, to_, value):
+        """
+        Replaces the bytes starting at the first position up to (but not including)
+        the byte at the last position with the given value.
+        """
+        if self._fixed and not self._bytes: return # NULL number
+        if from_ >= len(self._bytes): return # Out of bounds
+
+
+        self._QueueEvents()
+
+        cmd = HexByteCommand(self)
+        v = bytearray(self._AdaptValue(value))
+        to_ = min(to_, len(self._bytes))
+        overflow = len(v) - (to_ - from_)
+
+        if self._fixed:
+            if overflow > 0: # Erase overflow
+                v = v[:len(self._bytes) - from_]
+            elif overflow < 0: # Pad underflow with 0-bytes
+                v += bytearray([0] * min(len(self._bytes) - from_, abs(overflow)))
+        elif overflow > 0:
+            self._bytes0[to_:to_] = [None] * overflow
+        elif overflow < 0:
+            del self._bytes0[to_ + overflow:to_]
+        self._bytes[from_:to_] = v
+
+        self._Populate()
+        self.SetSelection(to_, to_)
+        self.EnsureCaretVisible()
+        cmd.Store()
+
+
     def EmptyUndoBuffer(self, mirror=False):
         """Deletes undo history."""
         super(HexTextCtrl, self).EmptyUndoBuffer()
