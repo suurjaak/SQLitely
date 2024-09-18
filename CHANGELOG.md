@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.4, 2024-09-17
+2.4, 2024-09-18
 ---------------
 - add support for generated columns
 - add find/replace dialog to data grids and column editors and database schema text
@@ -19,6 +19,7 @@ CHANGELOG
 - fix compatibility issues with Python 3.6
 - fix compatibility issues with Python 3.10+
 - fix opening third-party license link in snaps
+- fix accounting for relation lines in schema diagram zoom to fit 
 - refactor import-export functionality to classes
 
 

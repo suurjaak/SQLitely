@@ -1149,6 +1149,7 @@ class SchemaDiagram(object):
                       for o in map(self._objs.get, (name1, name2)))
 
             if isinstance(dc, wx.adv.PseudoDC):
+                bounds = dc.GetIdBounds(opts["id"])
                 dc.RemoveId(opts["id"])
                 dc.SetId(opts["id"])
 
@@ -1181,7 +1182,9 @@ class SchemaDiagram(object):
             dc.SetPen(cornerfadedpen if lpen == linefadedpen else cornerpen)
             for cpt in opts["cornerpts"]: dc.DrawPoint(adjust(*cpt))
 
-            if isinstance(dc, wx.adv.PseudoDC): dc.SetId(-1)
+            if isinstance(dc, wx.adv.PseudoDC):
+                dc.SetId(-1)
+                dc.SetIdBounds(opts["id"], bounds)
 
 
     def GetImageSize(self, obj):
