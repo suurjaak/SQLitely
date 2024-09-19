@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.09.2024
+@modified    19.09.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -180,10 +180,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.load_fs_images()
         self.adapt_colours()
 
-        self.worker_detection = \
-            workers.DetectDatabaseThread(self.on_detect_databases_callback)
-        self.worker_folder = \
-            workers.ImportFolderThread(self.on_add_from_folder_callback)
+        self.worker_detection = workers.DetectDatabaseThread(self.on_detect_databases_callback)
+        self.worker_folder    = workers.ImportFolderThread  (self.on_add_from_folder_callback)
         self.Bind(EVT_DETECTION, self.on_detect_databases_result)
         self.Bind(EVT_ADD_FOLDER, self.on_add_from_folder_result)
         self.Bind(EVT_OPEN_DATABASE, self.on_open_database_event)
@@ -204,8 +202,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         def on_close_hotkey(event):
             notebook and notebook.DeletePage(notebook.GetSelection())
         def on_tab_hotkey(number, event):
-            if notebook and notebook.GetSelection() != number \
-            and number < notebook.GetPageCount():
+            if notebook and notebook.GetSelection() != number and number < notebook.GetPageCount():
                 notebook.SetSelection(number)
                 self.on_change_page(None)
 
@@ -472,8 +469,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if self.trayicon.IsAvailable():
             menu_to_tray = self.menu_to_tray = menu_file.Append(wx.ID_ANY,
                 "Minimize to &tray", "Minimize %s window to notification area" % conf.Title)
-        menu_exit = self.menu_exit = \
-            menu_file.Append(wx.ID_ANY, "E&xit\tAlt-X", "Exit")
+        menu_exit = self.menu_exit = menu_file.Append(wx.ID_ANY, "E&xit\tAlt-X", "Exit")
 
         menu_view = self.menu_view = wx.Menu()
         menu.Append(menu_view, "&View")
@@ -487,7 +483,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_view_folder = self.menu_view_folder = menu_view.Append(wx.ID_ANY,
             "Show in &folder", "Open database file directory")
         menu_view_locks = self.menu_view_locks = menu_view.Append(
-            wx.ID_ANY, "Current &locks", "Show all current database locks (for pending changes, ongoing exports, statistics etc)")
+            wx.ID_ANY, "Current &locks", "Show all current database locks "
+                                         "(for pending changes, ongoing exports, statistics etc)")
         menu_view_changes = self.menu_view_changes = menu_view.Append(
             wx.ID_ANY, "&Unsaved changes", "Show unsaved changes")
         menu_view_history = self.menu_view_history = menu_view.Append(
@@ -521,8 +518,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_edit_drop_view     = wx.Menu()
         menu_edit_drop_index    = wx.Menu()
         menu_edit_drop_trigger  = wx.Menu()
-        self.menu_edit_clone_table  = menu_edit_clone.AppendSubMenu(menu_edit_clone_table, "&Table")
-        self.menu_edit_clone_view   = menu_edit_clone.AppendSubMenu(menu_edit_clone_view,  "&View")
+        self.menu_edit_clone_table  = menu_edit_clone.AppendSubMenu(menu_edit_clone_table,  "&Table")
+        self.menu_edit_clone_view   = menu_edit_clone.AppendSubMenu(menu_edit_clone_view,   "&View")
         self.menu_edit_drop_table   = menu_edit_drop .AppendSubMenu(menu_edit_drop_table,   "&Table")
         self.menu_edit_drop_view    = menu_edit_drop .AppendSubMenu(menu_edit_drop_view,    "&View")
         self.menu_edit_drop_index   = menu_edit_drop .AppendSubMenu(menu_edit_drop_index,   "&Index")
@@ -793,25 +790,29 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def update_check(self):
         """
-        Checks for an updated program version if sufficient time
-        from last check has passed, and opens a dialog for upgrading
-        if new version available. Schedules a new check on due date.
+        Checks for an updated program version if sufficient time from last check has passed,
+        and opens dialog for upgrading if new version available. Schedules a new check on due date.
         """
         if not self or not conf.UpdateCheckAutomatic: return
-        interval = datetime.timedelta(days=conf.UpdateCheckInterval)
-        due_date = datetime.datetime.now() - interval
-        if not (conf.WindowMinimizedToTray or support.update_window) \
-        and (not conf.LastUpdateCheck or conf.LastUpdateCheck < due_date.strftime("%Y%m%d")):
-            callback = lambda resp: self.on_check_update_callback(resp, False)
+        if support.update_window: # Update window already open: reschedule a later check
+            millis = max(3600 * 1000, min(sys.maxsize, conf.UpdateCheckInterval * 24 * 3600 * 1000))
+            wx.CallLater(millis, self.update_check)
+            return
+
+        check_delta = datetime.timedelta(days=conf.UpdateCheckInterval)
+        last_date = None
+        if conf.LastUpdateCheck:
+            last_date = datetime.datetime.strptime(conf.LastUpdateCheck, "%Y%m%d")
+        do_check = not conf.WindowMinimizedToTray
+        if do_check and last_date:
+            do_check = datetime.datetime.now() - check_delta < last_date
+        if do_check:
+            callback = functools.partial(self.on_check_update_callback, full_response=False)
             support.check_newest_version(callback)
-        elif not support.update_window:
-            try:
-                dt = datetime.datetime.strptime(conf.LastUpdateCheck, "%Y%m%d")
-                interval = (dt + interval) - datetime.datetime.now()
-            except (TypeError, ValueError):
-                pass
-        # Schedule a check for due date, should the program run that long.
-        millis = max(1, min(sys.maxsize, int(util.timedelta_seconds(interval) * 1000)))
+        elif last_date: # Shift next check closer by elapsed time
+            check_delta -= datetime.datetime.now() - last_date
+        # Schedule next check, should the program run that long
+        millis = max(1, min(sys.maxsize, int(util.timedelta_seconds(check_delta) * 1000)))
         wx.CallLater(millis, self.update_check)
 
 
@@ -820,7 +821,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         allow = conf.AllowMultipleInstances = event.IsChecked()
         util.run_once(conf.save)
         checker = wx.GetApp().SingleChecker
-        checker.StopReceive() if allow else checker.StartReceive(self.on_ipc, conf.IPCPort)
+        if allow: checker.StopReceive()
+        else: checker.StartReceive(self.on_ipc, conf.IPCPort)
 
 
     def on_toggle_trayicon(self, event=None):
@@ -841,65 +843,65 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def on_open_tray_menu(self, event):
         """Creates and opens a popup menu for the tray icon."""
-        menu = wx.Menu()
-        menu_recent = wx.Menu()
-        menu_all = wx.Menu()
 
         def on_recent_file(event):
-            if conf.WindowMinimizedToTray: self.on_toggle_to_tray()
+            if conf.WindowMinimizedToTray:
+                self.on_toggle_to_tray()
             filename = history_file.GetHistoryFile(event.Id - wx.ID_FILE1)
             self.load_database_page(filename, clearselection=True)
         def open_item(filename, *_, **__):
-            if conf.WindowMinimizedToTray: self.on_toggle_to_tray()
+            if conf.WindowMinimizedToTray:
+                self.on_toggle_to_tray()
             self.load_database_page(filename, clearselection=True)
 
-        history_file = wx.FileHistory(conf.MaxRecentFiles)
-        history_file.UseMenu(menu_recent)
-        # Reverse list, as FileHistory works like a stack
-        [history_file.AddFileToHistory(f) for f in conf.RecentFiles[::-1]]
-        history_file.UseMenu(menu_recent)
+        menu = wx.Menu()
+        menu_recent = wx.Menu() # Recent files submenu
+        menu_all = wx.Menu() # All files submenu
 
         label = ["Minimize to", "Restore from"][conf.WindowMinimizedToTray] + " &tray"
-        item_new = wx.MenuItem(menu, -1, "&New database")
-        item_toggle = wx.MenuItem(menu, -1, label)
-        item_icon = wx.MenuItem(menu, -1, kind=wx.ITEM_CHECK,
-                                text="Show &icon in notification area")
-        item_console = wx.MenuItem(menu, -1, kind=wx.ITEM_CHECK,
-                                   text="Show Python &console")
-        item_editor = wx.MenuItem(menu, -1, kind=wx.ITEM_CHECK,
-                                  text="Show value &editor")
-        item_exit = wx.MenuItem(menu, -1, "E&xit %s" % conf.Title)
+        item_new     = wx.MenuItem(menu, -1, "&New database")
+        item_toggle  = wx.MenuItem(menu, -1, label)
+        item_icon    = wx.MenuItem(menu, -1, "Show &icon in notification area", kind=wx.ITEM_CHECK)
+        item_console = wx.MenuItem(menu, -1, "Show Python &console",            kind=wx.ITEM_CHECK)
+        item_editor  = wx.MenuItem(menu, -1, "Show value &editor",              kind=wx.ITEM_CHECK)
+        item_exit    = wx.MenuItem(menu, -1, "E&xit %s" % conf.Title)
 
         boldfont = self.Font.Bold()
 
         curpage = self.notebook.GetCurrentPage()
         curfile = curpage.db.filename if isinstance(curpage, DatabasePage) else None
 
-        openfiles = [(os.path.split(db.name)[-1], p) for p, db in self.db_pages.items()]
+        # Populate opened files at menu top, bolded if single file or current page in program
+        openfiles = [(os.path.basename(db.name), p) for p, db in self.db_pages.items()]
         for name, page in sorted(openfiles):
             item = wx.MenuItem(menu, -1, util.ellipsize(name))
-            if page.db.filename == curfile or len(openfiles) < 2:
+            if page.db.filename == curfile or len(openfiles) == 1:
                 item.Font = boldfont
             menu.Bind(wx.EVT_MENU, functools.partial(open_item, page.db.name), item)
             menu.Append(item)
         if openfiles: menu.AppendSeparator()
 
-        allfiles = [(os.path.split(k)[-1], k) for k, v in self.db_datas.items()
-                    if "name" in v]
+        # Populate all files in submenu, bolded if opened
+        allfiles = [(os.path.basename(k), k) for k, v in self.db_datas.items() if "name" in v]
         for i, (name, path) in enumerate(sorted(allfiles)):
             if path in self.dbs and self.dbs[path].temporary: continue # for
-            label = "&%s %s" % ((i + 1), util.ellipsize(name))
+            label = "&%s %s" % (i + 1, util.ellipsize(name))
             item = wx.MenuItem(menu, -1, label)
-            if len(allfiles) > 1 and (path == curfile if curfile
-            else len(openfiles) == 1 and path in self.dbs):
+            if len(allfiles) > 1 and path in self.dbs:
                 item.Font = boldfont
             menu_all.Append(item)
             menu.Bind(wx.EVT_MENU, functools.partial(open_item, path), item)
         if menu_all.MenuItemCount:
             menu.AppendSubMenu(menu_all, "All &files")
 
+        # Populate recent files in submenu
+        history_file = wx.FileHistory(conf.MaxRecentFiles)
+        history_file.UseMenu(menu_recent)
+        for f in conf.RecentFiles[::-1]: # Reverse list, as FileHistory works like a stack
+            history_file.AddFileToHistory(f)
+        history_file.UseMenu(menu_recent)
         item_recent = menu.AppendSubMenu(menu_recent, "&Recent files")
-        menu.Enable(item_recent.Id, bool(conf.RecentFiles))
+
         menu.Append(item_new)
         menu.AppendSeparator()
         menu.Append(item_toggle)
@@ -909,9 +911,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu.Append(item_editor)
         menu.AppendSeparator()
         menu.Append(item_exit)
+
         item_icon.Check(True)
         item_console.Check(self.frame_console.Shown)
         item_editor.Check(bool(self.columndlg and self.columndlg.Shown))
+        menu.Enable(item_recent.Id, bool(conf.RecentFiles))
 
         menu.Bind(wx.EVT_MENU_RANGE, on_recent_file, id=wx.ID_FILE1,
                   id2=wx.ID_FILE1 + conf.MaxRecentFiles)
@@ -952,17 +956,17 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         if self.is_dragging_page: return
         if event: event.Skip() # Pass event along to next handler
-        p = self.notebook.GetCurrentPage()
-        if not self.pages_visited or self.pages_visited[-1] != p:
-            self.pages_visited.append(p)
+        page = self.notebook.GetCurrentPage()
+        if self.pages_visited[-1:] != [page]:
+            self.pages_visited.append(page)
         self.Title, subtitle = conf.Title, ""
-        if isinstance(p, DatabasePage): # Use parent/file.db or C:/file.db
-            self.page_db_latest = p
-            path, file = os.path.split(p.db.name)
+        if isinstance(page, DatabasePage): # Use parent/file.db or C:/file.db
+            path, file = os.path.split(page.db.name)
             subtitle = os.path.join(os.path.split(path)[-1] or path, file)
             subtitle = util.ellipsize(subtitle, conf.MaxTabTitleLength, front=True)
-            self.db_menustate[p.db.filename] = {"full": True}
-        elif p is self.page_main:
+            self.db_menustate[page.db.filename] = {"full": True}
+            self.page_db_latest = page
+        elif page is self.page_main:
             self.list_db.ContainingSizer.Layout()
         self.Title = " - ".join(filter(bool, (conf.Title, subtitle)))
         self.update_notebook_header()
@@ -975,19 +979,21 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.notebook.Freeze()
         self.is_dragging_page = True
         try:
-            cur_page = self.notebook.GetCurrentPage()
-            idx_main = self.notebook.GetPageIndex(self.page_main)
-            if idx_main > 0:
-                text = self.notebook.GetPageText(idx_main)
-                self.notebook.RemovePage(idx_main)
+            current_page = self.notebook.GetCurrentPage()
+            main_page_index = self.notebook.GetPageIndex(self.page_main)
+            if main_page_index > 0:
+                # Dragging pushed main page off from first place: restore
+                text = self.notebook.GetPageText(main_page_index)
+                self.notebook.RemovePage(main_page_index)
                 self.notebook.InsertPage(0, page=self.page_main, text=text)
-            idx_log = self.notebook.GetPageIndex(self.page_log)
-            if 0 <= idx_log < self.notebook.GetPageCount() - 1:
-                text = self.notebook.GetPageText(idx_log)
-                self.notebook.RemovePage(idx_log)
+            log_page_index = self.notebook.GetPageIndex(self.page_log)
+            if log_page_index >= 0 and log_page_index < self.notebook.GetPageCount() - 1:
+                # Dragging pushed log page off from last place: restore
+                text = self.notebook.GetPageText(log_page_index)
+                self.notebook.RemovePage(log_page_index)
                 self.notebook.AddPage(page=self.page_log, text=text)
-            if self.notebook.GetCurrentPage() != cur_page:
-                self.notebook.SetSelection(self.notebook.GetPageIndex(cur_page))
+            if self.notebook.GetCurrentPage() != current_page: 
+                self.notebook.SetSelection(self.notebook.GetPageIndex(current_page))
         finally:
             self.is_dragging_page = False
             self.notebook.Thaw()
@@ -1004,12 +1010,14 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 conf.TrayIconEnabled = True
                 self.trayicon.SetIcon(self.TRAY_ICON.Icon, conf.Title)
                 self.menu_tray.Check(True)
-            if self.menu_console.IsChecked(): self.frame_console.Hide()
+            if self.menu_console.IsChecked():
+                self.frame_console.Hide()
         else:
             if conf.WindowPosition and not conf.WindowMaximized:
                 self.Position = conf.WindowPosition
             self.Show()
-            self.IsIconized() and self.Restore()
+            if self.IsIconized():
+                self.Restore()
             if self.menu_console.IsChecked():
                 self.frame_console.Show(), self.frame_console.Iconize(False)
         wx.CallAfter(setattr, self, "is_minimizing", False)
@@ -1033,8 +1041,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """Handler for window move event, saves position."""
         event.Skip()
         if self.is_minimizing: return
-        if not self.IsIconized() and not self.IsMaximized() and not conf.WindowMaximized \
-        and self.is_started and not self.is_minimizing:
+        if self.IsIconized() or self.IsMaximized() or conf.WindowMaximized: return
+        if self.is_started and not self.is_minimizing:
             conf.WindowPosition = self.Position[:]
             util.run_once(conf.save)
 
@@ -1050,11 +1058,13 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         def after(data):
             if not self: return
 
-            if conf.WindowMinimizedToTray: self.on_toggle_to_tray()
-            else: self.Restore()
+            if conf.WindowMinimizedToTray:
+                self.on_toggle_to_tray()
+            else:
+                self.Restore()
             self.Raise()
-            filenames = data if isinstance(data, (list, set, tuple)) else list(filter(bool, [data]))
-            if filenames: self.load_database_pages(filenames, clearselection=True)
+            if data:
+                self.load_database_pages(util.tuplefy(data), clearselection=True)
         wx.CallAfter(after, data)
 
 
@@ -1067,8 +1077,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def adapt_colours(self):
         """Adapts configuration colours to better fit current theme."""
-        COLOURS = ["GridRowInsertedColour", "GridRowChangedColour",
-                   "GridCellChangedColour"]
+        COLOURS = ["GridRowInsertedColour", "GridRowChangedColour", "GridCellChangedColour"]
         frgb = tuple(ColourManager.GetColour(wx.SYS_COLOUR_BTNTEXT))[:3]
         brgb = tuple(ColourManager.GetColour(wx.SYS_COLOUR_WINDOW ))[:3]
         for n in COLOURS:
@@ -1094,8 +1103,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         tint_colour = wx.Colour(conf.BgColour)
         tint_factor = [((4 * x) % 256) / 255. for x in tint_colour]
         # Images shown on the default search content page
-        for name in ["HelpSearch", "HelpData", "HelpSchema", "HelpSQL",
-                     "HelpPragma", "HelpInfo"]:
+        for name in ["HelpSearch", "HelpData", "HelpSchema", "HelpSQL", "HelpPragma", "HelpInfo"]:
             embedded = getattr(images, name, None)
             if not embedded: continue # for name
             img = embedded.Image.AdjustChannels(*tint_factor)
@@ -1108,24 +1116,21 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def update_notebook_header(self):
         """
-        Removes or adds X to notebook tab style, depending on whether current
-        page can be closed.
+        Removes or adds X to notebook tab style, depending on whether current page can be closed.
         """
         if not self: return
 
         p = self.notebook.GetCurrentPage()
         style = self.notebook.GetAGWWindowStyleFlag()
         if isinstance(p, DatabasePage):
-            if p.ready_to_close \
-            and not (style & wx.lib.agw.flatnotebook.FNB_X_ON_TAB):
+            if p.ready_to_close and not (style & wx.lib.agw.flatnotebook.FNB_X_ON_TAB):
                 style |= wx.lib.agw.flatnotebook.FNB_X_ON_TAB
-            elif not p.ready_to_close \
-            and (style & wx.lib.agw.flatnotebook.FNB_X_ON_TAB):
+            elif not p.ready_to_close and (style & wx.lib.agw.flatnotebook.FNB_X_ON_TAB):
                 style ^= wx.lib.agw.flatnotebook.FNB_X_ON_TAB
         elif self.page_log == p:
             style |= wx.lib.agw.flatnotebook.FNB_X_ON_TAB
-        elif style & wx.lib.agw.flatnotebook.FNB_X_ON_TAB: # Hide close box
-            style ^= wx.lib.agw.flatnotebook.FNB_X_ON_TAB  # on main page
+        elif style & wx.lib.agw.flatnotebook.FNB_X_ON_TAB: # Hide close box on main page
+            style ^= wx.lib.agw.flatnotebook.FNB_X_ON_TAB
         if style != self.notebook.GetAGWWindowStyleFlag():
             self.notebook.SetAGWWindowStyleFlag(style)
 
@@ -1138,39 +1143,43 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def on_database_page_event(self, event):
         """Handler for notification from DatabasePage, updates UI."""
-        idx = self.notebook.GetPageIndex(event.source)
+        page_index = self.notebook.GetPageIndex(event.source)
         ready, modified = (getattr(event, x, None) for x in ("ready", "modified"))
         rename, updated = (getattr(event, x, None) for x in ("rename", "updated"))
 
         if rename:
-            for dct in (self.dbs, conf.DBsOpen): dct.pop(event.filename1, None)
+            self.dbs.pop(event.filename1, None)
+            conf.DBsOpen.pop(event.filename1, None)
             self.dbs[event.filename2] = conf.DBsOpen[event.filename2] = event.source.db
 
-            if event.temporary: self.db_datas.pop(event.filename1, None)
+            if event.temporary:
+                self.db_datas.pop(event.filename1, None)
             if "name" in self.db_datas.get(event.filename1, {}):
                 self.list_db.SetItemStyleByText(event.filename1, None)
             self.update_database_list(event.filename2)
             self.list_db.SetItemStyleByText(event.filename2, "active")
-            if self.list_db.IsSelected(0): self.list_db.Select(0, False)
+            if self.list_db.IsSelected(0):
+                self.list_db.Select(0, False)
             for i in range(1, self.list_db.GetItemCount()):
-                fn = self.list_db.GetItemText(i)
-                self.list_db.Select(i, on=(fn == event.filename2))
+                itempath = self.list_db.GetItemText(i)
+                self.list_db.Select(i, on=(itempath == event.filename2))
             if event.filename2 in conf.RecentFiles: # Remove earlier position
-                idx = conf.RecentFiles.index(event.filename2)
-                try: self.history_file.RemoveFileFromHistory(idx)
+                recent_index = conf.RecentFiles.index(event.filename2)
+                try: self.history_file.RemoveFileFromHistory(recent_index)
                 except Exception: pass
             self.history_file.AddFileToHistory(event.filename2)
-            util.add_unique(conf.RecentFiles, event.filename2, -1,
-                            conf.MaxRecentFiles)
+            util.add_unique(conf.RecentFiles, event.filename2, -1, conf.MaxRecentFiles)
             util.run_once(conf.save)
             if event.source == self.notebook.GetCurrentPage():
                 self.on_change_page() # Update program title
 
-        if modified is not None or updated:
+        if modified is not None or updated: # Make note to refresh program menu for page state
             self.db_menustate.setdefault(event.source.db.filename, {})
-            if updated: self.db_menustate[event.source.db.filename]["full"] = True
+            if updated: # Make note to rebuild page entity lists in program menu
+                self.db_menustate[event.source.db.filename]["full"] = True
 
-        if ready or rename: self.update_notebook_header()
+        if ready or rename:
+            self.update_notebook_header()
 
         if (rename or modified is not None) and event.source.db.filename in self.db_datas:
             suffix = "*" if modified else ""
@@ -1178,8 +1187,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                      or make_unique_page_title(event.source.db.name, self.notebook, front=True)
             self.db_datas[event.source.db.filename]["title"] = title1
             title2 = title1 + suffix
-            if self.notebook.GetPageText(idx) != title2:
-                self.notebook.SetPageText(idx, title2)
+            if self.notebook.GetPageText(page_index) != title2:
+                self.notebook.SetPageText(page_index, title2)
 
 
     def on_list_db_key(self, event):
@@ -1212,7 +1221,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 self.db_datas[filename].update(data)
                 items.append(data)
             self.list_db.Populate(items, [1])
-            if selected_home: self.list_db.Select(0)
+            if selected_home:
+                self.list_db.Select(0)
             if selected_files:
                 for i in range(1, self.list_db.GetItemCount()):
                     if self.list_db.GetItemText(i) in selected_files:
@@ -1220,11 +1230,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 self.update_database_detail()
         elif event.KeyCode in [ord("F")] and event.CmdDown():
             self.edit_filter.SetFocus()
-        elif event.KeyCode in controls.KEYS.ENTER and not event.AltDown() \
-        and self.list_db.GetFirstSelected() >= 0 and self.dbs_selected:
-            self.load_database_pages(self.dbs_selected)
-        elif event.KeyCode in controls.KEYS.DELETE and self.dbs_selected:
-            self.on_remove_database(None)
+        elif event.KeyCode in controls.KEYS.ENTER and not event.AltDown():
+            if self.list_db.GetFirstSelected() >= 0 and self.dbs_selected:
+                self.load_database_pages(self.dbs_selected)
+        elif event.KeyCode in controls.KEYS.DELETE:
+            if self.dbs_selected:
+                self.on_remove_database(None)
 
 
     def on_sort_list_db(self, event):
@@ -1248,7 +1259,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             selected = self.list_db.GetNextSelected(selected)
         if event.GetIndex() >= 0 and event.GetIndex() not in selecteds:
             if event.GetIndex():
-                files, selecteds = [self.list_db.GetItemText(event.GetIndex())], [event.GetIndex()]
+                files = [self.list_db.GetItemText(event.GetIndex())]
+                selecteds = [event.GetIndex()]
         if not files:
             menu = wx.Menu()
             label1 = "Stop &import from folder" if self.worker_folder.is_working() \
@@ -1378,8 +1390,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         if not support.update_window:
             guibase.status("Checking for new version of %s.", conf.Title)
-            wx.CallAfter(support.check_newest_version,
-                         self.on_check_update_callback)
+            wx.CallAfter(support.check_newest_version, self.on_check_update_callback)
         elif hasattr(support.update_window, "Raise"):
             support.update_window.Raise()
 
@@ -1401,7 +1412,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             func = wx.MessageBox if conf.Snapped else controls.YesNoMessageBox
             text = "Newer version (%s) available. You are currently on version %s.%s" % \
                    (version, conf.Version, "\n\n%s\n" % util.ellipsize(changes, 1000))
-            if not conf.Snapped: text += "\nDownload and install %s %s?" % (conf.Title, version)
+            if not conf.Snapped:
+                text += "\nDownload and install %s %s?" % (conf.Title, version)
             if wx.YES == func(text, "Update information", wx.ICON_INFORMATION):
                 wx.CallAfter(support.download_and_install, url)
         elif full_response and check_result is not None:
@@ -1419,9 +1431,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def populate_database_list(self):
         """
-        Inserts all databases into the list, updates UI buttons.
+        Clears and populates list with all databases, retains selection, updates UI buttons.
         """
         if not self: return
+
         items, selected_files = [], []
         for filename in conf.DBFiles:
             filename = util.to_unicode(filename)
@@ -1431,24 +1444,25 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 data["last_modified"] = datetime.datetime.fromtimestamp(os.path.getmtime(filename))
             self.db_datas[filename] = data
             items.append(data)
-            if filename in conf.LastSelectedFiles: selected_files += [filename]
+            if filename in conf.LastSelectedFiles:
+                selected_files += [filename]
 
         self.list_db.Populate(items, [1])
         if conf.DBSort and conf.DBSort[0] >= 0:
             self.list_db.SortListItems(*conf.DBSort)
 
         if selected_files:
-            idx = -1
+            first_selected_index = -1
             self.list_db.Select(0, on=False) # Deselect home row
-            for i in range(1, self.list_db.GetItemCount()):
-                if self.list_db.GetItemText(i) in selected_files:
-                    if idx < 0: idx = i
-                    self.list_db.Select(i)
+            for item_index in range(1, self.list_db.GetItemCount()):
+                if self.list_db.GetItemText(item_index) in selected_files:
+                    if first_selected_index < 0: first_selected_index = item_index
+                    self.list_db.Select(item_index)
                     self.list_db.SetFocus()
 
-            if idx >= self.list_db.GetCountPerPage():
-                lh = self.list_db.GetUserLineHeight()
-                dy = (idx - self.list_db.GetCountPerPage() // 2) * lh
+            if first_selected_index >= self.list_db.GetCountPerPage(): # Scroll to center selection
+                row_height = self.list_db.GetUserLineHeight()
+                dy = (first_selected_index - self.list_db.GetCountPerPage() // 2) * row_height
                 self.list_db.ScrollList(0, dy)
                 self.list_db.Update()
 
@@ -1456,7 +1470,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.button_clear.Show(bool(items))
         self.panel_db_main.Layout()
         self.update_database_count()
-        if selected_files: wx.CallLater(100, self.update_database_detail)
+        if selected_files:
+            wx.CallLater(100, self.update_database_detail)
 
 
     def update_database_list(self, filenames=()):
@@ -1468,10 +1483,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         @return            True if was file was new or changed, False otherwise
         """
         if not self: return
-        result, refresh_idxs = False, []
+
+        result, refresh_item_indexes = False, []
         # Insert into database lists, if not already there
-        if isinstance(filenames, six.string_types): filenames = [filenames]
-        for filename in filenames:
+        for filename in util.tuplefy(filenames):
             filename = util.to_unicode(filename)
             if filename not in conf.DBFiles:
                 conf.DBFiles.append(filename)
@@ -1487,32 +1502,35 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     data["last_modified"] = datetime.datetime.fromtimestamp(
                                             os.path.getmtime(filename))
             data_old = self.db_datas.get(filename)
-            if not data_old or "name" not in data_old \
-            or data_old["size"] != data["size"] \
-            or data_old["last_modified"] != data["last_modified"]:
-                if not data_old or "name" not in data_old:
-                    self.list_db.AppendRow(data, [1])
-                self.db_datas.setdefault(filename, defaultdict(lambda: None, name=filename))
+            if not data_old or "name" not in data_old:
+                do_update = True
+                self.list_db.AppendRow(data, imageIds=[1])
+                self.db_datas[filename] = defaultdict(lambda: None, name=filename)
+            else:
+                do_update = any(data_old.get(k) != data.get(k) for k in ("size", "modified"))
+            if do_update:
                 self.db_datas[filename].update(data)
-                idx = self.list_db.FindItem(filename)
-                if idx > 0: refresh_idxs.append(idx)
+                item_index = self.list_db.FindItem(filename)
+                if item_index > 0:
+                    refresh_item_indexes.append(item_index)
                 result = True
 
-        if self.button_missing.Shown != (self.list_db.GetItemCount() > 1):
-            self.button_missing.Show(self.list_db.GetItemCount() > 1)
-            self.button_clear.Show(self.list_db.GetItemCount() > 1)
+        any_files_visible = (self.list_db.GetItemCount() > 1)
+        if self.button_missing.Shown != any_files_visible:
+            self.button_missing.Show(any_files_visible)
+            self.button_clear.Show(any_files_visible)
             self.panel_db_main.Layout()
         self.update_database_count()
-        for idx in refresh_idxs: self.list_db.RefreshRow(idx)
+        for item_index in refresh_item_indexes:
+            self.list_db.RefreshRow(item_index)
         return result
 
 
     def update_database_count(self):
         """Updates database count label."""
         count = self.list_db.GetItemCount() - 1
-        total = len([v for v in self.db_datas.values() if "name" in v])
-        text = ""
-        if total: text = util.plural("file", count)
+        total = sum("name" in v for v in self.db_datas.values())
+        text = util.plural("file", count) if total else ""
         if count != total: text += " visible (%s in total)" % total
         self.label_count.Label = text
 
@@ -1520,9 +1538,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
     def update_database_detail(self):
         """Updates database detail panel with current database information."""
         if not self: return
-        self.label_db.Value = self.label_path.Value = ""
-        self.label_size.Value = self.label_modified.Value = ""
-        self.label_tables.Value = ""
+
+        self.label_db.Value = ""
+        self.label_path.Value     = self.label_size.Value   = ""
+        self.label_modified.Value = self.label_tables.Value = ""
         self.label_tables.ForegroundColour = self.ForegroundColour
         self.label_size.ForegroundColour = self.ForegroundColour
         if not self.panel_db_detail.Shown:
@@ -1530,69 +1549,75 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.panel_db_detail.Show()
             self.panel_db_detail.Parent.Layout()
 
-        size = None
+        total_size = None
         for filename in self.dbs_selected:
-            sz = database.get_size(filename) if os.path.exists(filename) else None
-            if sz: size = (size or 0) + sz
+            filesize = None
+            if os.path.exists(filename):
+                filesize = database.get_size(filename) 
+                total_size = (total_size or 0) + filesize
+            if len(self.dbs_selected) > 1: continue # for filename
 
-            if len(self.dbs_selected) > 1:
-                self.label_db.Value = "<%s files>" % len(self.dbs_selected)
+            directory, basename = os.path.split(filename)
+            self.label_db.Value = basename
+            self.label_path.Value = directory
+
+            if filesize is None:
+                self.label_size.Value = "File does not exist."
+                self.label_size.ForegroundColour = conf.LabelErrorColour
+                continue # for filename
+
+            filedate = datetime.datetime.fromtimestamp(os.path.getmtime(filename))
+            self.label_modified.Value = filedate.strftime("%Y-%m-%d %H:%M:%S")
+
+            data = self.db_datas[filename]
+            if data.get("tables") and (data["size"], data["last_modified"]) == (filesize, filedate):
+                # File does not seem changed: use cached values
+                self.label_tables.Value = data["tables"]
             else:
-                path, tail = os.path.split(filename)
-                self.label_db.Value = tail
-                self.label_path.Value = path
+                data.update(size=filesize, last_modified=filedate)
+                item_index = self.list_db.FindItem(filename)
+                if item_index > 0:
+                    self.list_db.RefreshRow(item_index)
+                wx.CallLater(10, self.update_database_stats, filename)
 
-                if os.path.exists(filename):
-                    dt = datetime.datetime.fromtimestamp(os.path.getmtime(filename))
-                    self.label_modified.Value = dt.strftime("%Y-%m-%d %H:%M:%S")
-                    data = self.db_datas[filename]
-                    if data["size"] == sz and data["last_modified"] == dt \
-                    and data.get("tables"):
-                        # File does not seem changed: use cached values
-                        self.label_tables.Value = data["tables"]
-                    else:
-                        data.update(size=sz, last_modified=dt)
-                        idx = self.list_db.FindItem(filename)
-                        if idx > 0: self.list_db.RefreshRow(idx)
-                        wx.CallLater(10, self.update_database_stats, filename)
-                else:
-                    self.label_size.Value = "File does not exist."
-                    self.label_size.ForegroundColour = conf.LabelErrorColour
+        if len(self.dbs_selected) > 1:
+            self.label_db.Value = "<%s files>" % len(self.dbs_selected)
+        if total_size is not None:
+            self.label_size.Value = util.format_bytes(total_size)
 
-        if size is not None: self.label_size.Value = util.format_bytes(size)
-
-        for name in ["path", "size", "modified", "tables"]:
-            getattr(self, "label_%s" % name).MinSize = (-1, -1)
+        self.label_path.MinSize     = self.label_size.MinSize   = (-1, -1)
+        self.label_modified.MinSize = self.label_tables.MinSize = (-1, -1)
         wx.CallLater(100, lambda: self and self.panel_db_detail.Layout())
 
 
     def on_clear_databases(self, event):
         """Handler for clicking to clear the database list."""
         count = self.list_db.GetItemCount() - 1
-        total = len([v for v in self.db_datas.values() if "name" in v])
-        t = "all" if count == total else "current"
-        if (self.list_db.GetItemCount() > 1) and wx.YES != controls.YesNoMessageBox(
-            "Are you sure you want to clear the list of %s databases?" % t,
-            conf.Title, wx.ICON_INFORMATION, default=wx.NO
-        ): return
+        total = sum("name" in v for v in self.db_datas.values())
+        label = "all" if count == total else "current"
+        if self.list_db.GetItemCount() > 1:
+            if wx.YES != controls.YesNoMessageBox(
+                "Are you sure you want to clear the list of %s databases?" % label,
+                conf.Title, wx.ICON_INFORMATION, default=wx.NO
+            ): return
 
         if count == total:
             self.list_db.Populate([])
             for lst in conf.DBFiles, conf.LastSelectedFiles: del lst[:]
             for dct in conf.LastActivePages, conf.LastSearchResults, \
                        conf.SchemaDiagrams,  conf.SQLWindowTexts: dct.clear()
-            for k, v in (self.db_datas.items()): v.pop("name", None)
+            for data in self.db_datas.values(): data.pop("name", None)
         else:
             files = [self.list_db.GetItemMappedData(i)["name"]
                      for i in range(1, self.list_db.GetItemCount())]
-            for f in files:
-                self.db_datas.get(f, {}).pop("name", None)
-                self.clear_database_data(f)
+            for filename in files:
+                if filename in self.db_datas: self.db_datas[filename].pop("name", None)
+                self.clear_database_data(filename)
             self.list_db.Freeze()
             try:
-                for i in range(self.list_db.GetItemCount())[::-1]:
-                    if self.list_db.GetItemText(i) in files:
-                        self.list_db.DeleteItem(i)
+                for item_index in range(self.list_db.GetItemCount())[::-1]:
+                    if self.list_db.GetItemText(item_index) in files:
+                        self.list_db.DeleteItem(item_index)
             finally: self.list_db.Thaw()
 
         del conf.LastSelectedFiles[:]
@@ -1605,24 +1630,23 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """Handler for clicking to save a copy of a database in the list."""
         filenames = list(filter(os.path.exists, self.dbs_selected))
         if not filenames:
-            m = "None of the selected files" if len(self.dbs_selected) > 1 \
-                else 'The file "%s" does not' % self.dbs_selected[0]
-            return wx.MessageBox("%s exist on this computer." % m, conf.Title,
+            info = "None of the selected files" if len(self.dbs_selected) > 1 \
+                   else 'The file "%s" does not' % self.dbs_selected[0]
+            return wx.MessageBox("%s exist on this computer." % info, conf.Title,
                                  wx.OK | wx.ICON_ERROR)
 
         exts = ";".join("*" + x for x in conf.DBExtensions)
         wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
-        dialog = wx.DirDialog(self,
-            message="Choose directory where to save databases",
-            defaultPath=six.moves.getcwd(),
-            style=wx.DD_DIR_MUST_EXIST | wx.RESIZE_BORDER
-        ) if len(filenames) > 1 else wx.FileDialog(self,
-            message="Save a copy..", wildcard=wildcard,
-            defaultDir=os.path.split(filenames[0])[0],
-            defaultFile=os.path.basename(filenames[0]),
-            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | 
-                  wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
-        )
+        if len(filenames) > 1:
+            dialog = wx.DirDialog(self, message="Choose directory where to save databases",
+                defaultPath=six.moves.getcwd(), style=wx.DD_DIR_MUST_EXIST | wx.RESIZE_BORDER
+            )
+        else:
+            dialog = wx.FileDialog(self, message="Save a copy..", wildcard=wildcard,
+                defaultDir=os.path.dirname(filenames[0]),
+                defaultFile=os.path.basename(filenames[0]),
+                style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
+            )
         if wx.ID_OK != dialog.ShowModal(): return
 
         path = dialog.GetPath() if len(filenames) > 1 else controls.get_dialog_path(dialog)
@@ -1630,8 +1654,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         new_filenames = []
         for filename in filenames:
-            _, basename = os.path.split(filename)
+            basename = os.path.basename(filename)
             filename2 = os.path.join(path, basename) if len(filenames) > 1 else path
+
             if filename == filename2:
                 logger.error("Attempted to save %s as itself.", filename)
                 wx.MessageBox("Cannot overwrite %s with itself." % filename,
@@ -1643,6 +1668,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 wx.MessageBox("%s is currently open in %s." %
                               (filename2, conf.Title), conf.Title, wx.OK | wx.ICON_WARNING)
                 continue # for filename
+
             try: shutil.copyfile(filename, filename2)
             except Exception as e:
                 logger.exception("%r when trying to copy %s to %s.",
@@ -1650,21 +1676,23 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 wx.MessageBox('Failed to copy "%s" to "%s":\n\n%s' %
                               (basename, filename2, util.format_exc(e)),
                               conf.Title, wx.OK | wx.ICON_ERROR)
-            else:
-                guibase.status("Saved a copy of %s as %s.", filename, filename2, log=True)
-                self.update_database_list(filename2)
-                new_filenames.append(filename2)
+                continue # for filename
 
-                for dct in conf.LastActivePages, conf.LastSearchResults, \
-                           conf.SchemaDiagrams,  conf.SQLWindowTexts:
-                    if filename in dct: dct[filename2] = copy.deepcopy(dct[filename])
-                if filename in self.db_datas:
-                    self.db_datas[filename2] = copy.deepcopy(self.db_datas[filename])
-                    self.db_datas[filename2]["name"] = filename2
+            guibase.status("Saved a copy of %s as %s.", filename, filename2, log=True)
+            self.update_database_list(filename2)
+            new_filenames.append(filename2)
 
-        if not new_filenames: return
-        for i in range(1, self.list_db.GetItemCount()):
-            self.list_db.Select(i, on=self.list_db.GetItemText(i) in new_filenames)
+            for dct in (conf.LastActivePages, conf.LastSearchResults,
+                        conf.SchemaDiagrams,  conf.SQLWindowTexts):
+                if filename in dct:
+                    dct[filename2] = copy.deepcopy(dct[filename])
+            if filename in self.db_datas:
+                self.db_datas[filename2] = copy.deepcopy(self.db_datas[filename])
+                self.db_datas[filename2]["name"] = filename2
+
+        if new_filenames:
+            for i in range(1, self.list_db.GetItemCount()):
+                self.list_db.Select(i, on=(self.list_db.GetItemText(i) in new_filenames))
 
 
     def on_close_active_database(self, event=None):
@@ -1680,7 +1708,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         commits unsaved changes.
         """
         page = self.notebook.GetSelection() and self.page_db_latest
-        if isinstance(page, DatabasePage): page.save_database()
+        if isinstance(page, DatabasePage):
+            page.save_database()
 
 
     def on_save_active_database_as(self, event=None):
@@ -1689,7 +1718,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         opens a save as dialog, copies file and commits unsaved changes.
         """
         page = self.notebook.GetSelection() and self.page_db_latest
-        if isinstance(page, DatabasePage): page.save_database(rename=True)
+        if isinstance(page, DatabasePage):
+            page.save_database(rename=True)
 
 
     def on_remove_database(self, event=None):
@@ -1704,44 +1734,47 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         for filename in self.dbs_selected:
             self.clear_database_data(filename)
-            self.db_datas.get(filename, {}).pop("name", None)
+            if filename in self.db_datas:
+                self.db_datas[filename].pop("name", None)
         self.list_db.Freeze()
         try:
-            for i in range(self.list_db.GetItemCount())[::-1]:
-                if self.list_db.GetItemText(i) in self.dbs_selected:
-                    self.list_db.DeleteItem(i)
+            for item_index in range(self.list_db.GetItemCount())[::-1]:
+                if self.list_db.GetItemText(item_index) in self.dbs_selected:
+                    self.list_db.DeleteItem(item_index)
         finally: self.list_db.Thaw()
         del self.dbs_selected[:]
-        self.list_db.Select(0, False), self.list_db.Select(0)
+        self.list_db.Select(0, False), self.list_db.Select(0) # Ensure selection event
         self.update_database_list()
         util.run_once(conf.save)
 
 
     def on_remove_missing(self, event, selecteds=None):
         """Handler to remove nonexistent files from the database list."""
-        file_indexes = selecteds or list(range(1, self.list_db.GetItemCount()))
         filter_func = lambda i: not os.path.exists(self.list_db.GetItemText(i))
-        file_indexes = list(filter(filter_func, file_indexes))
-        if not file_indexes: return
+        item_indexes = selecteds or list(range(1, self.list_db.GetItemCount()))
+        item_indexes = list(filter(filter_func, item_indexes))
+        if not item_indexes: return
 
         self.list_db.Freeze()
         try:
-            for i in range(len(file_indexes)):
+            for i in range(len(item_indexes)):
                 # - i, as item count is getting smaller one by one
-                selected = file_indexes[i] - i
-                filename = self.list_db.GetItemText(selected)
+                item_index = item_indexes[i] - i
+                filename = self.list_db.GetItemText(item_index)
                 self.clear_database_data(filename, recent=True)
-                self.db_datas.get(filename, {}).pop("name", None)
-                self.list_db.DeleteItem(selected)
+                if filename in self.db_datas: self.db_datas[filename].pop("name", None)
+                self.list_db.DeleteItem(item_index)
         finally: self.list_db.Thaw()
 
         self.update_database_list()
-        if self.dbs_selected: self.update_database_detail()
-        else: self.list_db.Select(0, False), self.list_db.Select(0)
+        if self.dbs_selected:
+            self.update_database_detail()
+        else:
+            self.list_db.Select(0, False), self.list_db.Select(0) # Ensure selection event
 
         util.run_once(conf.save)
         guibase.status("Removed %s from the database list.",
-                       util.plural("missing file", file_indexes), log=True)
+                       util.plural("missing file", item_indexes), log=True)
 
 
     def on_delete_database(self, event=None):
@@ -1797,22 +1830,23 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     conf.DBsOpen.pop(filename, None)
                     self.db_datas.get(filename, {}).pop("name", None)
 
-                    for i in range(self.list_db.GetItemCount())[::-1]:
-                        if self.list_db.GetItemText(i) == filename:
-                            self.list_db.DeleteItem(i)
+                    for item_index in range(self.list_db.GetItemCount())[::-1]:
+                        if self.list_db.GetItemText(item_index) == filename:
+                            self.list_db.DeleteItem(item_index)
                     self.dbs_selected.remove(filename)
                 except Exception as e:
                     logger.exception("Error deleting %s.", filename)
                     errors.append("%s: %s" % (filename, util.format_exc(e)))
         finally: self.list_db.Thaw()
 
-        self.list_db.Select(0, False), self.list_db.Select(0)
+        self.list_db.Select(0, False), self.list_db.Select(0) # Ensure selection event
         self.update_database_list()
         util.run_once(conf.save)
         if errors:
             wx.MessageBox("Error removing %s:\n\n%s" % (
-                          util.plural("file", errors, numbers=False),
-                          "\n".join(errors)), conf.Title, wx.OK | wx.ICON_ERROR)
+                util.plural("file", errors, numbers=False),
+                "\n".join(errors)
+            ), conf.Title, wx.OK | wx.ICON_ERROR)
 
 
     def on_showhide_log(self, event):
@@ -1856,7 +1890,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             dummygridbase.KEY_NEW = components.SQLiteGridBase.KEY_NEW
             dummygridbase.GetRowData = lambda *a, **kw: dict(rowdata)
             dummygridbase.GetAffinity = lambda c, *_, **__: database.Database.get_affinity(cols[c])
-
+ 
             def onclose(event):
                 event.Skip()
                 if not isinstance(event, wx.ShowEvent) or not event.Show:
