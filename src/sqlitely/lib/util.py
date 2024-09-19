@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.09.2024
+@modified    19.09.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1319,9 +1319,9 @@ def try_ignore(func, *args, **kwargs):
 
 
 def tuplefy(value):
-    """Returns the value in or as a tuple if not already a tuple."""
+    """Returns the value as a tuple if list/set/tuple else as a tuple of one."""
     return value if isinstance(value, tuple) \
-           else tuple(value) if isinstance(value, list) else (value, )
+           else tuple(value) if isinstance(value, (list, set)) else (value, )
 
 
 def unique_path(pathname):
