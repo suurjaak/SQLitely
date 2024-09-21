@@ -1966,8 +1966,7 @@ class FindReplaceDialog(wx.Dialog):
             if isinstance(ctrl, wx.TextCtrl):
                 ctrl.SetBackgroundColour(colour)
             else:
-                ctrl.StyleSetSpec(wx.stc.STC_STYLE_DEFAULT, "back:%s" % colour)
-                ctrl.StyleClearAll()
+                ctrl.SetStyleSpecs(background=colour)
             ctrl.Refresh()
             break # for ctrl
         status1 = self._ctrls["status"].Label
@@ -5277,17 +5276,18 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         self.Bind(wx.stc.EVT_STC_START_DRAG,      lambda e: e.SetString(""))
 
 
-    def SetStyleSpecs(self):
-        """Sets STC style colours."""
+    def SetStyleSpecs(self, background=None):
+        """Sets STC style colours from system settings, using given background if any."""
         if not self: return
-        fgcolour, bgcolour = (ColourManager.ColourHex(x) for x in
-            (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW if self.Enabled else wx.SYS_COLOUR_BTNFACE)
-        )
+        bg_code = wx.SYS_COLOUR_WINDOW if self.Enabled else wx.SYS_COLOUR_BTNFACE
+        fgcolour = ColourManager.ColourHex(wx.SYS_COLOUR_BTNTEXT)
+        bgcolour = ColourManager.ColourHex(bg_code)
+        textbgcolour = background or bgcolour
 
         self.SetCaretForeground(fgcolour)
         self.SetCaretLineBackground("#00FFFF")
         self.StyleSetSpec(wx.stc.STC_STYLE_DEFAULT,
-                          "face:%s,back:%s,fore:%s" % (self.FONT_FACE, bgcolour, fgcolour))
+                          "face:%s,back:%s,fore:%s" % (self.FONT_FACE, textbgcolour, fgcolour))
         self.StyleClearAll() # Apply the new default style to all styles
 
         self.StyleSetSpec(self.STYLE_CHANGED, "fore:%s" % self.COLOUR_CHANGED)
