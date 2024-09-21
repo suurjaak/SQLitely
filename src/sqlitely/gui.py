@@ -3717,7 +3717,7 @@ class DatabasePage(wx.Panel):
             lock = self.db.get_lock(category, name, skip=list(filter(bool, [datapage])))
             if lock:
                 wx.MessageBox(
-                    "Cannot drop %s %s column %s.\n\n" % 
+                    "Cannot drop %s %s column %s.\n\n%s" % 
                     (category, qname, qcolumn, lock), conf.Title, wx.ICON_WARNING
                 )
                 return
