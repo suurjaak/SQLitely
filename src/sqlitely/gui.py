@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.09.2024
+@modified    21.09.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3647,7 +3647,7 @@ class DatabasePage(wx.Panel):
 
             datapages = sum(([p for n, p in d.items() if n in categories.get(c, {})]
                              for c, d in self.data_pages.items()), [])
-            deleteds, notdeleteds = {}, OrderedDict()
+            deleteds, notdeleteds = {}, OrderedDict() # {category: [name]}, {category: {name: error}}
             try:
                 for category, names in categories.items():
                     for name in names:
@@ -3678,17 +3678,18 @@ class DatabasePage(wx.Panel):
             finally:
                 def after_err():
                     if not self: return
-                    wx.MessageBox("Failed to drop %s:\n\n- %s" % (
-                        util.join(", ", (util.plural(c, nn) for c, nn in notdeleteds.items())),
-                        "\n- ".join("%s %s: %s" % (c, fmt_entity(n), v)
-                                    for c, d in notdeleteds.items() for n, v in d.items())
-                    ), conf.Title, wx.ICON_WARNING | wx.OK)
+                    catwords = [util.plural(c, nn) for c, nn in notdeleteds.items()]
+                    errors = ["%s %s: %s" % (c, fmt_entity(n), v)
+                              for c, d in notdeleteds.items() for n, v in d.items()]
+                    wx.MessageBox("Failed to drop %s:\n\n- %s" %
+                                  (util.join(", ", catwords), "\n- ".join(errors)),
+                                  conf.Title, wx.ICON_WARNING | wx.OK)
 
                 if notdeleteds: wx.CallAfter(after_err) if deleteds else after_err()
                 if deleteds:
-                    guibase.status("Dropped %s." % util.join(", ", (
-                        util.plural(c, deleteds[c]) for c in self.db.CATEGORIES if c in deleteds
-                    )), log=True)
+                    catcounts = [util.plural(c, deleteds[c]) for c in self.db.CATEGORIES
+                                 if c in deleteds]
+                    guibase.status("Dropped %s." % util.join(", ", catcounts), log=True)
                     def after():
                         if not self: return
                         self.reload_schema()
@@ -3703,13 +3704,13 @@ class DatabasePage(wx.Panel):
                 (category, qname, qcolumn), conf.Title, wx.ICON_WARNING, default=wx.NO
             ): return
 
-            deps = self.db.get_column_dependents(category, name, column)
+            deps = self.db.get_column_dependents(category, name, column) # {category: [name]}
             if deps:
+                catwords = [util.plural(c, nn, numbers=False) for c, nn in deps.items()]
+                catnames = [", ".join(map(fmt_entity, nn)) for nn in deps.values()]
+                catitems = list(map(" ".join, zip(catwords, catnames))) # ['tables "a", "b"']
                 wx.MessageBox("Cannot drop %s %s column %s, in use in:\n\n- %s" %
-                    (category, qname, qcolumn, "\n- ".join("%s: %s" % (
-                        util.plural(c, nn, numbers=False), util.join(", ", map(fmt_entity, nn))
-                    ) for c, nn in deps.items())), conf.Title, wx.ICON_WARNING
-                )
+                    (category, qname, qcolumn, "\n- ".join(catitems)), conf.Title, wx.ICON_WARNING)
                 return
 
             datapage = self.data_pages.get(category, {}).get(name)
@@ -3742,7 +3743,7 @@ class DatabasePage(wx.Panel):
             if schemapage: schemapage.SetReadOnly()
 
             self.toggle_cursors(category, name, close=True)
-            extradrops = self.db.drop_column(name, column)
+            extradrops = self.db.drop_column(name, column) # {category: {name: item}}
             def after():
                 if not self: return
                 self.reload_schema()
@@ -3753,14 +3754,12 @@ class DatabasePage(wx.Panel):
                     schemapage = self.schema_pages.get(c, {}).get(n)
                     if schemapage: schemapage.Close(force=True)
             if extradrops:
+                catwords = [util.plural(c, nn, numbers=False) for c, nn in extradrops.items()]
+                catnames = [", ".join(map(fmt_entity, nn)) for nn in extradrops.values()]
+                catitems = list(map(" ".join, zip(catwords, catnames))) # ['tables "a", "b"']
+                sqls = [x["sql"] for d in extradrops.values() for x in d.values()]
                 wx.MessageBox("Also dropped column %s dependents:\n\n- %s\n\n%s" % 
-                              (qname, "\n- ".join("%s %s" % (
-                                  (util.plural(c, d, numbers=False),
-                                   ", ".join(map(fmt_entity, d)))
-                               ) for c, d in extradrops.items()),
-                               "\n\n".join(x["sql"] for c, d in extradrops.items()
-                                           for x in d.values())
-                              ), conf.Title)
+                              (qname, "\n- ".join(catitems), "\n\n".join(sqls)), conf.Title)
 
         elif "truncate" == cmd:
             self.on_truncate(names=args) if args else self.on_truncate_all()
