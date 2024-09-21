@@ -5218,7 +5218,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
     def __init__(self, *args, **kwargs):
         """
-        @param   addressed  content in lines of 16 bytes with address margin (default True)
+        @param   addressed  content shown in lines of 16 bytes with address margin (default True)
         """
         addressed = bool(kwargs.pop("addressed", True))
         wx.stc.StyledTextCtrl.__init__(self, *args, **kwargs)
@@ -5483,95 +5483,6 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         wx.PostEvent(self, evt)
 
 
-    def _PosIn(self, pos):
-        if not self._addressed: return pos
-        line, linebpos = divmod(pos, self.WIDTH)
-        return line * self.WIDTH * 3 + linebpos * 3
-    def _PosOut(self, pos):
-        if not self._addressed: return pos
-        line = self.LineFromPosition(pos)
-        linepos = pos - self.PositionFromLine(self.LineFromPosition(pos))
-        return line * self.WIDTH + linepos // 3
-
-
-    def _Populate(self):
-        """Sets current content to widget."""
-        lines, hexlify = [], binascii.hexlify
-        if sys.version_info < (3, 8): # Support sep-parameter
-            hexlify = lambda data, sep: sep.join(b"%02X" % c for c in data)
-        if self._addressed:
-            for i in range(0, len(self._bytes), self.WIDTH):
-                lines.append(hexlify(self._bytes[i:i + self.WIDTH], b" ").decode("latin1").upper())
-        else:
-            lines.append(hexlify(self._bytes, b" ").decode("latin1").upper())
-        super(HexTextCtrl, self).ChangeValue("\n".join(lines))
-        self._Restyle()
-        self._Remargin()
-        if self._fixed and not self.Overtype: self.SetOvertype(True)
-
-
-    def _Restyle(self):
-        """Restyles current content according to changed state."""
-        eventmask0, _ = self.GetModEventMask(), self.SetModEventMask(0)
-        try:
-            self.StartStyling(0)
-            self.SetStyling(super(HexTextCtrl, self).Length, 0)
-            ranges, currange = [], None
-            for i, c in enumerate(self._bytes):
-                if c == self._bytes0[i]: currange = None
-                elif currange:           currange[-1] += 1
-                else:                    currange = [i, 1]; ranges.append(currange)
-            for i, length in ranges:
-                self.StartStyling(i * 3)
-                self.SetStyling(length * 3 - 1, self.STYLE_CHANGED)
-        finally: self.SetModEventMask(eventmask0)
-
-
-    def _Remargin(self):
-        """Rebuilds hex address margin."""
-        if not self._addressed: return
-        eventmask0, _ = self.GetModEventMask(), self.SetModEventMask(0)
-        try:
-            sself = super(HexTextCtrl, self)
-            self.MarginTextClearAll()
-            for line in range((sself.Length + self.WIDTH - 1) // self.WIDTH):
-                self.MarginSetStyle(line, self.STYLE_MARGIN)
-                self.MarginSetText (line, " %08X " % line)
-        finally: self.SetModEventMask(eventmask0)
-
-
-    def _GetValueState(self, *value):
-        """Returns value type and data dict, from current content or given value."""
-        if not value:
-            state = {k: getattr(self, k) for k in ("_bytes", "_bytes0", "_fixed", "_type")}
-            return copy.deepcopy(state)
-        value = value[0]
-        if isinstance(value, bool): value = int(value)
-        bytesvalue = self._AdaptValue(value)
-        state = {
-            "_bytes":  bytearray(bytesvalue),
-            "_bytes0": [x if isinstance(x, int) else ord(x) for x in bytesvalue],
-            "_fixed":  is_fixed(value) or value is None,
-            "_type":   type(value) if is_fixed(value) or isinstance(value, string_types) else str,
-        }
-        diff = len(state["_bytes0"]) - len(state["_bytes"])
-        if diff < 0: state["_bytes0"] = state["_bytes0"] + [None] * abs(diff)
-        elif diff:   state["_bytes0"] = state["_bytes0"][:len(state["_bytes0"]) - diff]
-        return state
-
-
-    def _SetValue(self, value):
-        """Set current content as typed value (string or number), clears undo."""
-        if isinstance(value, bool): value = int(value)
-        v = self._AdaptValue(value)
-
-        self._type      = type(value) if is_fixed(value) or isinstance(value, string_types) else str
-        self._fixed     = is_fixed(value) or value is None
-        self._bytes0[:] = [x if isinstance(x, int) else ord(x) for x in v]
-        self._bytes[:]  = v
-        if self._fixed and not self.Overtype: self.SetOvertype(True)
-
-
     def OnFocus(self, event):
         """Handler for control getting focus, shows caret."""
         event.Skip()
@@ -5772,6 +5683,95 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         if not isinstance(v, bytes):
             v = str(v).encode("latin1")
         return v
+
+
+    def _PosIn(self, pos):
+        if not self._addressed: return pos
+        line, linebpos = divmod(pos, self.WIDTH)
+        return line * self.WIDTH * 3 + linebpos * 3
+    def _PosOut(self, pos):
+        if not self._addressed: return pos
+        line = self.LineFromPosition(pos)
+        linepos = pos - self.PositionFromLine(self.LineFromPosition(pos))
+        return line * self.WIDTH + linepos // 3
+
+
+    def _Populate(self):
+        """Sets current content to widget."""
+        lines, hexlify = [], binascii.hexlify
+        if sys.version_info < (3, 8): # Support sep-parameter
+            hexlify = lambda data, sep: sep.join(b"%02X" % c for c in data)
+        if self._addressed:
+            for i in range(0, len(self._bytes), self.WIDTH):
+                lines.append(hexlify(self._bytes[i:i + self.WIDTH], b" ").decode("latin1").upper())
+        else:
+            lines.append(hexlify(self._bytes, b" ").decode("latin1").upper())
+        super(HexTextCtrl, self).ChangeValue("\n".join(lines))
+        self._Restyle()
+        self._Remargin()
+        if self._fixed and not self.Overtype: self.SetOvertype(True)
+
+
+    def _Restyle(self):
+        """Restyles current content according to changed state."""
+        eventmask0, _ = self.GetModEventMask(), self.SetModEventMask(0)
+        try:
+            self.StartStyling(0)
+            self.SetStyling(super(HexTextCtrl, self).Length, 0)
+            ranges, currange = [], None
+            for i, c in enumerate(self._bytes):
+                if c == self._bytes0[i]: currange = None
+                elif currange:           currange[-1] += 1
+                else:                    currange = [i, 1]; ranges.append(currange)
+            for i, length in ranges:
+                self.StartStyling(i * 3)
+                self.SetStyling(length * 3 - 1, self.STYLE_CHANGED)
+        finally: self.SetModEventMask(eventmask0)
+
+
+    def _Remargin(self):
+        """Rebuilds hex address margin."""
+        if not self._addressed: return
+        eventmask0, _ = self.GetModEventMask(), self.SetModEventMask(0)
+        try:
+            sself = super(HexTextCtrl, self)
+            self.MarginTextClearAll()
+            for line in range((sself.Length + self.WIDTH - 1) // self.WIDTH):
+                self.MarginSetStyle(line, self.STYLE_MARGIN)
+                self.MarginSetText (line, " %08X " % line)
+        finally: self.SetModEventMask(eventmask0)
+
+
+    def _GetValueState(self, *value):
+        """Returns value type and data dict, from current content or given value."""
+        if not value:
+            state = {k: getattr(self, k) for k in ("_bytes", "_bytes0", "_fixed", "_type")}
+            return copy.deepcopy(state)
+        value = value[0]
+        if isinstance(value, bool): value = int(value)
+        bytesvalue = self._AdaptValue(value)
+        state = {
+            "_bytes":  bytearray(bytesvalue),
+            "_bytes0": [x if isinstance(x, int) else ord(x) for x in bytesvalue],
+            "_fixed":  is_fixed(value) or value is None,
+            "_type":   type(value) if is_fixed(value) or isinstance(value, string_types) else str,
+        }
+        diff = len(state["_bytes0"]) - len(state["_bytes"])
+        if diff < 0: state["_bytes0"] = state["_bytes0"] + [None] * abs(diff)
+        elif diff:   state["_bytes0"] = state["_bytes0"][:len(state["_bytes0"]) - diff]
+        return state
+
+
+    def _SetValue(self, value):
+        """Set current content as typed value (string or number), clears undo."""
+        if isinstance(value, bool): value = int(value)
+        v = self._AdaptValue(value)
+
+        self._type      = type(value) if is_fixed(value) or isinstance(value, string_types) else str
+        self._fixed     = is_fixed(value) or value is None
+        self._bytes0[:] = [x if isinstance(x, int) else ord(x) for x in v]
+        self._bytes[:]  = v
+        if self._fixed and not self.Overtype: self.SetOvertype(True)
 
 
     def _QueueEvents(self, singlepos=False):
