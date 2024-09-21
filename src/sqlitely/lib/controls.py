@@ -1386,13 +1386,13 @@ class FindReplaceDialog(wx.Dialog):
 
         text_find = TextCtrlAutoComplete(self, name="find")
         text_repl = TextCtrlAutoComplete(self, name="repl")
-        hex_find  = HexTextCtrl(self, name="find", addressed=False)
-        hex_repl  = HexTextCtrl(self, name="repl", addressed=False)
+        hex_find  = HexTextCtrl(self, name="find")
+        hex_repl  = HexTextCtrl(self, name="repl")
 
         text_findbig = wx.TextCtrl(self, style=wx.TE_MULTILINE, name="findbig")
         text_replbig = wx.TextCtrl(self, style=wx.TE_MULTILINE, name="replbig")
-        hex_findbig  = HexTextCtrl(self, name="findbig")
-        hex_replbig  = HexTextCtrl(self, name="replbig")
+        hex_findbig  = HexTextCtrl(self, name="findbig", addressed=True)
+        hex_replbig  = HexTextCtrl(self, name="replbig", addressed=True)
 
         check_case  = wx.CheckBox(self, label="Match &case")
         check_word  = wx.CheckBox(self, label="Match &whole words only")
@@ -5218,18 +5218,21 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
     def __init__(self, *args, **kwargs):
         """
-        @param   addressed  content shown in lines of 16 bytes with address margin (default True)
+        @param   addressed     show content in lines of 16 bytes with address margin (default False)
+        @param   show_changes  highlight changes from value given in SetValue() (default False)
         """
-        addressed = bool(kwargs.pop("addressed", True))
+        addressed = bool(kwargs.pop("addressed", False))
+        show_changes = bool(kwargs.pop("show_changes", False))
         wx.stc.StyledTextCtrl.__init__(self, *args, **kwargs)
 
-        self._addressed = addressed # Whether margin and fixed line width
-        self._fixed     = False     # Fixed-length value
-        self._type      = str       # Value type: str, unicode, int, float, long
-        self._bytes0    = []        # [byte or None, ]
-        self._bytes     = bytearray()
-        self._mirror    = None # Linked control
-        self._undoredo  = HexByteCommandProcessor(self)
+        self._addressed    = addressed     # Whether margin and fixed line width
+        self._show_changes = show_changes  # Whether changes from first value are highlighted
+        self._fixed        = False         # Fixed-length value
+        self._type         = str           # Value type: str, unicode, int, float, long
+        self._bytes0       = []            # [byte or None, ]
+        self._bytes        = bytearray()
+        self._mirror       = None # Linked control
+        self._undoredo     = HexByteCommandProcessor(self)
 
         self.SetStyleSpecs()
         cw = self.TextWidth(0, "X")
@@ -5381,6 +5384,16 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         """Selects the bytes from first position up to but not including second."""
         return super(HexTextCtrl, self).SetSelection(self._PosIn(from_), self._PosIn(to_) - (from_ != to_))
     Selection = property(GetSelection)
+
+
+    def GetShowChanges(self):
+        """Returns whether changes from value given in SetValue() are highlighted."""
+        return self._show_changes
+    def SetShowChanges(self, show_changes):
+        """Sets whether changes from value given in SetValue() are highlighted; restyles text."""
+        self._show_changes = bool(show_changes)
+        self._Restyle()
+    ShowChanges = property(GetShowChanges, SetShowChanges)
 
 
     def GetHex(self):
@@ -5652,8 +5665,10 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
                 self.SetFirstVisibleLine(line0)
             else:
                 sself.Replace(pos - idx, pos - idx + 2, "%02X" % byte)
-                self.StartStyling(pos - idx)
-                self.SetStyling(2, self.STYLE_CHANGED if self._bytes[bpos] != self._bytes0[bpos] else 0)
+                if self._show_changes:
+                    style = self.STYLE_CHANGED if self._bytes[bpos] != self._bytes0[bpos] else 0
+                    self.StartStyling(pos - idx)
+                    self.SetStyling(2, style)
             sself.SetSelection(pos + 1 + idx, pos + 1 + idx)
             " @todo siin võiks ka advancida kui not self._addressed "
             cmd.Store()
@@ -5714,6 +5729,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
     def _Restyle(self):
         """Restyles current content according to changed state."""
+        if not self._show_changes: return
         eventmask0, _ = self.GetModEventMask(), self.SetModEventMask(0)
         try:
             self.StartStyling(0)
