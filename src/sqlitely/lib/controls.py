@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    27.08.2024
+@modified    21.09.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -1733,6 +1733,7 @@ class FindReplaceDialog(wx.Dialog):
     def _DoReplaceAll(self, pattern):
         """Searches and replaces all matches for pattern."""
         self._RefreshStatus(searching=True)
+        self._match = None
         kwargs = dict(reverse=False, wrap=False)
         kwargs["startpos" if isinstance(self._target, wx.grid.Grid) else "startspan"] = (0, 0)
         while self._FindMatch(pattern, **kwargs):
@@ -1745,6 +1746,7 @@ class FindReplaceDialog(wx.Dialog):
     def _DoCount(self, pattern):
         """Returns count of all occurrences of pattern in target."""
         self._RefreshStatus(searching=True)
+        self._match = None
         count, kwargs = 0, dict(reverse=False, wrap=False)
         kwargs["startpos" if isinstance(self._target, wx.grid.Grid) else "startspan"] = (0, 0)
         while self._FindMatch(pattern, **kwargs):
@@ -1762,9 +1764,10 @@ class FindReplaceDialog(wx.Dialog):
         if isinstance(self._target, wx.grid.Grid):
             self._target.GoToCell(*self._matchpos)
         else:
-            self._target.ShowPosition(self._matchspan[0]) # Try to make whole selection visible
-            self._target.ShowPosition(self._matchspan[1])
-            self._target.SetSelection(*self._matchspan)
+            span = self._GetSpanForTextCtrl(self._matchspan)
+            self._target.ShowPosition(span[0]) # Try to make whole selection visible
+            self._target.ShowPosition(span[1])
+            self._target.SetSelection(*span)
 
 
     def _ReplaceMatch(self):
@@ -1790,8 +1793,9 @@ class FindReplaceDialog(wx.Dialog):
             wx.PostEvent(self._target, evt)
             self._matchspan = (span[0], span[1] + len(v2) - len(v1))
         else:
+            span, span0 = self._GetSpanForTextCtrl(self._matchspan), self._matchspan
             self._target.Replace(span[0], span[1], text)
-            self._matchspan = (span[0], span[1] + len(text) - (span[1] - span[0]))
+            self._matchspan = (span0[0], span0[1] + len(text) - (span0[1] - span0[0]))
         self._status["replaced"] = self._status.get("replaced", 0) + 1
 
 
@@ -1853,8 +1857,8 @@ class FindReplaceDialog(wx.Dialog):
         Returns target text to search, and text position.
 
         @param   direction  1 for forward, -1 for backward, 0 for current grid cell
-        @param   startpos   target position to start from if not current; (row, col) for grid
         @param   startspan  (start, end) of text span to continue from
+        @param   startpos   target grid position to start from if not current, as (row, col)
         @param   wrap       start from other end in direction of given or current position
 
         @return             (text, span, pos); text as full or remaining side in target;
@@ -1904,14 +1908,29 @@ class FindReplaceDialog(wx.Dialog):
                     text = text[span[0]:span[1]]
         else:
             text = self._target.Value
-            mystart = startspan or [self._target.InsertionPoint] * 2
-            span = (0, mystart[wrap]) if (direction < 0) ^ wrap else (mystart[not wrap], len(text))
-            if startspan and startspan[0] == startspan[1] and not ((direction < 0) ^ wrap):
-                span = (mystart[not wrap] + 1, len(text))  # 0-length match: advance
+            mystartspan = startspan or [self._target.InsertionPoint] * 2
+            if (direction < 0 and not wrap) or (direction > 0 and wrap):
+                span = (0, mystartspan[0])
+            else: # Going backward and wrapping, or forward and not wrapping
+                advance = self._match and startspan and startspan[0] == startspan[1] # 0-length match
+                span = (mystartspan[1] + bool(advance), len(text))
             if span != (0, len(text)):
                 text = text[span[0]:span[1]]
             pos = span
         return text, span, pos
+
+
+    def _GetSpanForTextCtrl(self, span):
+        """Returns given text span for target text control, usable for SetSelection() et al."""
+        if not isinstance(self._target, wx.stc.StyledTextCtrl) \
+        or len(self._target.Text) == len(self._target.TextRaw):
+            return span
+        # Workaround for StyledTextCtrl text indexes being for raw bytes not unicode
+        unichars = self._target.Value[:span[1]]
+        rawchars = [x.encode("utf-8") for x in unichars]
+        rawfrom = sum(map(len, rawchars[:span[0]]))
+        rawto   = rawfrom + sum(map(len, rawchars[span[0]:span[1]]))
+        return (rawfrom, rawto)
 
 
     def _IsAtMatch(self, pattern):
@@ -1921,9 +1940,11 @@ class FindReplaceDialog(wx.Dialog):
             if isinstance(self._target, wx.grid.Grid):
                 text, pos = None, (self._target.GridCursorRow, self._target.GridCursorCol)
                 if self._target.IsColShown(self._matchpos[1]): text = self._target.GetCellValue(pos)
+                result = pattern == self._pattern and text == self._text and pos == self._matchpos
             else:
                 text, pos = self._target.Value, self._target.GetSelection()
-            result = pattern == self._pattern and text == self._text and pos == self._matchpos
+                result = pattern == self._pattern and text == self._text and \
+                         pos == self._GetSpanForTextCtrl(self._matchspan)
         return result
 
 
