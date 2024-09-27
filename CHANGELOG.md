@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.4, 2024-09-18
+2.4, 2024-09-25
 ---------------
 - add support for generated columns
 - add find/replace dialog to data grids and column editors and database schema text
@@ -11,6 +11,7 @@ CHANGELOG
 - show STRICT checkbox for STRICT table in schema editor even if current SQLite does not support it
 - add ANY as possible column type if SQLite version supports STRICT
 - improve converting changed values in table grids to original type for untyped columns
+- fix and improve editing and movement in hex editor
 - tweak initial size of resizable text controls in data grid row dialog
 - re-hide hidden columns on refreshing data grid
 - use double precision for floating-point values in column editor

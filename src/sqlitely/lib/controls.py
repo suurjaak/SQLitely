@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    21.09.2024
+@modified    25.09.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -5412,8 +5412,8 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         cmd = HexByteCommand(self)
         selection = self.GetSelection()
         if selection[0] != selection[1] and not self._fixed:
-            del self._bytes [selection[0]:selection[1] + 1]
-            del self._bytes0[selection[0]:selection[1] + 1]
+            del self._bytes [selection[0]:selection[1]]
+            del self._bytes0[selection[0]:selection[1]]
 
         value = self._AdaptValue(text)
         try: v = bytearray.fromhex(value.decode("latin1")) # Interpret as hex text if possible
@@ -5443,7 +5443,6 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         """
         if self._fixed and not self._bytes: return # NULL number
         if from_ >= len(self._bytes): return # Out of bounds
-
 
         self._QueueEvents()
 
@@ -5531,11 +5530,13 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
         if event.CmdDown() and not event.AltDown() and not event.ShiftDown() \
         and ord("Z") == event.KeyCode:
-            return self.Undo(mirror=True)
+            self.Undo(mirror=True)
+            return
 
         if event.CmdDown() and not event.AltDown() and (not event.ShiftDown() \
         and ord("Y") == event.KeyCode) or (event.ShiftDown() and ord("Z") == event.KeyCode):
-            return self.Redo(mirror=True)
+            self.Redo(mirror=True)
+            return
 
         if event.CmdDown() and not event.AltDown() and (not event.ShiftDown()
         and ord("V") == event.KeyCode or event.ShiftDown() and event.KeyCode in KEYS.INSERT):
@@ -5549,139 +5550,266 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
             if text is not None: self.InsertInto(text)
             return
 
-        if not event.HasModifiers() and (event.KeyCode in KEYS.ENTER + KEYS.SPACE
-        or (unichr(event.UnicodeKey) not in self.MASK and event.KeyCode not in self.NUMPAD_NUMS) \
-        and event.KeyCode not in KEYS.NAVIGATION + KEYS.COMMAND):
-            return
-        event.Skip()
+        if event.HasModifiers():
+            event.Skip()
+        else:
+            is_enter_or_space = event.KeyCode in KEYS.ENTER + KEYS.SPACE
+            is_hex = unichr(event.UnicodeKey) in self.MASK 
+            is_numpad = event.KeyCode in self.NUMPAD_NUMS
+            is_cmd_or_nav = event.KeyCode in KEYS.NAVIGATION + KEYS.COMMAND
+            if not is_enter_or_space and (is_numpad or is_hex or is_cmd_or_nav):
+                event.Skip()
 
 
     def OnKeyDown(self, event):
         """Handler for key down, moves caret to word boundary."""
         self._QueueEvents()
-        sself = super(HexTextCtrl, self)
 
         if event.KeyCode in KEYS.LEFT + KEYS.RIGHT:
-            direction = -1 if event.KeyCode in KEYS.LEFT else 1
-            pos0 = sself.CurrentPos
-            linepos0 = pos0 - self.PositionFromLine(self.LineFromPosition(pos0))
-            if event.ShiftDown():
-                func = self.WordLeftExtend if direction < 0 else self.WordRightEndExtend
-            else:
-                func = self.WordLeft if direction < 0 else self.WordRight
-            func()
-            pos = sself.CurrentPos
-            if self._addressed:
-                linepos = pos - self.PositionFromLine(self.LineFromPosition(pos))
-                if not event.ShiftDown() and linepos >= self.WIDTH * 3 - 1 \
-                or event.ShiftDown() and (not linepos and not linepos0
-                                          or not linepos0 and linepos >= self.WIDTH * 3 - 1):
-                    func()
-            if direction < 0 and not self.GetSelectionEmpty() and pos > sself.GetSelection()[0]:
-                self.CharLeftExtend()
+            self._OnKeyDownLeftRight(event)
+
+        elif event.KeyCode in KEYS.UP + KEYS.DOWN:
+            self._OnKeyDownUpDown(event)
 
         elif event.KeyCode in KEYS.END and not event.CmdDown():
-            if event.ShiftDown(): self.LineEndExtend()
+            if event.ShiftDown():
+                self.LineEndExtend()
             else:
-                pos = self.GetLineEndPosition(self.CurrentLine)
-                sself.SetSelection(pos, pos)
+                text_pos2 = self.GetLineEndPosition(self.CurrentLine)
+                super(HexTextCtrl, self).SetSelection(text_pos2, text_pos2)
+
         elif event.KeyCode in KEYS.DELETE + KEYS.BACKSPACE:
-            if self._fixed: return
+            self._OnKeyDownDeleteBackspace(event)
 
-            cmd = HexByteCommand(self)
-            selection = self.GetSelection()
-            if selection[0] != selection[1]:
-                del self._bytes [selection[0]:selection[1]]
-                del self._bytes0[selection[0]:selection[1]]
-                self.SetSelection(selection[0], selection[0])
-                cmd.Submit(mirror=True)
-                return
-
-            pos        = sself.CurrentPos
-            line0      = sself.FirstVisibleLine
-            line       = self.LineFromPosition(pos)
-            linepos    = pos - self.PositionFromLine(line)
-            direction  = -(event.KeyCode in KEYS.BACKSPACE)
-            is_lastpos = (pos == self.GetLastPosition())
-
-            if not self._bytes or not pos and direction \
-            or is_lastpos and not direction:
-                return
-
-            bpos, idx = self.CurrentPos, linepos % 3
-            if is_lastpos: bpos, idx = min(bpos, len(self._bytes) - 1), 0
-            elif direction and not idx: bpos -= 1 # Backspacing over previous byte
-            for bb in self._bytes, self._bytes0: del bb[bpos]
-
-            if line == self.LineCount - 1 and (not direction or linepos):
-                # Last line and not backspacing from first byte
-                frompos = max(pos + (-idx if idx else direction * 3), 0)
-                topos   = sself.Length if frompos + 3 > sself.Length else frompos + 3
-                self.Remove(frompos, topos)
-                if idx:
-                    if bpos >= len(self._bytes): self.DeleteBack()
-                    sself.SetSelection(frompos, frompos)
-                self._Remargin()
-            else:
-                self._Populate()
-                sself.SetSelection(*(pos + direction * 3 - idx, ) * 2)
-            cmd.Store()
         elif not event.HasModifiers() \
         and (unichr(event.UnicodeKey) in self.MASK or event.KeyCode in self.NUMPAD_NUMS) \
         and (not event.ShiftDown() or unichr(event.UnicodeKey) not in string.digits):
-            if self._fixed and not self._bytes: return # NULL number
+            self._OnKeyDownHex(event)
 
-            cmd = HexByteCommand(self)
-            selection = self.GetSelection()
-            if selection[0] != selection[1] and not self._fixed:
-                del self._bytes [selection[0]:selection[1] + 1]
-                del self._bytes0[selection[0]:selection[1] + 1]
-
-            line0 = sself.FirstVisibleLine
-            pos   = sself.CurrentPos
-            linepos = pos - self.PositionFromLine(self.LineFromPosition(pos))
-            bpos, idx = self.CurrentPos, linepos % 3
-            if pos == self.GetLastPosition():
-                if self._fixed: return
-                pos, bpos, idx = pos + bool(self._bytes), bpos + bool(self._bytes), 0
-                self._bytes.append(0), self._bytes0.append(None)
-            elif idx > 1: idx, pos = 0, pos - idx
-            elif not idx and not self.Overtype:
-                self._bytes.insert(bpos, 0), self._bytes0.insert(bpos, None)
-            bpos = min(bpos, len(self._bytes) - 1)
-
-            number = self.NUMPAD_NUMS[event.KeyCode] if event.KeyCode in self.NUMPAD_NUMS \
-                     else int(unichr(event.UnicodeKey), 16)
-            byte = self._bytes[bpos]
-
-            b1 = byte >> 4 if idx else number
-            b2 = number if idx else byte & 0x0F
-            byte = b1 * 16 + b2
-            self._bytes[bpos] = byte
-
-            if selection[0] != selection[1] and not self._fixed \
-            or not ((self.Overtype or idx) and pos < self.GetLastPosition()):
-                self._Populate()
-                self.SetFirstVisibleLine(line0)
-            else:
-                sself.Replace(pos - idx, pos - idx + 2, "%02X" % byte)
-                if self._show_changes:
-                    style = self.STYLE_CHANGED if self._bytes[bpos] != self._bytes0[bpos] else 0
-                    self.StartStyling(pos - idx)
-                    self.SetStyling(2, style)
-            sself.SetSelection(pos + 1 + idx, pos + 1 + idx)
-            " @todo siin võiks ka advancida kui not self._addressed "
-            cmd.Store()
         elif event.KeyCode in KEYS.INSERT and not event.HasAnyModifiers():
             if not self._fixed: event.Skip() # Disallow changing overtype if length fixed
+
         elif event.KeyCode not in KEYS.TAB:
             event.Skip()
 
 
     def OnMouse(self, event):
-        """Handler for mouse event, moves care to word boundary."""
+        """Handler for mouse event, moves caret to word boundary."""
         event.Skip()
-        self._QueueEvents(singlepos=event.LeftUp())
+        if event.LeftUp() or event.RightUp():
+            self._QueueEvents(after_mouse_click=True)
+
+
+    def _OnKeyDownLeftRight(self, event):
+        """Handler pressing left or right arrow keys."""
+        if not self._bytes: return
+
+        sself = super(HexTextCtrl, self)
+        direction = -1 if event.KeyCode in KEYS.LEFT else 1
+        text_pos = sself.CurrentPos
+        pos_in_line = self._GetPositionInLine(text_pos)
+        pos_in_triplet = pos_in_line % 3
+        has_selection = not self.GetSelectionEmpty()
+        text_selection = sself.GetSelection()
+        if event.ShiftDown(): # Select text
+            if pos_in_triplet == 1: # On byte second digit
+                anchor2 = text_pos + 1 if direction < 0 else text_pos - 1
+                text_pos2 = text_pos - 1 if direction < 0 else text_pos + 1
+            elif has_selection: # Change current selection
+                text_selection2 = list(text_selection)
+                active_side = 1 if sself.Anchor < sself.CurrentPos else 0 # Left-to-right vs reverse
+                is_reducing = (active_side == 1) != (direction > 0) # Moving back towards anchor
+                if is_reducing and text_selection[1] - text_selection[0] <= 3: # Single byte
+                    text_pos2 = text_selection2[1 - active_side] + (1 if direction > 0 else 0)
+                    text_selection2 = [text_pos2] * 2
+                else:
+                    text_pos2 = max(0, text_selection2[active_side] + direction * 3)
+                    text_selection2[active_side] = text_pos2
+                if text_selection2 == list(text_selection):
+                    return
+                step = 1 if sself.Anchor < sself.CurrentPos else -1 # Left-to-right vs reverse
+                anchor2, text_pos2 = text_selection2[::step]
+            elif self._addressed and pos_in_line >= self.WIDTH * 3 - 1: # At line end
+                anchor2 = text_pos if direction < 0 else text_pos + 1
+                text_pos2 = text_pos - 2 if direction < 0 else text_pos + 3
+            else: # In ordinary byte position
+                anchor2 = text_pos - 1 if direction < 0 else text_pos
+                text_pos2 = text_pos - 3 if direction < 0 else text_pos + 2
+                if pos_in_triplet == 2 and direction < 0: # Beyond last byte on incomplete line
+                    anchor2, text_pos2 = text_pos, text_pos - 2
+
+            sself.SetAnchor(anchor2)
+            sself.SetCurrentPos(text_pos2)
+
+        else: # Move cursor
+            text_pos2 = text_pos + direction * 3
+            if pos_in_triplet == 1: # At second digit of byte
+                text_pos2 = text_pos + (-1 if direction < 0 else 2)
+            elif self._addressed:
+                if pos_in_line >= self.GetLineLength(self.CurrentLine) - 1:
+                    text_pos2 = text_pos + (-2 if direction < 0 else 1)
+            sself.SetSelection(text_pos2, text_pos2)
+
+
+    def _OnKeyDownUpDown(self, event):
+        """Handler pressing up or down arrow keys."""
+        if not self._bytes: return
+
+        sself = super(HexTextCtrl, self)
+        direction = -1 if event.KeyCode in KEYS.UP else 1
+        text_pos = sself.CurrentPos
+        pos_in_line = self._GetPositionInLine(text_pos)
+        pos_in_triplet = pos_in_line % 3
+        has_selection = not self.GetSelectionEmpty()
+        text_selection = sself.GetSelection()
+        if event.ShiftDown(): # Select text
+            anchor2 = sself.Anchor
+            if self._addressed:
+                text_pos2 = max(0, min(text_pos + direction * self.WIDTH * 3, len(self._bytes) * 3))
+                if pos_in_triplet == 1: # At second digit of byte: include current byte in selection
+                    anchor2 += 1 if direction < 0 else -1
+                    text_pos2 += -1 if direction < 0 else 1
+                elif not has_selection:
+                    if pos_in_triplet == 2: # At line end: omit linefeed from selection
+                        anchor2 += 1 if direction > 0 else 0
+                        text_pos2 += 1 if direction < 0 else 0
+            else:
+                text_pos2 = 0 if direction < 0 else len(self._bytes) * 3
+
+            sself.SetAnchor(anchor2)
+            sself.SetCurrentPos(text_pos2)
+
+        else: # Move cursor
+            if self._addressed:
+                text_pos2 = max(0, min(text_pos + direction * self.WIDTH * 3, len(self._bytes) * 3))
+                if pos_in_triplet == 2: # At line end
+                    if direction < 0 and pos_in_line < self.WIDTH * 3 - 1: # At incomplete line end
+                        text_pos2 += 1 # Move to next byte start in upper line
+            else:
+                text_pos2 = 0 if direction < 0 else len(self._bytes) * 3
+            sself.SetSelection(text_pos2, text_pos2)
+
+
+    def _OnKeyDownDeleteBackspace(self, event):
+        """Handler pressing Delete or Backspace."""
+        if self._fixed or not self._bytes: return
+
+        cmd = HexByteCommand(self)
+        selection = self.GetSelection()
+        if selection[0] != selection[1]:
+            del self._bytes [selection[0]:selection[1]]
+            del self._bytes0[selection[0]:selection[1]]
+            self.SetSelection(selection[0], selection[0])
+            cmd.Submit(mirror=True)
+            return
+
+        sself = super(HexTextCtrl, self)
+        direction = -1 if event.KeyCode in KEYS.BACKSPACE else 1
+        text_pos = sself.CurrentPos
+        pos_in_line = self._GetPositionInLine(text_pos)
+        line_index = self.LineFromPosition(text_pos)
+        is_beyond_content = (sself.SelectionEnd == self.GetLastPosition())
+
+        if text_pos == 0 and direction < 0 or is_beyond_content and direction > 0:
+            return # Backspacing at start or deleting at end
+
+        byte_pos, pos_in_triplet = self.CurrentPos, pos_in_line % 3
+        if is_beyond_content:
+            byte_pos = min(byte_pos, len(self._bytes) - 1)
+            pos_in_triplet = 0
+        elif direction < 0 and not pos_in_triplet:
+            byte_pos -= 1 # Backspacing over previous byte
+        elif self._addressed and pos_in_line >= self.WIDTH * 3 - 1:
+            if direction > 0: # Delete at line end: apply on first byte of next line
+                byte_pos += 1
+            pos_in_triplet = 0
+        for bb in self._bytes, self._bytes0: del bb[byte_pos]
+
+        needs_reflow = line_index < self.LineCount - 1 or (pos_in_line == 0 and direction < 0)
+        if needs_reflow:
+            self._Populate()
+            text_pos2 = self._PosIn(byte_pos)
+            sself.SetSelection(text_pos2, text_pos2)
+        else: # Last line and not backspacing from first byte: change in-place
+            remove_from = text_pos
+            if pos_in_triplet:
+                remove_from -= 1 # Include first digit of byte
+            elif direction < 0 and self.GetSelectionEmpty():
+                remove_from -= 3
+            elif direction > 0 and byte_pos >= len(self._bytes) - 1:
+                remove_from -= 1 # Drop trailing space
+            remove_until = min(sself.Length, remove_from + 3)
+            sself.Replace(remove_from, remove_until, "")
+            self._Remargin()
+        cmd.Store()
+
+
+    def _OnKeyDownHex(self, event):
+        """Handler pressing hex input keys."""
+        if self._fixed and not self._bytes: return # NULL value
+
+        cmd = HexByteCommand(self)
+
+        selection = self.GetSelection() # Byte positions
+        has_selection = (selection[0] != selection[1])
+        is_replacing_selection = has_selection and not self._fixed
+        if is_replacing_selection:
+            del self._bytes [selection[0]:selection[1]]
+            del self._bytes0[selection[0]:selection[1]]
+
+        sself = super(HexTextCtrl, self)
+        byte_pos = self.CurrentPos
+        text_pos = sself.CurrentPos
+        is_beyond_content = (sself.SelectionEnd == self.GetLastPosition())
+        pos_in_triplet = 0 # Position index in byte triplet "XY "
+        if is_replacing_selection:
+            byte_pos = selection[0]
+            text_pos = byte_pos * 3
+        elif self._fixed and (has_selection or is_beyond_content):
+            if is_beyond_content: byte_pos = len(self._bytes) - 1
+            text_pos = byte_pos * 3
+            is_beyond_content = False
+        else:
+            pos_in_line = self._GetPositionInLine(text_pos)
+            pos_in_triplet = pos_in_line % 3
+
+        if is_beyond_content: # At very end: add new byte
+            if self._bytes: text_pos, byte_pos = text_pos + 1, byte_pos + 1
+            pos_in_triplet = 0
+            self._bytes.append(0), self._bytes0.append(None)
+        elif pos_in_triplet > 1: # At space between bytes: move pointer back to byte start
+            text_pos, pos_in_triplet = text_pos - pos_in_triplet, 0
+        elif pos_in_triplet == 0: # At first digit of byte
+            if not self.Overtype: # Insert new byte at current position
+                self._bytes.insert(byte_pos, 0), self._bytes0.insert(byte_pos, None)
+        byte_pos = min(byte_pos, len(self._bytes) - 1)
+
+        byte = self._bytes[byte_pos]
+        input_number = self.NUMPAD_NUMS[event.KeyCode] if event.KeyCode in self.NUMPAD_NUMS \
+                       else int(unichr(event.UnicodeKey), 16)
+        if pos_in_triplet == 0: # Write first digit in byte
+            digit1, digit2 = input_number, byte & 0x0F
+        else: # Write second digit in byte
+            digit1, digit2 = byte >> 4, input_number
+        byte = digit1 * 16 + digit2
+        self._bytes[byte_pos] = byte
+
+        is_inserting_new = is_beyond_content or (pos_in_triplet == 0 and not self.Overtype)
+        if is_replacing_selection or is_inserting_new:
+            initial_visible_line = sself.FirstVisibleLine
+            self._Populate()
+            self.SetFirstVisibleLine(initial_visible_line)
+        else: # Overwrite current text with new value for byte
+            byte_start_pos = text_pos - pos_in_triplet
+            sself.Replace(byte_start_pos, byte_start_pos + 2, "%02X" % byte)
+            if self._show_changes:
+                style = self.STYLE_CHANGED
+                if self._bytes[byte_pos] == self._bytes0[byte_pos]: style = 0
+                self.StartStyling(byte_start_pos)
+                self.SetStyling(2, style)
+        text_pos2 = text_pos + 1 + bool(pos_in_triplet) # Go to next digit, possibly next byte
+        sself.SetSelection(text_pos2, text_pos2)
+        cmd.Store()
 
 
     def _AdaptValue(self, value):
@@ -5701,11 +5829,11 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
 
     def _PosIn(self, pos):
-        if not self._addressed: return pos
+        if not self._addressed: return pos * 3
         line, linebpos = divmod(pos, self.WIDTH)
         return line * self.WIDTH * 3 + linebpos * 3
     def _PosOut(self, pos):
-        if not self._addressed: return pos
+        if self._addressed: return pos // 3
         line = self.LineFromPosition(pos)
         linepos = pos - self.PositionFromLine(self.LineFromPosition(pos))
         return line * self.WIDTH + linepos // 3
@@ -5758,6 +5886,12 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         finally: self.SetModEventMask(eventmask0)
 
 
+    def _GetPositionInLine(self, pos):
+        """Returns position in line for global text position."""
+        line_start_pos = self.PositionFromLine(self.LineFromPosition(pos)) if self._addressed else 0
+        return pos - line_start_pos
+
+
     def _GetValueState(self, *value):
         """Returns value type and data dict, from current content or given value."""
         if not value:
@@ -5790,44 +5924,75 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         if self._fixed and not self.Overtype: self.SetOvertype(True)
 
 
-    def _QueueEvents(self, singlepos=False):
+    def _QueueEvents(self, after_mouse_click=False):
         """Raises CaretPositionEvent or LinePositionEvent or SelectionEvent if changed after."""
         sself = super(HexTextCtrl, self)
-        pos, firstline = self.CurrentPos, self.FirstVisibleLine
-        notselected, selection = self.GetSelectionEmpty(), list(sself.GetSelection())
+        text_selection1 = sself.GetSelection()
+        byte_pos1, firstline1 = self.CurrentPos, self.FirstVisibleLine
+
+        def adjust_selection(): # Ensures valid position or byte selection
+            text_selection2, notselected2 = sself.GetSelection(), self.GetSelectionEmpty()
+            new_selection = list(text_selection2)
+            left_pos_in_line, right_pos_in_line = map(self._GetPositionInLine, text_selection2)
+            pos_in_left_triplet = left_pos_in_line % 3
+            pos_in_right_triplet = right_pos_in_line % 3
+
+            starts_beyond_content = (left_pos_in_line >= self.WIDTH * 3 - 1)
+            any_byte_selected = (text_selection2[1] - text_selection2[0]) > 1
+            if self._addressed and starts_beyond_content and not any_byte_selected:
+                if sself.Anchor < sself.CurrentPos and pos_in_right_triplet == 0:
+                    # Left to right over linefeed: move to first byte of next line
+                    new_pos = self._PosIn(self.CurrentPos)
+                else: # Move to line end
+                    new_pos = text_selection2[0] - max(0, pos_in_left_triplet - 2)
+                new_selection = [new_pos] * 2 # Set to line end
+            elif notselected2 and pos_in_left_triplet == pos_in_left_triplet == 1:
+                pass # At second digit of byte: allow
+            elif pos_in_left_triplet == 1: # At second digit of byte
+                new_selection[0] -= 1 # Move back to first digit
+            elif pos_in_left_triplet == 2: # At space between bytes
+                new_selection[0] += 1 # Move to first digit of next byte
+
+            if notselected2:
+                new_selection[1] = new_selection[0]
+            elif new_selection[0] != new_selection[1]:
+                if pos_in_right_triplet == 0: # At first digit of next byte
+                    new_selection[1] -= 1 # Move back before trailing space
+                elif pos_in_right_triplet == 1: # At second digit of byte
+                    new_selection[1] += 1 # Move forward to byte end
+
+            if new_selection != list(text_selection2):
+                if new_selection[0] == new_selection[1]:
+                    sself.SetSelection(*new_selection)
+                else:
+                    step = 1 if sself.Anchor < sself.CurrentPos else -1 # Left-to-right vs reverse
+                    new_anchor, new_currentpos = new_selection[::step]
+                    sself.SetAnchor(new_anchor)
+                    sself.SetCurrentPos(new_currentpos)
 
         def after():
             if not self: return
 
-            notselected2, selection2 = self.GetSelectionEmpty(), list(sself.GetSelection())
-            if singlepos or selection2[0] != selection2[1] and not self.HasCapture():
-                linepos1 = selection2[0] - self.PositionFromLine(self.LineFromPosition(selection2[0]))
-                linepos2 = selection2[1] - self.PositionFromLine(self.LineFromPosition(selection2[1]))
-                if linepos1 % 3: selection2[0] += 1 if linepos1 % 3 == 2 else -1
-                if notselected2: selection2[1] = selection2[0]
-                elif linepos1 != linepos2 and linepos2 % 3 != 2:
-                    selection2[1] += 1 if linepos2 % 3 == 1 else -1
-            if selection2 != list(sself.GetSelection()):
-                if sself.Anchor == selection2[0]: sself.SetSelection(*selection2)
-                else: sself.SetAnchor(selection2[1]), sself.SetCurrentPos(selection2[0])
+            if after_mouse_click: adjust_selection()
 
-            if pos != self.CurrentPos:
+            text_selection2 = sself.GetSelection()
+            byte_pos2, firstline2 = self.CurrentPos, self.FirstVisibleLine
+            if after_mouse_click or byte_pos1 != byte_pos2: # Notify of new position
                 evt = CaretPositionEvent(self.Id)
                 evt.SetEventObject(self)
-                evt.SetInt(self.CurrentPos)
+                evt.SetInt(byte_pos2)
                 wx.PostEvent(self, evt)
-            elif firstline != self.FirstVisibleLine:
+            elif firstline1 != firstline2: # Notify of scroll change
                 evt = LinePositionEvent(self.Id)
                 evt.SetEventObject(self)
-                evt.SetInt(self.FirstVisibleLine)
+                evt.SetInt(firstline2)
                 wx.PostEvent(self, evt)
-            if notselected != notselected2 \
-            or not notselected and selection != selection2:
+            if after_mouse_click or text_selection1 != text_selection2: # Notify of selection change
                 evt = SelectionEvent(self.Id)
                 evt.SetEventObject(self)
                 wx.PostEvent(self, evt)
-        wx.CallAfter(after)
 
+        wx.CallAfter(after)
 
 
 class ByteTextCtrl(wx.stc.StyledTextCtrl):
@@ -6116,7 +6281,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
             del self._bytes [selection[0]:selection[1]]
             del self._bytes0[selection[0]:selection[1]]
 
-        pos = self.CurrentPos
+        pos = selection[0]
         v = self._AdaptValue(text)
         maxlen = min(len(v), self.Length - pos) if self._fixed else len(v)
         v = v[:maxlen]
@@ -6149,8 +6314,8 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         cmd = HexByteCommand(self)
         selection = self.GetSelection()
         if selection[0] != selection[1] and not self._fixed:
-            del self._bytes [selection[0]:selection[1] + 1]
-            del self._bytes0[selection[0]:selection[1] + 1]
+            del self._bytes [selection[0]:selection[1]]
+            del self._bytes0[selection[0]:selection[1]]
             self.DeleteBack()
         elif self._fixed:
             self.SetSelection(selection[0], selection[0])
@@ -6159,7 +6324,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         if not event.UnicodeKey: event.Skip()
         elif sself.CurrentPos == self.GetLastPosition() and self._fixed: pass
         else:
-            pos, bpos = sself.CurrentPos, self.CurrentPos
+            pos, bpos = sself.CurrentPos, selection[0]
             tbyte = re.sub("[^\x20-\x7e]", ".", chr(event.KeyCode))
             if bpos >= len(self._bytes) or pos >= self.GetLastPosition():
                 self._bytes0.append(None), self._bytes.append(0)
