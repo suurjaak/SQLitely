@@ -6062,18 +6062,21 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         if not value:
             state = {k: getattr(self, k) for k in ("_bytes", "_bytes0", "_fixed", "_type")}
             return copy.deepcopy(state)
+
         value = value[0]
         if isinstance(value, bool): value = int(value)
         bytesvalue = self._AdaptValue(value)
+        bytes0 = self._bytes0[:]
+        diff = len(bytesvalue) - len(bytes0)
+        if diff > 0:   bytes0.extend([None] * diff)
+        elif diff < 0: del bytes0[abs(diff):]
+
         state = {
             "_bytes":  bytearray(bytesvalue),
-            "_bytes0": [x if isinstance(x, int) else ord(x) for x in bytesvalue],
+            "_bytes0": bytes0,
             "_fixed":  is_fixed(value) or value is None,
             "_type":   type(value) if is_fixed(value) or isinstance(value, string_types) else str,
         }
-        diff = len(state["_bytes0"]) - len(state["_bytes"])
-        if diff < 0: state["_bytes0"] = state["_bytes0"] + [None] * abs(diff)
-        elif diff:   state["_bytes0"] = state["_bytes0"][:len(state["_bytes0"]) - diff]
         return state
 
 
@@ -6401,18 +6404,21 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         if not value:
             state = {k: getattr(self, k) for k in ("_bytes", "_bytes0", "_fixed", "_type")}
             return copy.deepcopy(state)
+
         value = value[0]
         if isinstance(value, bool): value = int(value)
         bytesvalue = self._AdaptValue(value)
+        bytes0 = self._bytes0[:]
+        diff = len(bytesvalue) - len(bytes0)
+        if diff > 0:   bytes0.extend([None] * diff)
+        elif diff < 0: del bytes0[abs(diff):]
+
         state = {
             "_bytes":  bytearray(bytesvalue),
-            "_bytes0": [x if isinstance(x, int) else ord(x) for x in bytesvalue],
+            "_bytes0": bytes0,
             "_fixed":  is_fixed(value) or value is None,
             "_type":   type(value) if is_fixed(value) or isinstance(value, string_types) else str,
         }
-        diff = len(state["_bytes0"]) - len(state["_bytes"])
-        if diff < 0: state["_bytes0"] = state["_bytes0"] + [None] * abs(diff)
-        elif diff:   state["_bytes0"] = state["_bytes0"][:len(state["_bytes0"]) - diff]
         return state
 
 
