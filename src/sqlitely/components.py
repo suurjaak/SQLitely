@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.09.2024
+@modified    29.09.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -9570,7 +9570,7 @@ class ColumnDialog(wx.Dialog):
             elif event.EventType == wx.wxEVT_SCROLLWIN_BOTTOM:   pos1  = ctrl1.GetScrollRange(wx.VERTICAL)
             ctrl2.SetFirstVisibleLine(pos1)
             if isinstance(event, controls.CaretPositionEvent):
-                ctrl2.SetSelection(event.Int, event.Int)
+                ctrl2.MirrorSelection()
 
             state["scrolling"][ctrl1] = state["scrolling"][ctrl2] = False
 
@@ -9586,7 +9586,7 @@ class ColumnDialog(wx.Dialog):
 
         def on_select(event):
             ctrl1, ctrl2 = event.EventObject, event.EventObject.Mirror
-            ctrl2.SetSelection(*ctrl1.GetSelection())
+            ctrl2.MirrorSelection()
 
         def on_tab(event):
             if event.KeyCode in controls.KEYS.TAB:

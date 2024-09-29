@@ -5512,6 +5512,29 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         wx.PostEvent(self, evt)
 
 
+    def MirrorSelection(self):
+        """Sets selection or cursor position from mirrored control, if any."""
+        if not self._mirror: return
+
+        byte_selection = self._mirror.Selection
+        if byte_selection[0] != byte_selection[1]:
+            self.SetSelection(*byte_selection)
+            return
+
+        byte_pos = byte_selection[0]
+        text_pos_shift = 0
+
+        if self._addressed:
+            mirrorbase = super(type(self._mirror), self._mirror)
+            mirror_text_pos = mirrorbase.CurrentPos
+            line_start = mirrorbase.PositionFromLine(mirrorbase.LineFromPosition(mirror_text_pos))
+            mirror_pos_in_line = mirror_text_pos - line_start
+            if mirror_pos_in_line >= self._mirror.WIDTH:  # At line end
+                text_pos_shift = -1 # Move back from line to previous line end
+
+        self._ApplyPositions(byte_pos, text_pos_shift=text_pos_shift)
+
+
     def OnFocus(self, event):
         """Handler for control getting focus, shows caret."""
         event.Skip()
@@ -5627,7 +5650,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
             if not self._fixed: event.Skip() # Disallow changing overtype if length fixed
 
         elif event.KeyCode in KEYS.TAB:
-            if not self.Mirror: # Allow normal tab navigation if stand-alone control
+            if not self._mirror: # Allow normal tab navigation if stand-alone control
                 direction = wx.NavigationKeyEvent.IsBackward if event.ShiftDown() \
                             else wx.NavigationKeyEvent.IsForward
                 self.Parent.NavigateIn(direction)
@@ -6305,6 +6328,31 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         evt.SetModificationType(wx.stc.STC_PERFORMED_UNDO)
         evt.SetEventObject(self)
         wx.PostEvent(self, evt)
+
+
+    def MirrorSelection(self):
+        """Sets selection or cursor position from mirrored control, if any."""
+        if not self._mirror: return
+
+        byte_selection = self._mirror.Selection
+        if byte_selection[0] != byte_selection[1]:
+            self.SetSelection(*byte_selection)
+            return
+
+        byte_pos = byte_selection[0]
+        do_shift = False
+
+        if self._mirror._addressed:
+            mirrorbase = super(type(self._mirror), self._mirror)
+            mirror_text_pos = mirrorbase.CurrentPos
+            line_start = mirrorbase.PositionFromLine(mirrorbase.LineFromPosition(mirror_text_pos))
+            mirror_pos_in_line = mirror_text_pos - line_start
+            if mirror_pos_in_line >= self._mirror.WIDTH * 3 - 1:  # At line end
+                do_shift = True # Move back from line to previous line end
+
+        self.SetSelection(byte_pos, byte_pos)
+        if do_shift:
+            self.CharLeft()
 
 
     def _PosIn(self, pos):
