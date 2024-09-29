@@ -5605,7 +5605,13 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         elif event.KeyCode in KEYS.INSERT and not event.HasAnyModifiers():
             if not self._fixed: event.Skip() # Disallow changing overtype if length fixed
 
-        elif event.KeyCode not in KEYS.TAB:
+        elif event.KeyCode in KEYS.TAB:
+            if not self.Mirror: # Allow normal tab navigation if stand-alone control
+                direction = wx.NavigationKeyEvent.IsBackward if event.ShiftDown() \
+                            else wx.NavigationKeyEvent.IsForward
+                self.Parent.NavigateIn(direction)
+
+        else:
             event.Skip()
 
 
