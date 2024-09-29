@@ -6179,8 +6179,13 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
 
 
     def __init__(self, *args, **kwargs):
+        """
+        @param   show_changes  highlight changes from value given in SetValue() (default False)
+        """
+        show_changes = bool(kwargs.pop("show_changes", False))
         wx.stc.StyledTextCtrl.__init__(self, *args, **kwargs)
 
+        self._show_changes = show_changes  # Whether changes from first value are highlighted
         self._fixed  = False # Fixed-length value
         self._type   = str   # Value type: str, unicode, int, float, long
         self._bytes0 = []    # [byte or None, ]
@@ -6312,6 +6317,16 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
     Selection = property(GetSelection)
 
 
+    def GetShowChanges(self):
+        """Returns whether changes from value given in SetValue() are highlighted."""
+        return self._show_changes
+    def SetShowChanges(self, show_changes):
+        """Sets whether changes from value given in SetValue() are highlighted; restyles text."""
+        self._show_changes = bool(show_changes)
+        self._Restyle()
+    ShowChanges = property(GetShowChanges, SetShowChanges)
+
+
     def EmptyUndoBuffer(self, mirror=False):
         """Deletes undo history."""
         super(ByteTextCtrl, self).EmptyUndoBuffer()
@@ -6384,6 +6399,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
 
     def _Restyle(self):
         """Restyles current content according to changed state."""
+        if not self._show_changes: return
         eventmask0, _ = self.GetModEventMask(), self.SetModEventMask(0)
         try:
             self.StartStyling(0)
@@ -6545,8 +6561,11 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
 
             if self.Overtype and pos < self.GetLastPosition():
                 self.Replace(pos, pos + 1, tbyte)
-                self.StartStyling(pos)
-                self.SetStyling(1, self.STYLE_CHANGED if self._bytes0[bpos] != self._bytes[bpos] else 0)
+                if self._show_changes:
+                    style = self.STYLE_CHANGED
+                    if self._bytes0[bpos] == self._bytes[bpos]: style = 0
+                    self.StartStyling(pos)
+                    self.SetStyling(1, style)
             else: self._Populate()
             self.SetSelection(pos + 1, pos + 1)
         cmd.Store()
