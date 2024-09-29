@@ -5348,9 +5348,12 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
     def SetValue(self, value):
         """Set current content as typed value (string or number), clears undo."""
+        self._QueueEvents()
+        byte_pos = self.Selection[0]
         self._SetValue(value)
         self._undoredo.ClearCommands()
         self._Populate()
+        self._ApplyPositions(byte_pos)
 
     Value = property(GetValue, SetValue)
 
@@ -5361,7 +5364,10 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
     def UpdateValue(self, value, mirror=False):
         """Update current content as typed value (string or number)."""
+        self._QueueEvents()
+        byte_pos = self.Selection[0]
         HexByteCommand(self).Submit(value, mirror=mirror)
+        self._ApplyPositions(byte_pos)
 
 
     def GetAnchor(self):
