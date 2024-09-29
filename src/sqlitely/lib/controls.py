@@ -1255,6 +1255,8 @@ class FindReplaceDialog(wx.Dialog):
             self._RefreshStatus()
             self._shownonce = True
         wx.Dialog.Show(self, show=show)
+
+
     def GetTarget(self):
         """Returns text component being searched."""
         return self._target
@@ -1271,9 +1273,15 @@ class FindReplaceDialog(wx.Dialog):
         self._matchpos  = None
         self._status.clear()
         self._RefreshStatus()
-
-
     Target = property(GetTarget, SetTarget)
+
+
+    def EnsureVisible(self):
+        """Moves dialog upwards if beyond screen bottom edge."""
+        display = wx.Display(self)
+        if not display.ClientArea.Contains(self.Rect):
+            delta = display.ClientArea.Bottom - self.Rect.Bottom
+            self.SetPosition((self.Position.x, self.Position.y + delta))
 
 
     def IsFindOnly(self):
@@ -1498,7 +1506,7 @@ class FindReplaceDialog(wx.Dialog):
     def _Bind(self):
         """Binds control and dialog event and shortcut handlers."""
         repl = not self._flags["findonly"]
-        on_toggle = lambda f: (lambda event: f(event.EventObject.Value))
+        on_toggle = lambda f, f2=None: (lambda event: (f(event.EventObject.Value), f2 and f2()))
         on_edit   = lambda e: self._RefreshStatus()
         self.Bind(wx.EVT_CHECKBOX, on_toggle(self.SetCase),       self._ctrls["check_case"])
         self.Bind(wx.EVT_CHECKBOX, on_toggle(self.SetWholeWords), self._ctrls["check_word"])
@@ -1521,7 +1529,7 @@ class FindReplaceDialog(wx.Dialog):
         self.Bind(wx.EVT_TEXT, on_edit, self._ctrls["text_findbig"])
         self.Bind(wx.EVT_TEXT, on_edit, self._ctrls["hex_findbig"])
 
-        self.Bind(wx.EVT_TOGGLEBUTTON, on_toggle(self.SetMultiline), self._ctrls["button_multi"])
+        self.Bind(wx.EVT_TOGGLEBUTTON, on_toggle(self.SetMultiline, self.EnsureVisible), self._ctrls["button_multi"])
 
         self.Bind(wx.EVT_SET_FOCUS, lambda e: self._LoadSharedHistory())
         self.Bind(wx.EVT_WINDOW_DESTROY, self._OnDestroy) if self.Parent else None
