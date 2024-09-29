@@ -5637,6 +5637,8 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
             else:
                 text_pos2 = self.GetLineEndPosition(self.CurrentLine)
                 super(HexTextCtrl, self).SetSelection(text_pos2, text_pos2)
+            if not self._addressed:
+                self.EnsureCaretVisible()
 
         elif event.KeyCode in KEYS.DELETE + KEYS.BACKSPACE:
             self._OnKeyDownDeleteBackspace(event)
@@ -5919,6 +5921,8 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
                 self.SetStyling(2, style)
         text_pos2 = text_pos + 1 + bool(pos_in_triplet) # Go to next digit, possibly next byte
         sself.SetSelection(text_pos2, text_pos2)
+        if not self._addressed:
+            self.EnsureCaretVisible()
         cmd.Store()
 
 
