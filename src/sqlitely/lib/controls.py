@@ -6234,14 +6234,6 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         HexByteCommand(self).Submit(value, mirror=mirror)
 
 
-    def UpdateBytes(self, value):
-        """Update current bytes as typed value (string or number), leaving text unchanged."""
-        self._SetValue(value, noreset=True)
-        if len(self._bytes0) < len(self._bytes):
-            self._bytes0.extend([None] * (len(self._bytes) - len(self._bytes0)))
-        self._Populate()
-
-
     def GetAnchor(self):
         return self._PosOut(super(ByteTextCtrl, self).Anchor)
     def SetAnchor(self, anchor):
