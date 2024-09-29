@@ -5279,10 +5279,10 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         self.Bind(wx.EVT_MOUSE_EVENTS,            self.OnMouse)
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED,      self.OnSysColourChange)
         self.Bind(wx.stc.EVT_STC_ZOOM,            self.OnZoom)
-        self.Bind(wx.stc.EVT_STC_CLIPBOARD_PASTE, self.OnPaste) \
-        if hasattr(wx.stc, "EVT_STC_CLIPBOARD_PASTE") else None
         self.Bind(wx.stc.EVT_STC_CLIPBOARD_COPY,  self.OnCopy) \
         if hasattr(wx.stc, "EVT_STC_CLIPBOARD_COPY") else None
+        self.Bind(wx.stc.EVT_STC_CLIPBOARD_PASTE, self.OnPaste) \
+        if hasattr(wx.stc, "EVT_STC_CLIPBOARD_PASTE") else None
         self.Bind(wx.stc.EVT_STC_START_DRAG,      lambda e: e.SetString(""))
 
 
@@ -6208,6 +6208,8 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         self.Bind(wx.stc.EVT_STC_ZOOM,            self.OnZoom)
         self.Bind(wx.stc.EVT_STC_CLIPBOARD_PASTE, self.OnPaste) \
         if hasattr(wx.stc, "EVT_STC_CLIPBOARD_PASTE") else None
+        self.Bind(wx.stc.EVT_STC_CLIPBOARD_COPY,  self.OnCopy) \
+        if hasattr(wx.stc, "EVT_STC_CLIPBOARD_COPY") else None
         self.Bind(wx.stc.EVT_STC_START_DRAG,      lambda e: e.SetString(""))
 
 
@@ -6479,6 +6481,25 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         self.SetSelection(selection[0] + len(v), selection[0] + len(v))
         self.EnsureCaretVisible()
         cmd.Store()
+
+
+    def OnCopy(self, event):
+        """Handler for clipboard copy event, updates bytes if cutting."""
+
+        def fix_content(cmd, byte_selection, line_index):
+            if not self or not self.GetSelectionEmpty(): return
+
+            for bb in self._bytes, self._bytes0:
+                del bb[byte_selection[0]:byte_selection[1]]
+            self._Populate()
+            self.SetSelection(*byte_selection[:1] * 2)
+            self.SetFirstVisibleLine(line_index)
+            cmd.Store()
+
+        if event.EventType == wx.stc.EVT_STC_CLIPBOARD_COPY.typeId:
+            cmd = HexByteCommand(self)
+            wx.CallAfter(fix_content, cmd, self.Selection, self.FirstVisibleLine)
+            self._QueueEvents()
 
 
     def OnPaste(self, event):
