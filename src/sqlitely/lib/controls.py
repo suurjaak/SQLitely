@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    28.09.2024
+@modified    29.09.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -5610,12 +5610,12 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         direction = -1 if event.KeyCode in KEYS.LEFT else 1
         pos_in_line = self._GetPositionInLine()
         pos_in_triplet = pos_in_line % 3
+        has_selection = not self.GetSelectionEmpty()
         is_beyond_content = (sself.SelectionEnd == self.GetLastPosition())
         is_beyond_line_content = self._addressed and pos_in_line >= self.WIDTH * 3 - 1
         byte_selection = self.GetSelection()
 
         if event.ShiftDown(): # Select text
-            has_selection = not self.GetSelectionEmpty()
             active_side = 1 if sself.Anchor <= sself.CurrentPos else 0 # Left-to-right vs reverse
             if not has_selection:
                 active_side = 0 if direction < 0 else 1
@@ -5630,10 +5630,18 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
             self._ApplyPositions(currentpos2, anchor2)
         else: # Move cursor
             byte_pos = self.CurrentPos
+            adjust = direction
+            if direction < 0 and has_selection:
+                byte_pos = byte_selection[0] # Start moving back from selection front
+                pos_in_line = (byte_pos % self.WIDTH if self._addressed else byte_pos) * 3
+                pos_in_triplet = 0
+                is_beyond_content = False
+                is_beyond_line_content = pos_in_line >= self.WIDTH * 3 - 1
+                adjust = 0
+
             byte_pos2 = byte_pos + direction
             text_pos_shift = 0
 
-            adjust = direction
             if pos_in_triplet == 1 and direction < 0: # At second digit of byte: remain at byte
                 adjust = 0
             elif is_beyond_line_content and direction > 0: # At line end: already on next byte
@@ -5649,8 +5657,9 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
                     if pos_in_triplet == 0:
                         adjust = 0 # Remain at current byte
                         text_pos_shift = 1 # To second digit in current byte
-                else: # direction > 0
+                else: # direction < 0
                     if pos_in_triplet == 0:
+                        adjust = direction
                         text_pos_shift = 1 # To second digit in previous byte
                     elif is_beyond_content or is_beyond_line_content:
                         text_pos_shift = 1 # To second digit in last byte of line
@@ -5663,7 +5672,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
     def _OnKeyDownVertical(self, event):
         """Handler pressing up/down or pageup/pagedown keys."""
-        if not self._bytes: return
+        if not self._bytes or not self._addressed: return
 
         STEP = self.WIDTH if event.KeyCode in KEYS.UP + KEYS.DOWN else \
                self.WIDTH * max(1, self.LinesOnScreen()) # PAGEUP / PAGEDOWN
@@ -5672,12 +5681,12 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         line_index = self.CurrentLine
         pos_in_line = self._GetPositionInLine()
         pos_in_triplet = pos_in_line % 3
+        has_selection = not self.GetSelectionEmpty()
         is_beyond_content = (sself.SelectionEnd == self.GetLastPosition())
         is_beyond_line_content = self._addressed and pos_in_line >= self.WIDTH * 3 - 1
         byte_selection = self.GetSelection()
 
         if event.ShiftDown(): # Select text
-            has_selection = not self.GetSelectionEmpty()
             active_side = 1 if sself.Anchor <= sself.CurrentPos else 0 # Left-to-right vs reverse
             if not has_selection:
                 active_side = 0 if direction < 0 else 1
@@ -5692,6 +5701,14 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
             self._ApplyPositions(currentpos2, anchor2)
         else: # Move cursor
             byte_pos = self.CurrentPos
+            if has_selection and event.KeyCode in KEYS.UP + KEYS.PAGEUP:
+                byte_pos = byte_selection[0] # Start moving up from selection front
+                pos_in_line = (byte_pos % self.WIDTH) * 3
+                pos_in_triplet = 0
+                is_beyond_content = False
+                is_beyond_line_content = pos_in_line >= self.WIDTH * 3 - 1
+                line_index = self.LineFromPosition(byte_pos * 3)
+
             byte_pos2 = byte_pos + direction * STEP
             text_pos_shift = 0
 
