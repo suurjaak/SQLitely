@@ -5639,8 +5639,9 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
     def OnMouse(self, event):
         """Handler for mouse event, moves caret to word boundary."""
         event.Skip()
-        if event.LeftUp() or event.RightUp():
-            self._QueueEvents(after_mouse_click=True)
+        after_mouse_click = event.LeftUp() or event.RightUp()
+        if after_mouse_click or event.LinesPerAction:
+            self._QueueEvents(after_mouse_click)
 
 
     def _OnKeyDownLeftRight(self, event):
