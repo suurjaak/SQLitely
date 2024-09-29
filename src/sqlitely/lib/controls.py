@@ -5281,6 +5281,8 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         self.Bind(wx.stc.EVT_STC_ZOOM,            self.OnZoom)
         self.Bind(wx.stc.EVT_STC_CLIPBOARD_PASTE, self.OnPaste) \
         if hasattr(wx.stc, "EVT_STC_CLIPBOARD_PASTE") else None
+        self.Bind(wx.stc.EVT_STC_CLIPBOARD_COPY,  self.OnCopy) \
+        if hasattr(wx.stc, "EVT_STC_CLIPBOARD_COPY") else None
         self.Bind(wx.stc.EVT_STC_START_DRAG,      lambda e: e.SetString(""))
 
 
@@ -5531,6 +5533,25 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
     def OnZoom(self, event):
         """Disables zoom."""
         if self.Zoom: self.Zoom = 0
+
+
+    def OnCopy(self, event):
+        """Handler for clipboard copy event, updates bytes and fixes content if cutting."""
+
+        def fix_content(cmd, byte_selection, line_index):
+            if not self or not self.GetSelectionEmpty(): return
+
+            for bb in self._bytes, self._bytes0:
+                del bb[byte_selection[0]:byte_selection[1]]
+            self._Populate()
+            self._ApplyPositions(byte_selection[0])
+            self.SetFirstVisibleLine(line_index)
+            cmd.Store()
+
+        if event.EventType == wx.stc.EVT_STC_CLIPBOARD_COPY.typeId:
+            cmd = HexByteCommand(self)
+            wx.CallAfter(fix_content, cmd, self.Selection, self.FirstVisibleLine)
+            self._QueueEvents()
 
 
     def OnPaste(self, event):
