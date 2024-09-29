@@ -1403,9 +1403,9 @@ class FindReplaceDialog(wx.Dialog):
         hex_replbig  = HexTextCtrl(self, name="replbig", addressed=True)
 
         check_case  = wx.CheckBox(self, label="Match &case")
-        check_word  = wx.CheckBox(self, label="Match &whole words only")
         check_regex = wx.CheckBox(self, label="Regular e&xpression")
         check_hex   = wx.CheckBox(self, label="&Hexadecimal")
+        check_word  = wx.CheckBox(self, label="Match &whole words only")
         check_rev   = wx.CheckBox(self, label="Search &upwards")
 
         button_find    = wx.Button(self, label="&Find next")
@@ -1450,9 +1450,9 @@ class FindReplaceDialog(wx.Dialog):
         sizer_repledits.Add(hex_repl,  flag=wx.GROW) if repl else None
 
         sizer_flags.Add(check_case,  pos=(0, 0))
-        sizer_flags.Add(check_word,  pos=(0, 1))
         sizer_flags.Add(check_regex, pos=(1, 0))
         sizer_flags.Add(check_hex,   pos=(2, 0))
+        sizer_flags.Add(check_word,  pos=(0, 1))
         sizer_flags.Add(check_rev,   pos=(1, 1)) if repl else None
 
         sizer_bigedits.Add(label_findbig, flag=wx.BOTTOM,          border=3)
