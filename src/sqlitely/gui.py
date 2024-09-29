@@ -1902,6 +1902,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                        columnlabel="type")
             dlg = components.ColumnDialog(None, dummygridbase, **kws)
             dlg.SetIcons(images.get_appicons())
+            dlg.HighlightChangesInHex(False)
             dlg.Bind(wx.EVT_CLOSE, onclose)
             dlg.Bind(wx.EVT_SHOW,  onclose)
             dlg._button_reset.Show()

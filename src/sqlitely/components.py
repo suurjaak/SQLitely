@@ -9012,6 +9012,7 @@ class ColumnDialog(wx.Dialog):
         self._setters   = OrderedDict()      # {view name: set(value, reset=False)}
         self._reprers   = OrderedDict()      # {view name: get_text()}
         self._findctrls = {}                 # {view name: [component for FindReplaceDialog, ]}
+        self._ctrls     = defaultdict(dict)  # {view name: {label: component}}
         self._state     = defaultdict(dict)  # {view name: {view state}}
         self._row       = row
         self._col       = col
@@ -9110,6 +9111,13 @@ class ColumnDialog(wx.Dialog):
             (x, y), (w, h), (w2, h2) = top.Position, top.Size, self.Size
             self.Position = (x + (w - w2)  // 2), (y + (h - h2) // 2)
         wx.CallAfter(self.Layout)
+
+
+    def HighlightChangesInHex(self, show=True):
+        """Sets whether to highlight changes from original value in hex view."""
+        for ctrl in self._ctrls["hex"].values():
+            if isinstance(ctrl, (controls.HexTextCtrl, controls.ByteTextCtrl)):
+                ctrl.SetShowChanges(show)
 
 
     def _MakeToolBar(self, page, name, label=None, filelabel=None, load=True, save=True,
@@ -9537,6 +9545,9 @@ class ColumnDialog(wx.Dialog):
         button_xform.Bind(wx.EVT_BUTTON, on_transform)
         button_copy .Bind(wx.EVT_BUTTON, on_copy)
 
+        self._ctrls[NAME].update({"edit_text": tedit, "edit_number": nedit,
+                                  "button_set": button_set, "button_case": button_case,
+                                  "button_xform": button_xform, "button_copy": button_copy})
         self._getters[NAME] = lambda: tedit.GetValue() if tedit.Shown else nedit.GetValue()
         self._setters[NAME] = update
         self._findctrls[NAME] = [tedit, nedit]
@@ -9677,6 +9688,8 @@ class ColumnDialog(wx.Dialog):
         stchex.Bind(wx.EVT_SET_FOCUS,        on_focus)
         stctxt.Bind(wx.EVT_SET_FOCUS,        on_focus)
 
+        self._ctrls[NAME].update({"edit_hex": stchex, "edit_text": stctxt,
+                                  "label_pos": status1, "label_len": status2})
         self._getters[NAME] = stchex.GetValue
         self._setters[NAME] = update
         self._reprers[NAME] = stchex.GetHex
@@ -9777,6 +9790,8 @@ class ColumnDialog(wx.Dialog):
         self.Bind(wx.EVT_CHECKBOX,        on_toggle_validate, cb)
         self.Bind(wx.EVT_BUTTON,          on_format, btn)
 
+        self._ctrls[NAME].update({"edit": stc, "check_validate": cb,
+                                  "button_format": btn, "label_status": status})
         self._getters[NAME] = stc.GetText
         self._setters[NAME] = update
         self._findctrls[NAME] = [stc]
@@ -9881,6 +9896,8 @@ class ColumnDialog(wx.Dialog):
         self.Bind(wx.EVT_CHECKBOX,        on_toggle_validate, cb)
         self.Bind(wx.EVT_BUTTON,          on_format, btn)
 
+        self._ctrls[NAME].update({"edit": stc, "check_validate": cb,
+                                  "button_format": btn, "label_status": status})
         self._getters[NAME] = stc.GetText
         self._setters[NAME] = update
         self._findctrls[NAME] = [stc]
@@ -9983,6 +10000,7 @@ class ColumnDialog(wx.Dialog):
         stc.Bind(wx.stc.EVT_STC_MODIFIED,    functools.partial(self._OnChar, name=NAME, handler=validate))
         page.Bind(wx.EVT_SYS_COLOUR_CHANGED, lambda e: set_styles())
 
+        self._ctrls[NAME].update({"edit": stc, "check_validate": cb, "label_status": status})
         self._getters[NAME] = stc.GetText
         self._setters[NAME] = update
         self._findctrls[NAME] = [stc]
@@ -10255,6 +10273,12 @@ class ColumnDialog(wx.Dialog):
         dtedit.Bind(wx.EVT_CHAR_HOOK, functools.partial(self._OnChar, name=NAME, handler=change_value))
         tsedit.Bind(wx.EVT_CHAR_HOOK, functools.partial(self._OnChar, name=NAME, handler=change_value))
 
+        self._ctrls[NAME].update({"check_date": dcb, "check_time": tcb, "check_usec": ucb,
+                                  "check_zone": zcb, "button_date_current": dbutton, "date": dedit,
+                                  "edit_time": tedit, "edit_usec": uedit, "edit_zone": zedit,
+                                  "button_time_current": tbutton, "button_usec_current": ubutton,
+                                  "button_zone_current": zbutton, "edit_datetime": dtedit,
+                                  "edit_timestamp": tsedit})
         self._getters[NAME] = dtedit.GetValue
         self._setters[NAME] = update
         state = self._state.setdefault(NAME, {"parts": {}, "ignore_change": False, "numeric": False, "zones": zones})
@@ -10461,6 +10485,8 @@ class ColumnDialog(wx.Dialog):
         self.Bind(wx.EVT_CHOICE,   on_convert,     flist)
         self.Bind(wx.EVT_SIZE,     on_size)
 
+        self._ctrls[NAME].update({"image": bmp, "check_show": cb, "label_status": status,
+                                  "select_format": flist})
         self._getters[NAME] = lambda: state["image"]
         self._setters[NAME] = update
         state = self._state.setdefault(NAME, {"show": True, "image": None, "format0": None, "timer": None, "converts": {}})

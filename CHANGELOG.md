@@ -15,6 +15,7 @@ CHANGELOG
 - tweak initial size of resizable text controls in data grid row dialog
 - re-hide hidden columns on refreshing data grid
 - use double precision for floating-point values in column editor
+- do not highlight changes in hex view in value editor tool
 - use hourglass cursor while showing busy message
 - fix representing very large integers in column editor hex view
 - fix cutting text from column editor hex view
