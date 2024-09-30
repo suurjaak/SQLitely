@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.09.2024
-@modified    17.09.2024
+@modified    30.09.2024
 ------------------------------------------------------------------------------
 """
 import io
@@ -132,12 +132,12 @@ class TestInfoSink(FileTest):
         """Returns schema diagram structure for export, or None if not available."""
         if not wx: return None
         _ = wx.App()
-        layout = scheme.SchemaPlacement(self._db)
+        layout = scheme.SchemaDiagram(self._db)
         layout.SetFonts("Verdana",
                         ("Open Sans", conf.FontDiagramSize,
                          conf.FontDiagramFile, conf.FontDiagramBoldFile))
         layout.Populate({"stats": True})
-        layout.Redraw(scheme.Rect(0, 0, *conf.WindowSize), layout.LAYOUT_GRID)
+        layout.Redraw(scheme.Rect(0, 0, *conf.WindowSize), scheme.LayoutStyle.GRID)
         bmp = layout.MakeBitmap() 
         svg = layout.MakeTemplate("SVG", embed=True)
         return {"bmp": bmp, "svg": svg}

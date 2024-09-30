@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2024
-@modified    16.09.2024
+@modified    30.09.2024
 ------------------------------------------------------------------------------
 """
 import collections
@@ -62,13 +62,13 @@ class TestFileDataSource(FileTest):
         logger.info("Verifying get_file_info() with nonexistent file.")
         for fmt in IMPORT_FORMATS:
             with self.assertRaises(Exception, msg="Expected error on nonexistent file."):
-                importexport.FileDataSource(self.mktemp("." + fmt))
+                importexport.FileDataSource(self.mktemp("." + fmt)).get_file_info()
 
         logger.info("Verifying get_file_info() with empty file.")
         for fmt in IMPORT_FORMATS:
             infile = self.mktemp("." + fmt)
-            with self.assertRaises(Exception, msg="Expected error on nonexistent file."):
-                importexport.FileDataSource(self.mktemp("." + fmt, ""))
+            with self.assertRaises(Exception, msg="Expected error on empty file."):
+                importexport.FileDataSource(self.mktemp("." + fmt, "")).get_file_info()
 
         logger.info("Verifying get_file_info() with unexpected format.")
         table_name = "parent"
