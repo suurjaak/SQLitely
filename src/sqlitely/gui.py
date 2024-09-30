@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.09.2024
+@modified    30.09.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3163,7 +3163,7 @@ class DatabasePage(wx.Panel):
 
             ctrl_name, label_name = "pragma_%s" % name, "pragma_%s_label" % name
 
-            label = wx.StaticText(panel_pragma, label=opts["label"], name=label_name)
+            label = wx.StaticText(panel_pragma, label=opts["label"] + " ", name=label_name)
             if "table" == opts["type"]:
                 ctrl = wx.TextCtrl(panel_pragma, name=ctrl_name, style=wx.TE_MULTILINE,
                                    value="\n".join(util.to_unicode(x) for x in value or ()))
@@ -4761,6 +4761,9 @@ class DatabasePage(wx.Panel):
             self.pragma_changes.pop(name, None)
         else: self.pragma_changes[name] = value
 
+        label = self.pragma_items[name][0]
+        label.Label = label.Label.rstrip(" *") + ("*" if name in self.pragma_changes else " ")
+
         self.populate_pragma_sql()
 
 
@@ -4937,6 +4940,7 @@ class DatabasePage(wx.Panel):
         self.on_pragma_refresh()
         for name, opts in database.Database.PRAGMA.items():
             if "table" != opts["type"]: self.pragma_ctrls[name].Disable()
+            self.pragma_items[name][0].Label = self.pragma_items[name][0].Label.rstrip(" *") + " "
         self.page_pragma.Layout()
         self.update_page_header()
         wx.CallLater(1, self.on_pragma_refresh, reload=True)

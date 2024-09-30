@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.4, 2024-09-29
+2.4, 2024-09-30
 ---------------
 - add support for generated columns
 - add find/replace dialog to data grids and column editors and database schema text
@@ -16,6 +16,7 @@ CHANGELOG
 - re-hide hidden columns on refreshing data grid
 - use double precision for floating-point values in column editor
 - do not highlight changes in hex view in value editor tool
+- mark changed pragma values with asterisks
 - use hourglass cursor while showing busy message
 - fix representing very large integers in column editor hex view
 - fix cutting text from column editor hex view
