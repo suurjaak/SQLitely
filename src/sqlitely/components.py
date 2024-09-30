@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.09.2024
+@modified    30.09.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -9254,7 +9254,7 @@ class ColumnDialog(wx.Dialog):
             elif "invert"   == category: value = value.swapcase()
             elif "sentence" == category:
                 value = "".join(x.capitalize() if x else ""
-                                for x in re.split("([\.\?\!]\s+)|(\r*\n\r*\n+)", value))
+                                for x in re.split(r"([\.\?\!]\s+)" + "|(\r*\n\r*\n+)", value))
             elif "snake" == category:
                 PUNCT = re.escape(re.sub(r"[\.\,\!\?\;\:\'\"]", "", string.punctuation))
                 parts1 = re.split(r"([ \t]+)", value, re.U)
@@ -9298,13 +9298,13 @@ class ColumnDialog(wx.Dialog):
                 elif "htmlunescape" == category:
                     value = html_unescape(value)
                 elif "strip" == category:
-                    value = re.sub("\s+", "", value)
+                    value = re.sub(r"\s+", "", value)
                 elif "punctuation" == category:
                     value = re.sub("[%s]+" % re.escape(string.punctuation), "", value)
                 elif "letters" == category:
                     value = re.sub(r"[^\W\d]+", "", value, re.U)
                 elif "numbers" == category:
-                    value = re.sub("\d+", "", value)
+                    value = re.sub(r"\d+", "", value)
                 elif "text" == category:
                     value = re.sub("[%s]+" % re.escape(TEXT), "", value, re.I)
                 elif "nontext" == category:
