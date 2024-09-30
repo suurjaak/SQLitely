@@ -4918,7 +4918,7 @@ class DatabasePage(wx.Panel):
             else:
                 ctrl.Value = "" if value is None else value
             writable = opts["write"](self.db) if callable(opts.get("write")) else opts.get("write")
-            ctrl.Enable(writable is not False and "table" != opts["type"])
+            ctrl.Enable(editmode and writable is not False and "table" != opts["type"])
         self.populate_pragma_sql()
         self.pragma_edit = editmode
         self.update_page_header()

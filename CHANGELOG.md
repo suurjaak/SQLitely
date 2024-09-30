@@ -25,6 +25,7 @@ CHANGELOG
 - fix compatibility issues with Python 3.10+
 - fix opening third-party license link in snaps
 - fix accounting for relation lines in schema diagram zoom to fit
+- fix pragma editor not disabling controls afterwards
 - refactor import-export functionality to classes
 
 
