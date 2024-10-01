@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.09.2024
+@modified    30.10.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1777,12 +1777,17 @@ class FileDataSource(Base):
         util.try_ignore(lambda: self._state["cursor"].execute(action))
         self._db.unlock("table", self._state["table"], self._filename)
         if self._db.is_open():
-            if self._state["cursor"]: util.try_ignore(self._state["cursor"].close)
-            if self._state["table"]: self._db.unlock("table", self._state["table"], self._filename)
-            if not self._state["was_open"]: self._db.close()
+            if self._state["cursor"]:
+                util.try_ignore(self._state["cursor"].close)
+            if self._state["table"]:
+                self._db.unlock("table", self._state["table"], self._filename)
+            if not self._state["was_open"]:
+                self._db.close()
 
         if not result and not self._state["file_existed"]:
-            try: not os.path.getsize(self._db.filename) and os.unlink(self._db.filename)
+            try:
+                if not os.path.getsize(self._db.filename):
+                    os.unlink(self._db.filename)
             except Exception: pass
         if result is None:
             if self._state["file_existed"] and "table" in self._db.schema:
