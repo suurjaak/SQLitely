@@ -48,7 +48,8 @@
  *                update keywords;
  *                add support for CREATE TABLE .. STRICT;
  *                add support for generated columns;
- *                add support for IS DISTINCT FROM and IS NOT DISTINCT FROM.
+ *                add support for IS DISTINCT FROM and IS NOT DISTINCT FROM;
+ *                add support for JSON operators -> and ->>.
  *                
  * Updated for  : SQLitely, an SQLite database tool.
  * Updated by   : Erki Suurjaak, 2019-2024
@@ -359,6 +360,7 @@ expr
  | expr ( '+' | '-' ) expr
  | expr ( '<<' | '>>' | '&' | '|' ) expr
  | expr ( '<' | '<=' | '>' | '>=' ) expr
+ | expr ( '->' | '->>' ) expr
  | expr ( '=' | '==' | '!=' | '<>' | K_IS | K_IS K_NOT | K_IN | K_LIKE | K_GLOB | K_MATCH | K_REGEXP ) expr
  | expr K_AND expr
  | expr K_OR expr
