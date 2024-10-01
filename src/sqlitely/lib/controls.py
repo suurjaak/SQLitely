@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    30.09.2024
+@modified    01.10.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -4731,6 +4731,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
     ])))
     """SQLite data types."""
     TYPEWORDS = list(map(text_type, sorted([
+        "ANY",
         "BLOB",
         "INTEGER", "BIGINT", "INT", "INT2", "INT8", "MEDIUMINT", "SMALLINT",
                    "TINYINT", "UNSIGNED",
