@@ -47,7 +47,8 @@
  *                fix ambiguity in parsing INDEX expressions with COLLATE,
  *                update keywords;
  *                add support for CREATE TABLE .. STRICT;
- *                add support for generated columns.
+ *                add support for generated columns;
+ *                add support for IS DISTINCT FROM and IS NOT DISTINCT FROM.
  *                
  * Updated for  : SQLitely, an SQLite database tool.
  * Updated by   : Erki Suurjaak, 2019-2024
@@ -368,6 +369,7 @@ expr
  | expr K_NOT? ( K_LIKE | K_GLOB | K_REGEXP | K_MATCH ) expr ( K_ESCAPE expr )?
  | expr ( K_ISNULL | K_NOTNULL | K_NOT K_NULL )
  | expr K_IS K_NOT? expr
+ | expr K_IS K_NOT? K_DISTINCT K_FROM expr
  | expr K_NOT? K_BETWEEN expr K_AND expr
  | expr K_NOT? K_IN ( '(' ( select_stmt
                           | expr ( ',' expr )*
