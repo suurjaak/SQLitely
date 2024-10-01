@@ -49,7 +49,8 @@
  *                add support for CREATE TABLE .. STRICT;
  *                add support for generated columns;
  *                add support for IS DISTINCT FROM and IS NOT DISTINCT FROM;
- *                add support for JSON operators -> and ->>.
+ *                add support for JSON operators -> and ->>;
+ *                add support for UPSERT statements.
  *                
  * Updated for  : SQLitely, an SQLite database tool.
  * Updated by   : Erki Suurjaak, 2019-2024
@@ -216,8 +217,8 @@ insert_stmt
                 | K_INSERT K_OR K_FAIL
                 | K_INSERT K_OR K_IGNORE ) K_INTO
    ( database_name '.' )? table_name ( '(' column_name ( ',' column_name )* ')' )?
-   ( K_VALUES '(' expr ( ',' expr )* ')' ( ',' '(' expr ( ',' expr )* ')' )*
-   | select_stmt
+   ( K_VALUES '(' expr ( ',' expr )* ')' ( ',' '(' expr ( ',' expr )* ')' )* upsert_clause?
+   | select_stmt upsert_clause?
    | K_DEFAULT K_VALUES
    )
  ;
@@ -423,6 +424,19 @@ table_constraint
 table_option
  : K_WITHOUT C_ROWID
  | C_STRICT
+ ;
+
+upsert_clause
+ : 
+ ( K_ON K_CONFLICT
+   ( '(' indexed_column ( ',' indexed_column )* ')' ( K_WHERE expr)? )?
+   K_DO (
+     K_NOTHING
+     | K_UPDATE K_SET (
+       ( column_name | column_name_list ) '=' expr ( ',' ( column_name | column_name_list ) '=' expr )*
+     ) ( K_WHERE expr )?
+   )
+ )+
  ;
 
 with_clause
@@ -693,6 +707,10 @@ new_table_name
 
 column_name 
  : any_name
+ ;
+
+column_name_list
+ : '(' column_name ( ',' column_name )* ')'
  ;
 
 collation_name 

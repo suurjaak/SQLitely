@@ -6,6 +6,7 @@ CHANGELOG
 - add support for generated columns
 - add find/replace dialog to data grids and column editors and database schema text
 - add dialog to manage shown and filtered columns in data grids; add EXACT- and NOT-option to column filter
+- add support for UPSERT statements
 - add support for IS DISTINCT FROM and IS NOT DISTINCT FROM (Python 3.9+)
 - add support for JSON operators -> and ->> (Python 3.9+)
 - update known and deprecated pragma directives up to SQLite version 3.44
