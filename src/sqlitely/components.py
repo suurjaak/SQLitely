@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.10.2024
+@modified    02.10.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -4767,31 +4767,36 @@ class SchemaObjectPage(wx.Panel):
         """Populate SQLiteTextCtrl autocomplete."""
         if not self._editmode: return
 
-        words, subwords, singlewords = [], {}, []
+        function_names = self._db.get_sql_functions()
+        data_names, data_columns, my_columns = [], {}, []
 
         for category in ("table", "view"):
             for item in self._db.schema.get(category, {}).values():
                 if self._category in ("trigger", "view"):
                     myname = grammar.quote(item["name"])
-                    words.append(myname)
+                    data_names.append(myname)
                 if not item.get("columns"): continue # for item
-                ww = [grammar.quote(c["name"]) for c in item["columns"]]
+                columns = [grammar.quote(c["name"]) for c in item["columns"]]
 
                 if self._category in ("index", "trigger") \
                 and util.lceq(item["name"], self._item["meta"].get("table")):
-                    singlewords = ww
-                if self._category in ("trigger", "view"): subwords[myname] = ww
+                    my_columns = columns
+                if self._category in ("trigger", "view"):
+                    data_columns[myname] = columns
                 if "trigger" == self._category \
                 and util.lceq(item["name"], self._item["meta"].get("table")):
-                    subwords["OLD"] = subwords["NEW"] = ww
+                    data_columns["OLD"] = data_columns["NEW"] = columns
 
-        for c in self._ctrls.values():
-            if not isinstance(c, controls.SQLiteTextCtrl): continue # for c
-            c.AutoCompClearAdded()
-            if singlewords and (not words or not c.Wheelable): c.AutoCompAddWords(singlewords)
-            elif words and c.Wheelable:
-                c.AutoCompAddWords(words)
-                for w, ww in subwords.items(): c.AutoCompAddSubWords(w, ww)
+        for ctrl in self._ctrls.values():
+            if not isinstance(ctrl, controls.SQLiteTextCtrl): continue # for ctrl
+            ctrl.AutoCompClearAdded()
+            ctrl.AutoCompAddWords(function_names)
+            if my_columns and (not ctrl.Wheelable or self._category in ("table", "index")):
+                ctrl.AutoCompAddWords(my_columns)
+            elif data_names and ctrl.Wheelable:
+                ctrl.AutoCompAddWords(data_names)
+                for name, columns in data_columns.items():
+                    ctrl.AutoCompAddSubWords(name, columns)
 
 
     def _PopulateSQL(self):
@@ -5582,20 +5587,23 @@ class SchemaObjectPage(wx.Panel):
         data  = util.getval(self._item["meta"], path)
         props, footer = self._GetFormDialogProps(path, data)
 
-        words = []
-        for category in ("table", "view") if self._editmode else ():
-            for item in self._db.schema.get(category, {}).values():
-                if not item.get("columns"): continue # for item
-                if "table" == self._category and util.lceq(item["name"], self._original.get("name")) \
-                or "index" == self._category and util.lceq(item["name"], self._item["meta"].get("table")):
-                    words = [grammar.quote(c["name"]) for c in item["columns"]]
-                    break
+        autocomp = self._db.get_sql_functions()
+        if self._editmode:
+            table_name = None
+            if   "table" == self._category: table_name = self._original.get("name")      
+            elif "index" == self._category: table_name = self._item["meta"].get("table") 
+            for category in ("table", "view") if table_name else ():
+                for item in self._db.schema.get(category, {}).values():
+                    if item.get("columns") and util.lceq(item["name"], table_name):
+                        autocomp.extend(grammar.quote(c["name"]) for c in item["columns"])
+                        break # for item
 
         title = "Table column"
         if "constraints" == path[0]:
             title = "%s constraint" % data["type"]
         dlg = controls.FormDialog(self.TopLevelParent, title, props, data,
-                                  self._editmode, autocomp=words, footer=footer)
+                                  self._editmode, autocomp=autocomp, footer=footer)
+
         wx_accel.accelerate(dlg)
         if wx.ID_OK != dlg.ShowModal() or not self._editmode: return dlg.Destroy()
         data2 = dlg.GetData()
@@ -6114,31 +6122,6 @@ class SchemaObjectPage(wx.Panel):
 
     def _OnImportSQL(self, event=None):
         """Handler for editing SQL directly, opens dialog."""
-        props = [{"name": "sql", "label": "SQL:", "component": controls.SQLiteTextCtrl,
-                  "tb": [{"type": "numbers", "help": "Show line numbers",
-                          "toggle": True, "bmp": images.ToolbarNumbered.Bitmap,
-                          "on": self._tb_sql.GetToolState(wx.ID_INDENT)},
-                         {"type": "wrap",    "help": "Word-wrap",
-                          "toggle": True, "bmp": images.ToolbarWordWrap.Bitmap,
-                          "on": self._tb_sql.GetToolState(wx.ID_STATIC)},
-                         {"type": "sep"},
-                         {"type": "copy",  "help": "Copy to clipboard"},
-                         {"type": "paste", "help": "Paste from clipboard"},
-                         {"type": "sep"},
-                         {"type": "open",  "help": "Load from file"},
-                         {"type": "save",  "help": "Save to file"}, ]}]
-        data, words = {"sql": self._item["sql0" if self._sql0_applies else "sql"]}, {}
-        for category in ("table", "view"):
-            for item in self._db.schema.get(category, {}).values():
-                if self._category in ("index", "trigger", "view"):
-                    myname = grammar.quote(item["name"])
-                    words[myname] = []
-                if not item.get("columns"): continue # for item
-                ww = [grammar.quote(c["name"]) for c in item["columns"]]
-                if self._category in ("index", "trigger", "view"): words[myname] = ww
-                if "trigger" == self._category \
-                and util.lceq(item["name"], self._item["meta"].get("table")):
-                    words["OLD"] = words["NEW"] = ww
 
         def onclose(mydata):
             sql = mydata.get("sql", "")
@@ -6163,9 +6146,42 @@ class SchemaObjectPage(wx.Panel):
             wx.MessageBox("Failed to parse SQL.\n\n%s" % err,
                           conf.Title, wx.OK | wx.ICON_ERROR)
 
+        props = [{"name": "sql", "label": "SQL:", "component": controls.SQLiteTextCtrl,
+                  "tb": [{"type": "numbers", "help": "Show line numbers",
+                          "toggle": True, "bmp": images.ToolbarNumbered.Bitmap,
+                          "on": self._tb_sql.GetToolState(wx.ID_INDENT)},
+                         {"type": "wrap",    "help": "Word-wrap",
+                          "toggle": True, "bmp": images.ToolbarWordWrap.Bitmap,
+                          "on": self._tb_sql.GetToolState(wx.ID_STATIC)},
+                         {"type": "sep"},
+                         {"type": "copy",  "help": "Copy to clipboard"},
+                         {"type": "paste", "help": "Paste from clipboard"},
+                         {"type": "sep"},
+                         {"type": "open",  "help": "Load from file"},
+                         {"type": "save",  "help": "Save to file"}, ]}]
+        data = {"sql": self._item["sql0" if self._sql0_applies else "sql"]}
+        autocomp = {n: [] for n in self._db.get_sql_functions()}
+        table_name = None
+        if   "table" == self._category: table_name = self._original.get("name")      
+        elif "index" == self._category: table_name = self._item["meta"].get("table") 
+        for category in ("table", "view"):
+            for item in self._db.schema.get(category, {}).values():
+                if self._category in ("index", "trigger", "view"):
+                    myname = grammar.quote(item["name"])
+                    autocomp[myname] = []
+                if not item.get("columns"): continue # for item
+
+                columns = [grammar.quote(c["name"]) for c in item["columns"]]
+                if self._category in ("trigger", "view"):
+                    autocomp[myname] = columns
+                if self._category == "trigger" and util.lceq(item["name"], table_name):
+                    autocomp["OLD"] = autocomp["NEW"] = columns
+                if self._category in ("table", "index") and util.lceq(item["name"], table_name):
+                    autocomp.update({k: [] for k in columns})
+
         format = lambda x: util.unprint(grammar.quote(x, embed=True))
         dlg = controls.FormDialog(self.TopLevelParent, "Edit SQL",
-                                  props, data, autocomp=words, onclose=onclose, format=format)
+                                  props, data, autocomp=autocomp, onclose=onclose, format=format)
         wx_accel.accelerate(dlg)
         if wx.ID_OK != dlg.ShowModal(): return dlg.Destroy()
         sql = dlg.GetData().get("sql", "").strip().replace("\r\n", "\n").rstrip(";")

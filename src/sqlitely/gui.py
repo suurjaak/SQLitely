@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.09.2024
+@modified    01.10.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -7629,6 +7629,7 @@ class DatabasePage(wx.Panel):
         """Add PRAGMAS, and table/view/column names to SQL autocomplete."""
         if not self: return
         words = list(database.Database.PRAGMA) + database.Database.EXTRA_PRAGMAS
+        words.extend(self.db.get_sql_functions())
         subwords = {}
 
         for category in ("table", "view"):

@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.4, 2024-10-01
+2.4, 2024-10-02
 ---------------
 - add support for generated columns
 - add find/replace dialog to data grids and column editors and database schema text
@@ -14,6 +14,7 @@ CHANGELOG
 - upgrade ANTLR version from 4.9 to 4.13
 - show STRICT checkbox for STRICT table in schema editor even if current SQLite does not support it
 - add ANY as possible column type if SQLite version supports STRICT
+- add SQL functions to SQL editors auto-completes
 - improve converting changed values in table grids to original type for untyped columns
 - fix and improve editing and movement in hex editor
 - tweak initial size of resizable text controls in data grid row dialog

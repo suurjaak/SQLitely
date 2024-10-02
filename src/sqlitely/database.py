@@ -1921,6 +1921,11 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return result
 
 
+    def get_sql_functions(self):
+        """Returns a list of names of SQL functions known to the database connection."""
+        return sorted(set(x["name"] for x in self.execute("PRAGMA function_list", log=False)))
+
+
     def notify_rename(self, category, oldname, newname):
         """
         Repopulates schema, retaining category item ID over rename.
