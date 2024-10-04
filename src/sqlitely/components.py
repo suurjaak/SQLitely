@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.10.2024
+@modified    04.10.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -6390,17 +6390,23 @@ class SchemaObjectPage(wx.Panel):
             self._PostEvent(sync=True, close_grids=True)
             logger.info("Executing test SQL:\n\n%s", sql2)
             busy = controls.BusyPanel(self, "Testing..")
-            self._fks_on = next(iter(self._db.execute("PRAGMA foreign_keys", log=False).fetchone().values()))
-            try: self._db.executescript(sql2, name="TEST")
+            if "PRAGMA foreign_keys" in sql: # Toggled off during complex ALTER TABLE
+                row = self._db.execute("PRAGMA foreign_keys", log=False).fetchone()
+                self._fks_on = next(iter(row.values()))
+            tx = self._db.execute("BEGIN TRANSACTION", log=False)
+            try: tx.executescript(sql2)
             except Exception as e:
                 logger.exception("Error executing test SQL.")
-                try: self._db.executescript("ROLLBACK", name="TEST")
-                except Exception: pass
-                try: self._fks_on and self._db.execute("PRAGMA foreign_keys = on", name="TEST")
-                except Exception: pass
                 errors = [util.format_exc(e)]
             finally:
                 busy.Close()
+                try: tx.execute("ROLLBACK")
+                except Exception: pass
+                tx.close()
+                self._db.log_query("TEST", sql2)
+                if self._fks_on and "PRAGMA foreign_keys" in sql: # Restore in case script failed
+                    try: self._db.execute("PRAGMA foreign_keys = on", log=False)
+                    except Exception: pass
                 self._PostEvent(reload_grids=True)
 
         if errors: wx.MessageBox("Errors:\n\n%s" % "\n\n".join(map(util.to_unicode, errors)),
@@ -6470,17 +6476,35 @@ class SchemaObjectPage(wx.Panel):
         sql1 and self._PostEvent(sync=True, close_grids=True)
         sql1 and logger.info("Executing schema SQL:\n\n%s", sql2)
         busy = controls.BusyPanel(self, "Saving..")
-        try: sql1 and self._db.executescript(sql2, name="CREATE" if self._newmode else "ALTER")
-        except Exception as e:
-            logger.exception("Error executing SQL.")
-            try: self._db.execute("ROLLBACK")
-            except Exception: pass
-            try: self._fks_on and self._db.execute("PRAGMA foreign_keys = on")
-            except Exception: pass
-            msg = "Error saving changes:\n\n%s" % util.format_exc(e)
-            wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
-            return
-        else:
+
+        if sql1: # Not just adding IF NOT EXISTS flag to existing entity statement
+            if "PRAGMA foreign_keys" in sql2: # Toggled off during complex ALTER TABLE
+                row = self._db.execute("PRAGMA foreign_keys", log=False).fetchone()
+                self._fks_on = next(iter(row.values()))
+
+            error = None
+            tx = self._db.execute("BEGIN TRANSACTION", log=False)
+            try: tx.executescript(sql2)
+            except Exception as e:
+                error = util.format_exc(e)
+                logger.exception("Error executing SQL.")
+                try: tx.execute("ROLLBACK")
+                except Exception: pass
+            else:
+                self._db.log_query("CREATE" if self._newmode else "ALTER", sql2)
+            finally:
+                tx.close()
+                if self._fks_on and "PRAGMA foreign_keys" in sql2:
+                    try: self._fks_on and self._db.execute("PRAGMA foreign_keys = on", log=False)
+                    except Exception: pass
+
+            if error:
+                busy.Close()
+                msg = "Error saving changes:\n\n%s" % error
+                wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
+                return
+
+        try:
             # Modify sqlite_master directly, as "ALTER TABLE x RENAME TO y"
             # sets a quoted name "y" to CREATE statements, including related objects,
             # regardless of whether the name required quoting.
