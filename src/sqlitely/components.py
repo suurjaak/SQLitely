@@ -10339,9 +10339,9 @@ class ColumnDialog(wx.Dialog):
         def on_save(value):
             fmts = sorted(v for v in self.IMAGE_FORMATS.values() if "svg" != v)
             wildcard = controls.make_dialog_filter(fmts, noun="image")
-            filteridx = next(i for i, (k, _) in enumerate(
-                sorted(self.IMAGE_FORMATS.items(), key=lambda x: x[1])
-            ) if k == value.Type)
+            filteridx = 0
+            if self.IMAGE_FORMATS[value.Type] in fmts:
+                filteridx = fmts.index(self.IMAGE_FORMATS[value.Type])
             dlg = wx.FileDialog(self, message="Save image as",
                 wildcard=wildcard, defaultFile=util.safe_filename(self._name),
                 style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
