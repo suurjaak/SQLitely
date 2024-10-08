@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    07.10.2024
+@modified    02.10.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -6616,11 +6616,9 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
             if not self._fixed:
                 event.Skip() # Disallow changing overtype for fixed-length content
 
-        elif event.KeyCode in KEYS.LEFT + KEYS.RIGHT:
-            self._OnKeyDownLeftRight(event)
-
-        elif event.KeyCode in KEYS.UP + KEYS.DOWN + KEYS.PAGEUP + KEYS.PAGEDOWN:
-            self._OnKeyDownVertical(event)
+        elif event.KeyCode in KEYS.ARROW + KEYS.PAGING + KEYS.HOME + KEYS.END:
+            self._QueueEvents()
+            event.Skip()
 
         elif event.KeyCode in KEYS.DELETE + KEYS.BACKSPACE:
             if not self._fixed:
@@ -6637,121 +6635,6 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         """Handler for mouse event, fires position change events."""
         self._QueueEvents()
         event.Skip()
-
-
-    def _OnKeyDownLeftRight(self, event):
-        """Handler for pressing left/right arrow keys."""
-        if not self._bytes: return
-        self._QueueEvents()
-
-        sself = super(ByteTextCtrl, self)
-        direction = -1 if event.KeyCode in KEYS.LEFT else 1
-        byte_selection = self.Selection
-
-        if event.ShiftDown(): # Selecting
-            byte_selection2 = list(byte_selection)
-            is_left_to_right = (self.Anchor <= self.CurrentPos)
-            if direction < 0 and self.GetSelectionEmpty():
-                is_left_to_right = False
-            active_side = 1 if is_left_to_right else 0
-
-            byte_selection2[active_side] += direction
-            limiter, limit = (min, len(self._bytes)) if is_left_to_right else (max, 0)
-            byte_selection2[active_side] = limiter(byte_selection2[active_side], limit)
-            if byte_selection2 == list(byte_selection): return
-
-            text_selection2 = list(map(self._PosIn, byte_selection2))
-            if byte_selection2[0] != byte_selection2[1]: # Tweak selection to exclude edge linefeeds
-                pos_in_lines = [x - self.PositionFromLine(self.LineFromPosition(x))
-                                for x in text_selection2]
-                if pos_in_lines[0] == self.WIDTH:
-                    text_selection2[0] += 1 # Exclude leading linefeed
-                if pos_in_lines[1] == 0:
-                    text_selection2[1] -= 1 # Exclude trailing linefeed
-
-            if is_left_to_right:
-                sself.SetSelection(*text_selection2)
-            else:
-                sself.SetAnchor(text_selection2[1])
-                sself.SetCurrentPos(text_selection2[0])
-        else: # Moving
-            byte_pos = self.CurrentPos
-            if self.GetSelectionEmpty():
-                byte_pos2 = byte_pos + direction
-                if direction > 0:
-                    text_pos = sself.CurrentPos
-                    pos_in_line = text_pos - self.PositionFromLine(self.LineFromPosition(text_pos))
-                    if pos_in_line == self.WIDTH: # At line end
-                        byte_pos2 -= 1 # Pull back one byte as line end == first byte of next line
-            else: # Clearing selection: remain on side of direction
-                byte_pos2 = byte_selection[0 if direction < 0 else 1]
-
-            if 0 <= byte_pos2 < len(self._bytes) + 1:
-                self.SetSelection(byte_pos2, byte_pos2)
-
-        self.EnsureCaretVisible()
-
-
-    def _OnKeyDownVertical(self, event):
-        """Handler for pressing up/down or pageup/pagedown keys."""
-        if not self._bytes: return
-        self._QueueEvents()
-
-        LINE_STEP = 1 if event.KeyCode in KEYS.UP + KEYS.DOWN else max(1, self.LinesOnScreen())
-        sself = super(ByteTextCtrl, self)
-        direction = -1 if event.KeyCode in KEYS.UP + KEYS.PAGEUP else 1
-        byte_pos = self.CurrentPos
-        anchor_pos = self.Anchor
-        text_pos = sself.CurrentPos
-        pos_in_line = text_pos - self.PositionFromLine(self.LineFromPosition(text_pos))
-        line_index = byte_pos // self.WIDTH
-        #line_index = self.CurrentLine
-
-        if event.ShiftDown(): # Select text
-            anchor_pos = sself.Anchor
-            line_index = self.CurrentLine
-            line_index2 = line_index + LINE_STEP * direction
-            line_index2 = max(0, min(line_index2, self.LineCount - 1))
-            text_pos2 = self.PositionFromLine(line_index2) + pos_in_line
-            self._ApplyPositions(text_pos2, anchor_pos)
-        else: # Move cursor
-            line_index = self.CurrentLine
-            line_index2 = line_index + LINE_STEP * direction
-            line_index2 = max(0, min(line_index2, self.LineCount - 1))
-            text_pos2 = self.PositionFromLine(line_index2) + pos_in_line
-            sself.SetSelection(text_pos2, text_pos2)
-
-        if event.KeyCode in KEYS.PAGEUP + KEYS.PAGEDOWN:
-            self.ScrollPages(direction)
-        self.EnsureCaretVisible()
-
-
-    def _ApplyPositions(self, currentpos, anchor=None):
-        """
-        Sets new cursor position or new selection, ensuring no leading or trailing linefeeds.
-
-        @param   currentpos      cursor text position to set
-        @param   anchor          selection anchor text position to set if not same as cursor
-        """
-        if anchor is None: anchor = currentpos
-        sself = super(ByteTextCtrl, self)
-        text_selection = [min(anchor, currentpos), max(anchor, currentpos)]
-        pos_in_lines = [x - self.PositionFromLine(self.LineFromPosition(x)) for x in text_selection]
-        xxx = text_selection[:]
-        if abs(anchor - currentpos) == 1 and self.WIDTH in pos_in_lines:
-            limiter = min if currentpos < sself.CurrentPos else max
-            text_selection = [limiter(text_selection)] * 2
-        else:
-            if pos_in_lines[0] == self.WIDTH:
-                text_selection[0] += 1 # Exclude leading linefeed
-            if pos_in_lines[1] == 0:
-                text_selection[1] -= 1 # Exclude trailing linefeed
-
-        if anchor <= currentpos: # Selection from left to right
-            sself.SetSelection(*text_selection)
-        else:
-            sself.SetAnchor(text_selection[1])
-            sself.SetCurrentPos(text_selection[0])
 
 
     def _OnKeyDownDeleteBackspace(self, event):
