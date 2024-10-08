@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    02.10.2024
+@modified    08.10.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -6384,78 +6384,6 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
             self.CharLeft()
 
 
-    def _PosIn(self, byte_pos):
-        line, linepos = divmod(byte_pos, self.WIDTH)
-        return line * (self.WIDTH + 1) + linepos
-    def _PosOut(self, text_pos):
-        return text_pos - self.LineFromPosition(text_pos)
-
-
-    def _Populate(self):
-        """Sets current content to widget."""
-        chars = re.sub("[^\x20-\x7e]", ".", bytes(self._bytes).decode("latin1"))
-        lines = [chars[i:i + self.WIDTH] for i in range(0, len(self._bytes), self.WIDTH)]
-        fulltext = "\n".join(lines)
-        if super(ByteTextCtrl, self).Text != fulltext:
-            super(ByteTextCtrl, self).ChangeValue(fulltext)
-        self._Restyle()
-        if self._fixed and not self.Overtype: self.SetOvertype(True)
-
-
-    def _Restyle(self):
-        """Restyles current content according to changed state."""
-        if not self._show_changes: return
-        eventmask0, _ = self.GetModEventMask(), self.SetModEventMask(0)
-        try:
-            self.StartStyling(0)
-            self.SetStyling(super(ByteTextCtrl, self).Length, 0)
-            ranges, currange = [], None
-            for i, c in enumerate(self._bytes):
-                if c == self._bytes0[i]: currange = None
-                elif currange:           currange[-1] += 1
-                else:                    currange = [i, 1]; ranges.append(currange)
-            for i, length in ranges:
-                self.StartStyling(i // self.WIDTH + i)
-                self.SetStyling(length // self.WIDTH + length, self.STYLE_CHANGED)
-        finally: self.SetModEventMask(eventmask0)
-
-
-    def _GetValueState(self, *value):
-        """Returns value type and data dict, from current content or given value."""
-        if not value:
-            state = {k: getattr(self, k) for k in ("_bytes", "_bytes0", "_fixed", "_type")}
-            return copy.deepcopy(state)
-
-        value = value[0]
-        if isinstance(value, bool): value = int(value)
-        bytesvalue = self._AdaptValue(value)
-        bytes0 = self._bytes0[:]
-        diff = len(bytesvalue) - len(bytes0)
-        if diff > 0:   bytes0.extend([None] * diff)
-        elif diff < 0: del bytes0[abs(diff):]
-
-        state = {
-            "_bytes":  bytearray(bytesvalue),
-            "_bytes0": bytes0,
-            "_fixed":  is_fixed(value) or value is None,
-            "_type":   type(value) if is_fixed(value) or isinstance(value, string_types) else str,
-        }
-        return state
-
-
-    def _SetValue(self, value, noreset=False):
-        """Set current content as typed value (string or number)."""
-        if isinstance(value, bool): value = int(value)
-        v = self._AdaptValue(value)
-
-        self._bytes[:] = v
-        if not noreset:
-            self._type  = type(value) if is_fixed(value) or isinstance(value, string_types) else str
-            self._fixed = is_fixed(value) or value is None
-            self._bytes0[:] = [x if isinstance(x, int) else ord(x) for x in v]
-        if self._fixed and not self.Overtype: self.SetOvertype(True)
-
-
     def OnFocus(self, event):
         """Handler for control getting focus, shows caret."""
         event.Skip()
@@ -6688,6 +6616,78 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         if not isinstance(v, bytes):
             v = str(v).encode("latin1")
         return v
+
+
+    def _PosIn(self, byte_pos):
+        line, linepos = divmod(byte_pos, self.WIDTH)
+        return line * (self.WIDTH + 1) + linepos
+    def _PosOut(self, text_pos):
+        return text_pos - self.LineFromPosition(text_pos)
+
+
+    def _Populate(self):
+        """Sets current content to widget."""
+        chars = re.sub("[^\x20-\x7e]", ".", bytes(self._bytes).decode("latin1"))
+        lines = [chars[i:i + self.WIDTH] for i in range(0, len(self._bytes), self.WIDTH)]
+        fulltext = "\n".join(lines)
+        if super(ByteTextCtrl, self).Text != fulltext:
+            super(ByteTextCtrl, self).ChangeValue(fulltext)
+        self._Restyle()
+        if self._fixed and not self.Overtype: self.SetOvertype(True)
+
+
+    def _Restyle(self):
+        """Restyles current content according to changed state."""
+        if not self._show_changes: return
+        eventmask0, _ = self.GetModEventMask(), self.SetModEventMask(0)
+        try:
+            self.StartStyling(0)
+            self.SetStyling(super(ByteTextCtrl, self).Length, 0)
+            ranges, currange = [], None
+            for i, c in enumerate(self._bytes):
+                if c == self._bytes0[i]: currange = None
+                elif currange:           currange[-1] += 1
+                else:                    currange = [i, 1]; ranges.append(currange)
+            for i, length in ranges:
+                self.StartStyling(i // self.WIDTH + i)
+                self.SetStyling(length // self.WIDTH + length, self.STYLE_CHANGED)
+        finally: self.SetModEventMask(eventmask0)
+
+
+    def _GetValueState(self, *value):
+        """Returns value type and data dict, from current content or given value."""
+        if not value:
+            state = {k: getattr(self, k) for k in ("_bytes", "_bytes0", "_fixed", "_type")}
+            return copy.deepcopy(state)
+
+        value = value[0]
+        if isinstance(value, bool): value = int(value)
+        bytesvalue = self._AdaptValue(value)
+        bytes0 = self._bytes0[:]
+        diff = len(bytesvalue) - len(bytes0)
+        if diff > 0:   bytes0.extend([None] * diff)
+        elif diff < 0: del bytes0[abs(diff):]
+
+        state = {
+            "_bytes":  bytearray(bytesvalue),
+            "_bytes0": bytes0,
+            "_fixed":  is_fixed(value) or value is None,
+            "_type":   type(value) if is_fixed(value) or isinstance(value, string_types) else str,
+        }
+        return state
+
+
+    def _SetValue(self, value, noreset=False):
+        """Set current content as typed value (string or number)."""
+        if isinstance(value, bool): value = int(value)
+        v = self._AdaptValue(value)
+
+        self._bytes[:] = v
+        if not noreset:
+            self._type  = type(value) if is_fixed(value) or isinstance(value, string_types) else str
+            self._fixed = is_fixed(value) or value is None
+            self._bytes0[:] = [x if isinstance(x, int) else ord(x) for x in v]
+        if self._fixed and not self.Overtype: self.SetOvertype(True)
 
 
     def _QueueEvents(self):
