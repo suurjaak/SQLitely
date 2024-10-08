@@ -10337,21 +10337,21 @@ class ColumnDialog(wx.Dialog):
 
 
         def on_save(value):
-            fmts = sorted(v for v in self.IMAGE_FORMATS.values() if "svg" != v)
-            wildcard = controls.make_dialog_filter(fmts, noun="image")
-            filteridx = 0
-            if self.IMAGE_FORMATS[value.Type] in fmts:
-                filteridx = fmts.index(self.IMAGE_FORMATS[value.Type])
+            is_svg = ("svg" == state["format0"])
+            formats = sorted(v for v in self.IMAGE_FORMATS.values() if is_svg or v != "svg")
+            wildcard = controls.make_dialog_filter(formats, noun="image")
+            filteridx = formats.index(self.IMAGE_FORMATS[value.Type])
             dlg = wx.FileDialog(self, message="Save image as",
                 wildcard=wildcard, defaultFile=util.safe_filename(self._name),
                 style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
             )
-            controls.set_dialog_filter(dlg, filteridx, exts=fmts)
+            controls.set_dialog_filter(dlg, filteridx, exts=formats)
             if wx.ID_OK != dlg.ShowModal(): return
 
             filename = controls.get_dialog_path(dlg)
-            filetype = os.path.splitext(filename)[-1].lstrip(".").upper()
-            v = convert(filetype)
+            filetype = os.path.splitext(filename)[-1].lstrip(".")
+            if is_svg and "svg" == filetype: v = state["converts"]["svg"]
+            else: v = convert(filetype)
             if not v: return
             with open(filename, "wb") as f: f.write(v)
 

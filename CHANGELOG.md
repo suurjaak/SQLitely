@@ -23,6 +23,7 @@ CHANGELOG
 - do not highlight changes in hex view in value editor tool
 - mark changed pragma values with asterisks
 - use hourglass cursor while showing busy message
+- allow saving SVG image as SVG in column editor
 - fix rolling back changes on error in schema editor test and save
 - fix representing very large integers in column editor hex view
 - fix cutting text from column editor hex view
