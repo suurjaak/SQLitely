@@ -6496,18 +6496,22 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
                 return
 
             self._bytes[byte_pos] = event.KeyCode
-            if self.Overtype and text_pos < self.GetLastPosition():
-                if not self._fixed and pos_in_line >= self.WIDTH:
-                    text_pos += 1
-                char = re.sub("[^\x20-\x7e]", ".", chr(event.KeyCode)) # Display non-ASCII as dots
-                self.Replace(text_pos, text_pos + 1, char)
-                if self._show_changes:
-                    style = self.STYLE_CHANGED
-                    if self._bytes0[byte_pos] == self._bytes[byte_pos]: style = 0
-                    self.StartStyling(text_pos)
-                    self.SetStyling(1, style)
-            else: self._Populate()
-            self.SetSelection(byte_pos + 1, byte_pos + 1)
+            self.Freeze()
+            try:
+                if self.Overtype and text_pos < self.GetLastPosition():
+                    if not self._fixed and pos_in_line >= self.WIDTH:
+                        text_pos += 1
+                    char = re.sub("[^\x20-\x7e]", ".", chr(event.KeyCode)) # Display non-ASCII as dots
+                    self.Replace(text_pos, text_pos + 1, char)
+                    if self._show_changes:
+                        style = self.STYLE_CHANGED
+                        if self._bytes0[byte_pos] == self._bytes[byte_pos]: style = 0
+                        self.StartStyling(text_pos)
+                        self.SetStyling(1, style)
+                else: self._Populate()
+                self.SetSelection(byte_pos + 1, byte_pos + 1)
+                self.EnsureCaretVisible()
+            finally: self.Thaw()
         cmd.Store()
 
 
