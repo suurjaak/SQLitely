@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.10.2024
+@modified    08.10.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4346,7 +4346,7 @@ class DatabasePage(wx.Panel):
                 layout.SetFonts("Verdana",
                                 ("Open Sans", conf.FontDiagramSize,
                                  conf.FontDiagramFile, conf.FontDiagramBoldFile))
-                layout.Populate({"stats": True})
+                layout.Populate({"statistics": True})
                 layout.Redraw(wx.Rect(0, 0, *conf.Defaults["WindowSize"]), scheme.LayoutStyle.GRID)
                 diagrams = {"bmp": layout.MakeBitmap(),
                             "svg": layout.MakeTemplate("SVG", embed=True)}

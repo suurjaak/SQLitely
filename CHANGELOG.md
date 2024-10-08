@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.4, 2024-10-04
+2.4, 2024-10-08
 ---------------
 - add support for generated columns
 - add find/replace dialog to data grids and column editors and database schema text
@@ -32,6 +32,7 @@ CHANGELOG
 - fix opening third-party license link in snaps
 - fix accounting for relation lines in schema diagram zoom to fit
 - fix pragma editor not disabling controls afterwards
+- fix not having counts/bytes on schema diagram in statistics export
 - refactor import-export functionality to classes
 
 
