@@ -5586,7 +5586,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
 
     def OnChar(self, event):
-        """Handler for keypress, cancels event if not acceptable character."""
+        """Handler for keypress, performs undo-redo-paste; cancels event if not acceptable key."""
 
         if event.CmdDown() and not event.AltDown() and not event.ShiftDown() \
         and ord("Z") == event.KeyCode:
@@ -5622,7 +5622,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
 
     def OnKeyDown(self, event):
-        """Handler for key down, moves caret to word boundary."""
+        """Handler for key down, performs navigation and text insertion."""
         self._QueueEvents()
 
         if event.KeyCode in KEYS.LEFT + KEYS.RIGHT:
@@ -6520,18 +6520,17 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
 
         if event.CmdDown() and not event.AltDown() and not event.ShiftDown() \
         and ord("Z") == event.KeyCode:
-            return self.Undo(mirror=True)
+            self.Undo(mirror=True)
 
         elif event.CmdDown() and not event.AltDown() and (not event.ShiftDown() \
         and ord("Y") == event.KeyCode) or (event.ShiftDown() and ord("Z") == event.KeyCode):
-            return self.Redo(mirror=True)
+            self.Redo(mirror=True)
 
         elif event.CmdDown() and not event.AltDown() and not event.ShiftDown() \
         and event.KeyCode in KEYS.INSERT + (ord("C"), ):
             if wx.TheClipboard.Open():
                 wx.TheClipboard.SetData(wx.TextDataObject(str(self._bytes)))
                 wx.TheClipboard.Close()
-            return
 
         elif event.CmdDown() and not event.AltDown() and (not event.ShiftDown()
         and ord("V") == event.KeyCode or event.ShiftDown() and event.KeyCode in KEYS.INSERT):
