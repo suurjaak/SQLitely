@@ -5357,6 +5357,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         self._undoredo.ClearCommands()
         self._Populate()
         self._ApplyPositions(byte_pos)
+        self.EnsureCaretVisible()
 
     Value = property(GetValue, SetValue)
 
@@ -5371,6 +5372,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         byte_pos = self.Selection[0]
         HexByteCommand(self).Submit(value, mirror=mirror)
         self._ApplyPositions(byte_pos)
+        self.EnsureCaretVisible()
 
 
     def GetAnchor(self):
@@ -6278,9 +6280,15 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
 
     def SetValue(self, value):
         """Set current content as typed value (string or number), clears undo."""
-        self._SetValue(value)
-        self._Populate()
-        self._undoredo.ClearCommands()
+        self.Freeze()
+        try:
+            text_pos = self.GetSelection()[0]
+            self._SetValue(value)
+            self._Populate()
+            self._undoredo.ClearCommands()
+            self.SetSelection(text_pos, text_pos)
+            self.EnsureCaretVisible()
+        finally: self.Thaw()
 
     Value = property(GetValue, SetValue)
 
@@ -6291,7 +6299,13 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
 
     def UpdateValue(self, value, mirror=False):
         """Update current content as typed value (string or number), retaining history."""
-        HexByteCommand(self).Submit(value, mirror=mirror)
+        self.Freeze()
+        try:
+            text_pos = self.GetSelection()[0]
+            HexByteCommand(self).Submit(value, mirror=mirror)
+            self.SetSelection(text_pos, text_pos)
+            self.EnsureCaretVisible()
+        finally: self.Thaw()
 
 
     def GetAnchor(self):
