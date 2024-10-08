@@ -1635,13 +1635,13 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             return wx.MessageBox("%s exist on this computer." % info, conf.Title,
                                  wx.OK | wx.ICON_ERROR)
 
-        exts = ";".join("*" + x for x in conf.DBExtensions)
-        wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
         if len(filenames) > 1:
             dialog = wx.DirDialog(self, message="Choose directory where to save databases",
                 defaultPath=six.moves.getcwd(), style=wx.DD_DIR_MUST_EXIST | wx.RESIZE_BORDER
             )
         else:
+            wildcard = controls.make_dialog_filter(conf.DBExtensions, noun="SQLite database",
+                                                   merge=True, blank=True)
             dialog = wx.FileDialog(self, message="Save a copy..", wildcard=wildcard,
                 defaultDir=os.path.dirname(filenames[0]),
                 defaultFile=os.path.basename(filenames[0]),
@@ -1978,8 +1978,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         Handler for open database menu or button, displays a file dialog and
         loads the chosen database.
         """
-        exts = ";".join("*" + x for x in conf.DBExtensions)
-        wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
+        wildcard = controls.make_dialog_filter(conf.DBExtensions, noun="SQLite database",
+                                               merge=True, blank=True)
         dialog = wx.FileDialog(self, message="Open", wildcard=wildcard,
             style=wx.FD_FILE_MUST_EXIST | wx.FD_MULTIPLE | wx.FD_OPEN | 
                   wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
@@ -4326,12 +4326,11 @@ class DatabasePage(wx.Panel):
         """
         filename = os.path.splitext(os.path.basename(self.db.name))[0]
         filename = filename.rstrip() + " statistics"
+        wildcard = controls.make_dialog_filter(importexport.InfoSink.STATS_TEMPLATES,
+                                               importexport.EXT_NAMES)
         dialog = wx.FileDialog(
-            self, message="Save statistics as", defaultFile=filename,
-            wildcard="HTML file (*.html)|*.html|SQL file (*.sql)|*.sql|"
-                     "Text file (*.txt)|*.txt",
-            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | 
-                  wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
+            self, message="Save statistics as", defaultFile=filename, wildcard=wildcard,
+            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
@@ -5033,11 +5032,11 @@ class DatabasePage(wx.Panel):
             directory, filename = os.path.split(self.db.filename)
             base = os.path.splitext(filename)[0]
 
+            wildcard = controls.make_dialog_filter(["db"], {"db": "SQLite database"})
             dlg = wx.FileDialog(self, message="Save recovered data as",
-                defaultDir=directory, defaultFile="%s (recovered)" % base,
-                wildcard="SQLite database (*.db)|*.db",
-                style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | 
-                      wx.FD_CHANGE_DIR | wx.RESIZE_BORDER)
+                defaultDir=directory, defaultFile="%s (recovered)" % base, wildcard=wildcard,
+                style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
+            )
             if wx.ID_OK != dlg.ShowModal(): return
 
             newfile = controls.get_dialog_path(dlg)
@@ -5581,11 +5580,10 @@ class DatabasePage(wx.Panel):
         """
         filename = os.path.splitext(os.path.basename(self.db.name))[0]
         if title: filename += " " + title
+        wildcard = controls.make_dialog_filter(["sql"], blank=True)
         dialog = wx.FileDialog(
-            self, message="Save SQL as", defaultFile=filename,
-            wildcard="SQL file (*.sql)|*.sql|All files|*.*",
-            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | 
-                  wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
+            self, message="Save SQL as", defaultFile=filename, wildcard=wildcard,
+            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
@@ -5734,11 +5732,10 @@ class DatabasePage(wx.Panel):
             return self.notebook.SetSelection(self.pageorder[self.page_data])
         filename = os.path.splitext(os.path.basename(self.db.name))[0]
         filename += " dump"
+        wildcard = controls.make_dialog_filter(["sql"], blank=True)
         dialog = wx.FileDialog(
-            self, message="Save database dump as", defaultFile=filename,
-            wildcard="SQL file (*.sql)|*.sql|All files|*.*",
-            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | 
-                  wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
+            self, message="Save database dump as", defaultFile=filename, wildcard=wildcard,
+            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
@@ -5786,12 +5783,10 @@ class DatabasePage(wx.Panel):
 
         title = os.path.splitext(os.path.basename(self.db.name))[0]
         title += " %s" % categorylabel
-        dialog = wx.FileDialog(
-            self, message="Save %s as" % categorylabel,
+        dialog = wx.FileDialog(self,
+            message="Save %s as" % categorylabel, wildcard=importexport.EXPORT_WILDCARD,
             defaultFile=title,
-            wildcard=importexport.EXPORT_WILDCARD,
-            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE |
-                  wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
+            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
         controls.set_dialog_filter(dialog, ext=conf.LastExportType, exts=importexport.EXPORT_EXTS)
         if wx.ID_OK != dialog.ShowModal(): return
@@ -5899,15 +5894,13 @@ class DatabasePage(wx.Panel):
         filename1, filename2, tempname = self.db.filename, self.db.filename, None
 
         if is_temporary or rename:
-            exts = ";".join("*" + x for x in conf.DBExtensions)
-            wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
+            wildcard = controls.make_dialog_filter(conf.DBExtensions, noun="SQLite database",
+                                                   merge=True, blank=True)
             title = "Save %s as.." % os.path.split(self.db.name)[-1]
             dialog = wx.FileDialog(self,
-                message=title, wildcard=wildcard,
+                message=title, wildcard=wildcard, defaultFile=os.path.basename(self.db.name),
                 defaultDir="" if is_temporary else os.path.split(self.db.filename)[0],
-                defaultFile=os.path.basename(self.db.name),
-                style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE |
-                      wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
+                style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
             )
             if wx.ID_OK != dialog.ShowModal(): return
 
@@ -6456,8 +6449,8 @@ class DatabasePage(wx.Panel):
                                      for x in database.Database.DATA_CATEGORIES), [])
         if not names: return
 
-        exts = ";".join("*" + x for x in conf.DBExtensions)
-        wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
+        wildcard = controls.make_dialog_filter(conf.DBExtensions, noun="SQLite database",
+                                               merge=True, blank=True)
         dialog = wx.FileDialog(
             self, message="Select existing or new database to export to",
             wildcard=wildcard, style=wx.FD_SAVE | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.10.2024
+@modified    08.10.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -1923,8 +1923,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
         self._dialog_export = wx.FileDialog(self, defaultDir=six.moves.getcwd(),
             message="Save query as", wildcard=importexport.EXPORT_WILDCARD,
-            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT |
-                  wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
         self._dialog_find_sql  = controls.FindReplaceDialog(self, title="Find in SQL")
         self._dialog_find_grid = controls.FindReplaceDialog(self, title="Find in data", findonly=True)
@@ -2565,9 +2564,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         Handler for loading SQL from file, opens file dialog and loads content.
         """
         dialog = wx.FileDialog(self, message="Open", defaultFile="",
-            wildcard="SQL file (*.sql)|*.sql|All files|*.*",
-            style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN |
-                  wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
+            wildcard=controls.make_dialog_filter(["sql"], blank=True),
+            style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
@@ -2587,9 +2585,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         """
         filename = "%s SQL" % os.path.splitext(os.path.basename(self._db.name))[0]
         dialog = wx.FileDialog(self, message="Save as", defaultFile=filename,
-            wildcard="SQL file (*.sql)|*.sql|All files|*.*",
-            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE |
-                  wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
+            wildcard=controls.make_dialog_filter(["sql"], blank=True),
+            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
@@ -2626,8 +2623,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         self._dialog_export = wx.FileDialog(self, defaultDir=six.moves.getcwd(),
             message="Save %s as" % self._category,
             wildcard=importexport.EXPORT_WILDCARD,
-            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT |
-                  wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -6101,9 +6097,8 @@ class SchemaObjectPage(wx.Panel):
             action, name = "ALTER", self._item["name"]
         filename = " ".join((action, category, name))
         dialog = wx.FileDialog(self, message="Save as", defaultFile=filename,
-            wildcard="SQL file (*.sql)|*.sql|All files|*.*",
-            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE |
-                  wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
+            wildcard=controls.make_dialog_filter(["sql"], blank=True),
+            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
@@ -7110,8 +7105,7 @@ class ImportDialog(wx.Dialog):
 
         self._dialog_file = wx.FileDialog(self, message="Open",
             wildcard=importexport.IMPORT_WILDCARD,
-            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST |
-                  wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
+            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
 
         self.DropTarget = controls.FileDrop(on_files=self._OnDropFiles)
@@ -10343,18 +10337,14 @@ class ColumnDialog(wx.Dialog):
 
 
         def on_save(value):
-            FMTS = sorted(x for x in self.IMAGE_FORMATS.values() if "SVG" != x)
-            fmts = [x.lower() for x in flist.Items]
-            wildcard = "|".join("%s image (*.%s)|*.%s" % (x.upper(), x, x)
-                                for x in fmts)
-            filteridx = next(i for i, (k, v) in enumerate(
+            fmts = sorted(x.lower() for x in self.IMAGE_FORMATS.values() if "SVG" != x)
+            wildcard = controls.make_dialog_filter(fmts, noun="image")
+            filteridx = next(i for i, (k, _) in enumerate(
                 sorted(self.IMAGE_FORMATS.items(), key=lambda x: x[1])
             ) if k == value.Type)
-
-            dlg = wx.FileDialog(self, message="Save image as", wildcard=wildcard,
-                defaultFile=util.safe_filename(self._name),
-                style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT |
-                      wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
+            dlg = wx.FileDialog(self, message="Save image as",
+                wildcard=wildcard, defaultFile=util.safe_filename(self._name),
+                style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
             )
             controls.set_dialog_filter(dlg, filteridx, exts=fmts)
             if wx.ID_OK != dlg.ShowModal(): return
@@ -10685,17 +10675,15 @@ class ColumnDialog(wx.Dialog):
 
     def _OnLoad(self, event, name, handler=None):
         """Handler for loading view value from file."""
-        wildcard, filteridx, fmts = "All files|*.*", -1, ()
+        wildcard, filteridx, formats = controls.make_dialog_filter(blank=True), -1, ()
         if "image" == name:
-            fmts = sorted([x.lower() for x in self.IMAGE_FORMATS.values()])
-            wildcard = "All images ({0})|{0}|".format(";".join("*." + x for x in fmts)) + \
-                       "|".join("%s image (*.%s)|*.%s" % (x.upper(), x, x) for x in fmts) + \
-                       "|" + wildcard
+            formats = sorted(x.lower() for x in self.IMAGE_FORMATS.values())
+            wildcard = controls.make_dialog_filter(formats, noun="image", group=True, blank=True)
             filteridx = 0
         dlg = wx.FileDialog(self, message="Open", defaultFile="", wildcard=wildcard,
             style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
-        controls.set_dialog_filter(dlg, filteridx, exts=fmts)
+        controls.set_dialog_filter(dlg, filteridx, exts=formats)
         if wx.ID_OK != dlg.ShowModal(): return
         filename = dlg.GetPath()
         if handler: handler(filename, propagate=True)
@@ -10709,7 +10697,8 @@ class ColumnDialog(wx.Dialog):
         if value in ("", None): return
         if handler: return handler(value)
 
-        dlg = wx.FileDialog(self, message="Save value as", wildcard="All files|*.*",
+        dlg = wx.FileDialog(self, message="Save value as",
+            wildcard=controls.make_dialog_filter(blank=True),
             defaultFile=util.safe_filename(self._name),
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
@@ -10849,16 +10838,17 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         self._tooltip_timer = None # wx.Timer for setting delayed tooltip on hover
 
 
-        FMTS = sorted(self.EXPORT_FORMATS.values())
-        wildcarder = lambda a: "|".join("%s image (*.%s)|*.%s" % (x, x.lower(), x.lower())
-                                        for x in a)
-        self._dlg_save = wx.FileDialog(self, message="Save diagram as", wildcard=wildcarder(FMTS),
+        all_formats = sorted(x.lower() for x in self.EXPORT_FORMATS.values())
+        bitmap_formats = sorted(x.lower() for x in self.EXPORT_FORMATS.values() if "SVG" != x)
+        self._dlg_save = wx.FileDialog(self, message="Save diagram as",
+            wildcard=controls.make_dialog_filter(all_formats, noun="image"),
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER)
-        controls.set_dialog_filter(self._dlg_save, FMTS.index("PNG") if "PNG" in FMTS else 0)
-        BMPFMTS = sorted(x for x in self.EXPORT_FORMATS.values() if "SVG" != x)
-        self._dlg_savebmp = wx.FileDialog(self, message="Save diagram as", wildcard=wildcarder(BMPFMTS),
+        self._dlg_savebmp = wx.FileDialog(self, message="Save diagram as",
+            wildcard=controls.make_dialog_filter(bitmap_formats, noun="image"),
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER)
-        controls.set_dialog_filter(self._dlg_savebmp, FMTS.index("PNG") if "PNG" in FMTS else 0)
+        if "png" in all_formats:
+            controls.set_dialog_filter(self._dlg_save, all_formats.index("png"))
+            controls.set_dialog_filter(self._dlg_savebmp, bitmap_formats.index("png"))
 
         self._worker_graph = workers.WorkerThread()
         self._worker_bmp = workers.WorkerThread()
@@ -12198,8 +12188,8 @@ class ImportWizard(wx.adv.Wizard):
             self.file_existed = False # Whether database file existed
 
 
-            exts = ";".join("*" + x for x in conf.DBExtensions)
-            wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
+            wildcard = controls.make_dialog_filter(conf.DBExtensions, noun="SQLite database",
+                                                   merge=True, blank=True)
             filebutton = self.button_file = controls.FileBrowseButton(
                             self, labelText="Target file:", buttonText="B&rowse",
                             dialogTitle="Choose existing or create new database",
