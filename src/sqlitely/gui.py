@@ -4348,7 +4348,7 @@ class DatabasePage(wx.Panel):
                 layout.Populate({"statistics": True})
                 layout.Redraw(wx.Rect(0, 0, *conf.Defaults["WindowSize"]), scheme.LayoutStyle.GRID)
                 diagrams = {"bmp": layout.MakeBitmap(),
-                            "svg": layout.MakeTemplate("SVG", embed=True)}
+                            "svg": layout.MakeTemplate("svg", embed=True)}
             importexport.InfoSink(self.db, filename).write_stats(extname, data, diagrams)
             guibase.status('Exported to "%s".', filename, log=True)
             util.start_file(filename)
@@ -4724,7 +4724,7 @@ class DatabasePage(wx.Panel):
             elif event.Id == item_all.Id:
                 self.handle_command("copy", "related", None, *names)
             elif event.Id == item_svg.Id:
-                text, label = self.diagram.MakeTemplate("SVG", items=names), "diagram SVG"
+                text, label = self.diagram.MakeTemplate("svg", items=names), "diagram SVG"
             elif event.Id == item_names.Id:
                 text = "\n".join(map(grammar.quote, names))
                 label = util.plural("name", names, numbers=False)

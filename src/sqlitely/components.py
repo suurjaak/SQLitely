@@ -9011,17 +9011,17 @@ class HistoryDialog(wx.Dialog):
 class ColumnDialog(wx.Dialog):
 
     IMAGE_FORMATS = {
-        wx.BITMAP_TYPE_BMP:  "BMP",
-        wx.BITMAP_TYPE_GIF:  "GIF",
-        wx.BITMAP_TYPE_ICO:  "ICO",
-        wx.BITMAP_TYPE_JPEG: "JPG",
-        wx.BITMAP_TYPE_PCX:  "PCX",
-        wx.BITMAP_TYPE_PNG:  "PNG",
-        wx.BITMAP_TYPE_PNM:  "PNM",
-        wx.BITMAP_TYPE_TIFF: "TIFF",
+        wx.BITMAP_TYPE_BMP:  "bmp",
+        wx.BITMAP_TYPE_GIF:  "gif",
+        wx.BITMAP_TYPE_ICO:  "ico",
+        wx.BITMAP_TYPE_JPEG: "jpg",
+        wx.BITMAP_TYPE_PCX:  "pcx",
+        wx.BITMAP_TYPE_PNG:  "png",
+        wx.BITMAP_TYPE_PNM:  "pnm",
+        wx.BITMAP_TYPE_TIFF: "tiff",
     }
     if wx.svg: IMAGE_FORMATS.update({
-        0xFFFF:              "SVG",
+        0xFFFF:              "svg",
     })
 
     # Global controls.CallableManagerDialog instance
@@ -10324,7 +10324,7 @@ class ColumnDialog(wx.Dialog):
         page = wx.Panel(notebook, name=NAME)
 
 
-        FMTS = sorted(x for x in self.IMAGE_FORMATS.values() if "SVG" != x)
+        bitmap_formats_upper = sorted(v.upper() for v in self.IMAGE_FORMATS.values() if "svg" != v)
         def load_svg(v):
             v = v if isinstance(v, six.binary_type) else v.encode("latin1")
             # Make a new string, as CreateFromBytes changes <> to NULL-bytes
@@ -10332,12 +10332,12 @@ class ColumnDialog(wx.Dialog):
             svg = wx.svg.SVGimage.CreateFromBytes(v + b" ")
             if not svg.width or not svg.height: return None
             img = svg.ConvertToScaledBitmap((svg.width, svg.height)).ConvertToImage()
-            img.Type = next(k for k, v in self.IMAGE_FORMATS.items() if "SVG" == v)
+            img.Type = next(k for k, v in self.IMAGE_FORMATS.items() if "svg" == v)
             return img
 
 
         def on_save(value):
-            fmts = sorted(x.lower() for x in self.IMAGE_FORMATS.values() if "SVG" != x)
+            fmts = sorted(v for v in self.IMAGE_FORMATS.values() if "svg" != v)
             wildcard = controls.make_dialog_filter(fmts, noun="image")
             filteridx = next(i for i, (k, _) in enumerate(
                 sorted(self.IMAGE_FORMATS.items(), key=lambda x: x[1])
@@ -10371,10 +10371,10 @@ class ColumnDialog(wx.Dialog):
                 bmp.Hide()
 
         def on_convert(event=None):
-            name = flist.StringSelection
+            name = flist.StringSelection.lower()
             img, v = state["image"], convert(name)
             if v:
-                img = state["image"] = load_svg(v) if "SVG" == name \
+                img = state["image"] = load_svg(v) if "svg" == name \
                                        else wx.Image(io.BytesIO(v))
                 status.Label = "%sx%s, %s bytes" % (img.Width, img.Height, len(v))
                 if state["show"]: show_image(img)
@@ -10383,16 +10383,16 @@ class ColumnDialog(wx.Dialog):
 
         def convert(name):
             v = state["converts"].get(name)
-            if not v and "SVG" != name:
+            if not v and "svg" != name:
                 stream, img = io.BytesIO(), state["image"]
-                if "GIF" == name and not (0 < img.GetPalette().ColoursCount <= 256):
+                if "gif" == name and not (0 < img.GetPalette().ColoursCount <= 256):
                     # wxPython does not auto-decrease palette size, need to use PIL
                     pimg = util.img_wx_to_pil(img)
                     pimg2 = pimg.convert("P", palette=PIL.Image.ADAPTIVE)
-                    pimg2.save(stream, name.lower())
+                    pimg2.save(stream)
                 else:
-                    if "SVG" == state["format0"]:
-                        img = load_svg(state["converts"]["SVG"])
+                    if "svg" == state["format0"]:
+                        img = load_svg(state["converts"]["svg"])
                     elif self.IMAGE_FORMATS[img.Type] != state["format0"]:
                         img = wx.Image(io.BytesIO(state["converts"][state["format0"]]))
                     fmt = next(k for k, v in self.IMAGE_FORMATS.items() if v == name)
@@ -10424,7 +10424,7 @@ class ColumnDialog(wx.Dialog):
                 imghdr.tests.extend((test_ico, test_pcx, test_pnm))
                 is_known_format.imghdr = imghdr
             fmt = is_known_format.imghdr.what(None, bb)
-            return bool(fmt) and fmt.upper() in self.IMAGE_FORMATS.values()
+            return bool(fmt) and fmt in self.IMAGE_FORMATS.values()
 
         def update(value, reset=False, propagate=False):
             img, v = None, value
@@ -10449,7 +10449,7 @@ class ColumnDialog(wx.Dialog):
                 if state["show"]: bmp.Bitmap = errbmp
                 status.Label = "Not an image" if value else ""
                 ColourManager.Manage(status, "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
-                flist.Items = FMTS
+                flist.Items = bitmap_formats_upper
             elif img != state["image"]:
                 if state["show"]: show_image(img)
                 status.Label = "%sx%s" % (img.Width, img.Height)
@@ -10462,8 +10462,8 @@ class ColumnDialog(wx.Dialog):
                     state["converts"][self.IMAGE_FORMATS[img.Type]] = v
                     state["format0"] = self.IMAGE_FORMATS[img.Type]
                 ColourManager.Manage(hint, "ForegroundColour", wx.SYS_COLOUR_WINDOWTEXT)
-                flist.Items = sorted(set(FMTS + list(state["converts"])))
-                flist.StringSelection = self.IMAGE_FORMATS[img.Type]
+                flist.Items = sorted(set(bitmap_formats_upper + [x.upper() for x in state["converts"]]))
+                flist.StringSelection = self.IMAGE_FORMATS[img.Type].upper()
 
             state["image"] = img if img else None
             page.Layout()
@@ -10478,7 +10478,7 @@ class ColumnDialog(wx.Dialog):
         bmp    = wx.StaticBitmap(panel)
         cb     = wx.CheckBox(page, label="Show &image")
         status = wx.StaticText(page)
-        flist  = wx.Choice(page, choices=FMTS)
+        flist  = wx.Choice(page, choices=bitmap_formats_upper)
 
         hint.Label = "Value as image binary"
         cb.Value   = True
@@ -10677,7 +10677,7 @@ class ColumnDialog(wx.Dialog):
         """Handler for loading view value from file."""
         wildcard, filteridx, formats = controls.make_dialog_filter(blank=True), -1, ()
         if "image" == name:
-            formats = sorted(x.lower() for x in self.IMAGE_FORMATS.values())
+            formats = sorted(v for v in self.IMAGE_FORMATS.values())
             wildcard = controls.make_dialog_filter(formats, noun="image", group=True, blank=True)
             filteridx = 0
         dlg = wx.FileDialog(self, message="Open", defaultFile="", wildcard=wildcard,
@@ -10802,9 +10802,9 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
     """
 
     EXPORT_FORMATS = {
-        wx.BITMAP_TYPE_BMP:  "BMP",
-        wx.BITMAP_TYPE_PNG:  "PNG",
-        0xFFFF:              "SVG",
+        wx.BITMAP_TYPE_BMP:  "bmp",
+        wx.BITMAP_TYPE_PNG:  "png",
+        0xFFFF:              "svg",
     }
 
     VIRTUALSZ = 2000, 2000 # Default virtual size
@@ -10838,8 +10838,8 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         self._tooltip_timer = None # wx.Timer for setting delayed tooltip on hover
 
 
-        all_formats = sorted(x.lower() for x in self.EXPORT_FORMATS.values())
-        bitmap_formats = sorted(x.lower() for x in self.EXPORT_FORMATS.values() if "SVG" != x)
+        all_formats = sorted(self.EXPORT_FORMATS.values())
+        bitmap_formats = sorted(v for v in self.EXPORT_FORMATS.values() if "svg" != v)
         self._dlg_save = wx.FileDialog(self, message="Save diagram as",
             wildcard=controls.make_dialog_filter(all_formats, noun="image"),
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER)
@@ -11169,7 +11169,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         if wx.ID_OK != dlg.ShowModal(): return
 
         filename = controls.get_dialog_path(dlg)
-        filetype = os.path.splitext(filename)[-1].lstrip(".").upper()
+        filetype = os.path.splitext(filename)[-1].lstrip(".")
         wxtype   = next(k for k, v in self.EXPORT_FORMATS.items() if v == filetype)
         layout = self._diagram
 
@@ -11187,7 +11187,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             layout.Populate()
             layout.Redraw(wx.Rect(0, 0, *conf.Defaults["WindowSize"]), scheme.LayoutStyle.GRID)
 
-        if "SVG" == filetype:
+        if "svg" == filetype:
             content = layout.MakeTemplate(filetype, title, selections=selections, items=items)
             with open(filename, "wb") as f: f.write(content.encode("utf-8", errors="replace"))
         else:
@@ -11213,12 +11213,12 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         """
         Returns diagram as template content.
 
-        @param   filetype  template type like "SVG"
+        @param   filetype  template type like "svg"
         @param   title     specific title to set if not from database filename
         @param   embed     whether to omit full XML headers for embedding in HTML
         @param   items     list of entity names to include if not all
         """
-        if not self or not self._enabled or "SVG" != filetype: return
+        if not self or not self._enabled: return
         return self._diagram.MakeTemplate(filetype, title, embed, selections=not items, items=items)
 
 
@@ -11288,7 +11288,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             elif event.Id == item_sqlall.Id:
                 self._page.handle_command("copy", "related", None, *names)
             elif event.Id == item_svg.Id:
-                text, label = self.MakeTemplate("SVG", items=names), "diagram SVG"
+                text, label = self.MakeTemplate("svg", items=names), "diagram SVG"
             elif event.Id == item_copy.Id:
                 text = "\n".join(map(grammar.quote, names))
                 label = util.plural("name", names, numbers=False)

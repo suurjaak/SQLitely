@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    18.07.2024
+@modified    08.10.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -687,13 +687,13 @@ class SchemaDiagram(object):
         """
         Returns diagram as template content.
 
-        @param   filetype    template type like "SVG"
+        @param   filetype    template type like "svg"
         @param   title       specific title to set if not from database filename
         @param   embed       whether to omit full XML headers for embedding in HTML
         @param   selections  whether currently selected items should be drawn as selected
         @param   items       list of entity names to include if not all
         """
-        if "SVG" != filetype or not self._objs: return None
+        if "svg" != filetype.lower() or not self._objs: return None
 
         zoom0 = self._zoom
         lines0, sels0 = copy.deepcopy(self._lines), copy.deepcopy(self._sels)

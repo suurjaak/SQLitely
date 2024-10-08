@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.09.2024
+@modified    08.10.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1758,7 +1758,7 @@ def run_stats(dbname, args):
             layout.Populate({"statistics": True})
             layout.Redraw(scheme.Rect(0, 0, *conf.Defaults["WindowSize"]), scheme.LayoutStyle.GRID)
             bmp = layout.MakeBitmap() 
-            svg = layout.MakeTemplate("SVG", embed=True)
+            svg = layout.MakeTemplate("svg", embed=True)
             diagrams = {"bmp": bmp, "svg": svg}
         bar.update(afterword=" Writing output")
         importexport.InfoSink(db, args.OUTFILE).write_stats(args.format, stats, diagrams)
