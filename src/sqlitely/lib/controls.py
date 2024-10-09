@@ -5163,10 +5163,16 @@ class HexByteCommand(wx.Command):
     def _Apply(self, state):
         """Populates control with state, returns False if control invalid else True."""
         if not self._ctrl: return False
+        line_index = self._ctrl.FirstVisibleLine
         for k in state:
             if "Selection" != k: setattr(self._ctrl, k, state[k])
-        self._ctrl._Populate()
-        self._ctrl.SetSelection(*state["Selection"])
+        self._ctrl.Freeze()
+        try:
+            self._ctrl._Populate()
+            self._ctrl.SetSelection(*state["Selection"])
+            self._ctrl.ChooseCaretX() # Update sticky column for vertical movement
+            self._ctrl.SetFirstVisibleLine(line_index)
+        finally: self._ctrl.Thaw()
         return True
 
     def _UpdateMirror(self, state):
@@ -5842,7 +5848,9 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
         needs_reflow = line_index < self.LineCount - 1 or (pos_in_line == 0 and direction < 0)
         if needs_reflow:
+            initial_visible_line = self.FirstVisibleLine
             self._Populate()
+            self.SetFirstVisibleLine(initial_visible_line)
             text_pos2 = self._PosIn(byte_pos)
             sself.SetEmptySelection(text_pos2)
         else: # Last line and not backspacing from first byte: change in-place
@@ -5914,7 +5922,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
         is_inserting_new = is_beyond_content or (pos_in_triplet == 0 and not self.Overtype)
         if is_replacing_selection or is_inserting_new: # Needs reflow: repopulate everything
-            initial_visible_line = sself.FirstVisibleLine
+            initial_visible_line = self.FirstVisibleLine
             self._Populate()
             self.SetFirstVisibleLine(initial_visible_line)
         else: # Overwrite current text with new value for byte
@@ -6288,8 +6296,8 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
             self._SetValue(value)
             self._Populate()
             self._undoredo.ClearCommands()
-            self.SetSelection(text_pos, text_pos)
-            self.EnsureCaretVisible()
+            self.GotoPos(text_pos)
+            self.ChooseCaretX() # Update sticky column for vertical movement
         finally: self.Thaw()
 
     Value = property(GetValue, SetValue)
@@ -6305,22 +6313,23 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         try:
             text_pos = self.GetSelection()[0]
             HexByteCommand(self).Submit(value, mirror=mirror)
-            self.SetSelection(text_pos, text_pos)
-            self.EnsureCaretVisible()
+            self.GotoPos(text_pos)
+            self.ChooseCaretX() # Update sticky column for vertical movement
         finally: self.Thaw()
 
 
     def GetAnchor(self):
         return self._PosOut(super(ByteTextCtrl, self).Anchor)
     def SetAnchor(self, anchor):
-        return super(ByteTextCtrl, self).SetAnchor(self._PosIn(anchor))
+        super(ByteTextCtrl, self).SetAnchor(self._PosIn(anchor))
     Anchor = property(GetAnchor, SetAnchor)
 
 
     def GetCurrentPos(self):
         return self._PosOut(super(ByteTextCtrl, self).CurrentPos)
     def SetCurrentPos(self, caret):
-        return super(ByteTextCtrl, self).SetCurrentPos(self._PosIn(caret))
+        super(ByteTextCtrl, self).SetCurrentPos(self._PosIn(caret))
+        self.ChooseCaretX() # Update sticky column for vertical movement
     CurrentPos = property(GetCurrentPos, SetCurrentPos)
 
 
@@ -6334,7 +6343,8 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         if from_ != to_:
             if to_ and not to_ % self.WIDTH: # Until line end: deselect linefeed
                 text_to -= 1
-        return super(ByteTextCtrl, self).SetSelection(text_from, text_to)
+        super(ByteTextCtrl, self).SetSelection(text_from, text_to)
+        self.ChooseCaretX() # Update sticky column for vertical movement
     Selection = property(GetSelection)
 
 
@@ -6382,6 +6392,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         byte_selection = self._mirror.Selection
         if byte_selection[0] != byte_selection[1]:
             self.SetSelection(*byte_selection)
+            self.ChooseCaretX() # Update sticky column for vertical movement
             return
 
         byte_pos = byte_selection[0]
@@ -6398,6 +6409,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         self.SetSelection(byte_pos, byte_pos)
         if do_shift:
             self.CharLeft()
+        self.ChooseCaretX() # Update sticky column for vertical movement
 
 
     def OnFocus(self, event):
@@ -6451,20 +6463,23 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         self._Populate()
         self.SetSelection(selection[0] + len(v), selection[0] + len(v))
         self.EnsureCaretVisible()
+        self.ChooseCaretX() # Update sticky column for vertical movement
         cmd.Store()
 
 
     def OnCopy(self, event):
         """Handler for clipboard copy event, updates bytes if cutting."""
 
-        def fix_content(cmd, byte_selection, line_index):
-            if not self or not self.GetSelectionEmpty(): return
+        def fix_content(cmd, byte_selection, first_line):
+            if not self: return
+            if not self.GetSelectionEmpty(): return # Not cut if selection still on
 
             for bb in self._bytes, self._bytes0:
                 del bb[byte_selection[0]:byte_selection[1]]
             self._Populate()
-            self.SetSelection(*byte_selection[:1] * 2)
-            self.SetFirstVisibleLine(line_index)
+            self.SetFirstVisibleLine(first_line)
+            self.GotoPos(self._PosIn(byte_selection[0]))
+            self.ChooseCaretX() # Update sticky column for vertical movement
             cmd.Store()
 
         if event.EventType == wx.stc.EVT_STC_CLIPBOARD_COPY.typeId:
@@ -6508,7 +6523,8 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
 
             if event.KeyCode == self._bytes[byte_pos] \
             and (byte_selection[0] == byte_selection[1] or self._fixed):
-                self.SetSelection(byte_pos + 1, byte_pos + 1)
+                self.GotoPos(self._PosIn(byte_pos + 1))
+                self.ChooseCaretX() # Update sticky column for vertical movement
                 return
 
             self._bytes[byte_pos] = event.KeyCode
@@ -6525,9 +6541,9 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
                         self.StartStyling(text_pos)
                         self.SetStyling(1, style)
                 else: self._Populate()
-                self.SetSelection(byte_pos + 1, byte_pos + 1)
-                self.EnsureCaretVisible()
+                self.GotoPos(self._PosIn(byte_pos + 1))
             finally: self.Thaw()
+        self.ChooseCaretX() # Update sticky column for vertical movement
         cmd.Store()
 
 
@@ -6565,7 +6581,13 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
 
         elif event.KeyCode in KEYS.ARROW + KEYS.PAGING + KEYS.HOME + KEYS.END:
             self._QueueEvents()
-            event.Skip()
+            accept = True
+            if event.KeyCode in KEYS.UP   and self.CurrentLine == 0 \
+            or event.KeyCode in KEYS.DOWN and self.CurrentLine == self.LineCount - 1:
+                accept = False # Do not jump to front or end from first or last line
+            if accept:
+                event.Skip()
+                self.ChooseCaretX() # Update sticky column for vertical movement
 
         elif event.KeyCode in KEYS.DELETE + KEYS.BACKSPACE:
             if not self._fixed:
@@ -6593,7 +6615,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         if byte_selection[0] != byte_selection[1]:
             del self._bytes [byte_selection[0]:byte_selection[1]]
             del self._bytes0[byte_selection[0]:byte_selection[1]]
-            self.SetSelection(byte_selection[0], byte_selection[0])
+            self.GotoPos(self._PosIn(byte_selection[0]))
             cmd.Submit(mirror=True)
             return
 
@@ -6615,9 +6637,15 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
             delete_from = max(text_pos - 1 if direction < 0 else text_pos, 0)
             self.Remove(delete_from, delete_from + 1)
         else:
-            self._Populate()
-            text_pos2 = self._PosIn(byte_pos)
-            sself.SetEmptySelection(text_pos2)
+            self.Freeze()
+            try:
+                initial_visible_line = self.FirstVisibleLine
+                self._Populate()
+                self.SetFirstVisibleLine(initial_visible_line)
+                text_pos2 = self._PosIn(byte_pos)
+                self.GotoPos(text_pos2)
+            finally: self.Thaw()
+        self.ChooseCaretX() # Update sticky column for vertical movement
         cmd.Store()
 
 
