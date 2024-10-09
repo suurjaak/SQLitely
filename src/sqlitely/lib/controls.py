@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    08.10.2024
+@modified    09.10.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -5832,11 +5832,11 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         if is_beyond_content:
             byte_pos = min(byte_pos, len(self._bytes) - 1)
             pos_in_triplet = 0
-        elif direction < 0 and not pos_in_triplet:
+        elif direction < 0 and pos_in_triplet == 0:
             byte_pos -= 1 # Backspacing over previous byte
         elif self._addressed and pos_in_line >= self.WIDTH * 3 - 1:
-            if direction > 0: # Delete at line end: apply on first byte of next line
-                byte_pos += 1
+            if direction < 0: # Backspace at line end: apply on last byte of cursor line
+                byte_pos -= 1
             pos_in_triplet = 0
         for bb in self._bytes, self._bytes0: del bb[byte_pos]
 
@@ -5844,18 +5844,19 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         if needs_reflow:
             self._Populate()
             text_pos2 = self._PosIn(byte_pos)
-            sself.SetSelection(text_pos2, text_pos2)
+            sself.SetEmptySelection(text_pos2)
         else: # Last line and not backspacing from first byte: change in-place
             remove_from = text_pos
             if pos_in_triplet:
                 remove_from -= 1 # Include first digit of byte
-            elif direction < 0 and self.GetSelectionEmpty():
+            elif direction < 0 and self.GetSelectionEmpty(): # Drop preceding triple
                 remove_from -= 3
-            elif direction > 0 and byte_pos >= len(self._bytes) - 1:
+            if direction > 0 and byte_pos >= len(self._bytes) - 1:
                 remove_from -= 1 # Drop trailing space
             remove_until = min(sself.Length, remove_from + 3)
             sself.Replace(remove_from, remove_until, "")
             self._Remargin()
+        self.EnsureCaretVisible()
         cmd.Store()
 
 
@@ -5877,24 +5878,26 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         text_pos = sself.CurrentPos
         is_beyond_content = (sself.SelectionEnd == self.GetLastPosition())
         pos_in_triplet = 0 # Position index in byte triplet "XY "
-        if is_replacing_selection:
+        if self._fixed: # Ensure valid start position
+            if has_selection or is_beyond_content:
+                byte_pos = len(self._bytes) - 1
+            text_pos = byte_pos * 3 # Ensure position from first digit of byte
+            is_beyond_content = False
+        elif is_replacing_selection: # Reset positions to former selection start
             byte_pos = selection[0]
             text_pos = byte_pos * 3
-        elif self._fixed and (has_selection or is_beyond_content):
-            if is_beyond_content: byte_pos = len(self._bytes) - 1
-            text_pos = byte_pos * 3
-            is_beyond_content = False
         else:
             pos_in_line = self._GetPositionInLine(text_pos)
             pos_in_triplet = pos_in_line % 3
 
-        if is_beyond_content: # At very end: add new byte
-            if self._bytes: text_pos, byte_pos = text_pos + 1, byte_pos + 1
-            pos_in_triplet = 0
+        if is_beyond_content: # At very end of free content: add new byte
+            if self._bytes:
+                byte_pos, text_pos = len(self._bytes), len(self._bytes) * 3
             self._bytes.append(0), self._bytes0.append(None)
-        elif pos_in_triplet > 1: # At space between bytes: move pointer back to byte start
-            text_pos, pos_in_triplet = text_pos - pos_in_triplet, 0
-        elif pos_in_triplet == 0: # At first digit of byte
+            pos_in_triplet = 0
+        elif pos_in_triplet != 1: # At first digit of byte or at addressed line end
+            text_pos = byte_pos * 3 # Ensure text pos from byte actual start pos
+            pos_in_triplet = 0 # Set text pos to byte actual start pos
             if not self.Overtype: # Insert new byte at current position
                 self._bytes.insert(byte_pos, 0), self._bytes0.insert(byte_pos, None)
         byte_pos = min(byte_pos, len(self._bytes) - 1)
@@ -5910,7 +5913,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         self._bytes[byte_pos] = byte
 
         is_inserting_new = is_beyond_content or (pos_in_triplet == 0 and not self.Overtype)
-        if is_replacing_selection or is_inserting_new:
+        if is_replacing_selection or is_inserting_new: # Needs reflow: repopulate everything
             initial_visible_line = sself.FirstVisibleLine
             self._Populate()
             self.SetFirstVisibleLine(initial_visible_line)
@@ -5923,9 +5926,8 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
                 self.StartStyling(byte_start_pos)
                 self.SetStyling(2, style)
         text_pos2 = text_pos + 1 + bool(pos_in_triplet) # Go to next digit, possibly next byte
-        sself.SetSelection(text_pos2, text_pos2)
-        if not self._addressed:
-            self.EnsureCaretVisible()
+        sself.SetEmptySelection(text_pos2)
+        self.EnsureCaretVisible()
         cmd.Store()
 
 
@@ -5962,7 +5964,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
                 text_selection = [text_selection[0] + 1] * 2
             if text_pos_shift:
                 text_selection = [x + text_pos_shift for x in text_selection]
-            sself.SetSelection(*text_selection)
+            sself.SetEmptySelection(text_selection[0])
             return
 
         anchor_side, caret_side = (0, 1)
@@ -6134,7 +6136,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
             if new_selection != list(text_selection2):
                 if new_selection[0] == new_selection[1]:
-                    sself.SetSelection(*new_selection)
+                    sself.SetEmptySelection(new_selection[0])
                 else:
                     step = 1 if sself.Anchor < sself.CurrentPos else -1 # Left-to-right vs reverse
                     new_anchor, new_currentpos = new_selection[::step]
@@ -6391,7 +6393,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
             line_start = mirrorbase.PositionFromLine(mirrorbase.LineFromPosition(mirror_text_pos))
             mirror_pos_in_line = mirror_text_pos - line_start
             if mirror_pos_in_line >= self._mirror.WIDTH * 3 - 1:  # At line end
-                do_shift = True # Move back from line to previous line end
+                do_shift = True # Move back from line start to previous line end
 
         self.SetSelection(byte_pos, byte_pos)
         if do_shift:
@@ -6615,7 +6617,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         else:
             self._Populate()
             text_pos2 = self._PosIn(byte_pos)
-            sself.SetSelection(text_pos2, text_pos2)
+            sself.SetEmptySelection(text_pos2)
         cmd.Store()
 
 
@@ -6710,12 +6712,14 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
     def _QueueEvents(self):
         """Raises CaretPositionEvent or LinePositionEvent or SelectionEvent if changed after."""
 
-        pos, firstline = self.CurrentPos, self.FirstVisibleLine
-        notselected, selection = self.GetSelectionEmpty(), self.GetSelection()
+        sself = super(ByteTextCtrl, self)
+        text_pos, firstline = sself.CurrentPos, self.FirstVisibleLine
+        text_selection = self.GetSelectionEmpty(), sself.GetSelection()
 
         def after():
             if not self: return
-            if pos != self.CurrentPos:
+
+            if text_pos != sself.CurrentPos:
                 evt = CaretPositionEvent(self.Id)
                 evt.SetEventObject(self)
                 evt.SetInt(self.CurrentPos)
@@ -6725,8 +6729,8 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
                 evt.SetEventObject(self)
                 evt.SetInt(self.FirstVisibleLine)
                 wx.PostEvent(self, evt)
-            if notselected != self.GetSelectionEmpty() \
-            or not self.GetSelectionEmpty() and selection != self.GetSelection():
+
+            if text_selection != sself.GetSelection():
                 evt = SelectionEvent(self.Id)
                 evt.SetEventObject(self)
                 wx.PostEvent(self, evt)
