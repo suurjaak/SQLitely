@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    09.10.2024
+@modified    10.10.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -5707,8 +5707,11 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         else: # Move cursor
             byte_pos = self.CurrentPos
             adjust = direction
-            if direction < 0 and has_selection:
-                byte_pos = byte_selection[0] # Start moving back from selection front
+            if has_selection:
+                if direction < 0:
+                    byte_pos = byte_selection[0] # Go back to selection front
+                else: # direction > 0
+                    byte_pos = byte_selection[1] # Go forward to selection end
                 pos_in_line = (byte_pos % self.WIDTH if self._addressed else byte_pos) * 3
                 pos_in_triplet = 0
                 is_beyond_content = False
@@ -5777,8 +5780,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
             self._ApplyPositions(currentpos2, anchor2)
         else: # Move cursor
             byte_pos = self.CurrentPos
-            if has_selection and event.KeyCode in KEYS.UP + KEYS.PAGEUP:
-                byte_pos = byte_selection[0] # Start moving up from selection front
+            if has_selection:
                 pos_in_line = (byte_pos % self.WIDTH) * 3
                 pos_in_triplet = 0
                 is_beyond_content = False
