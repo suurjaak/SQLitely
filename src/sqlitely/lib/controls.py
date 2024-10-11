@@ -6233,6 +6233,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
 
         self.SetMarginCount(0)
         self.SetMargins(0, 0)
+        self.SetMarginWidth(1, 0) # Py2 workaround
 
         self.SetStyleSpecs()
         self.SetOvertype(True)

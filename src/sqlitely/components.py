@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.10.2024
+@modified    11.10.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -9548,6 +9548,7 @@ class ColumnDialog(wx.Dialog):
         button_copy  = wx.Button(page, label="&Copy ..")
 
         tedit.SetMarginCount(0)
+        tedit.SetMarginWidth(1, 0) # Py2 workaround
         tedit.SetTabWidth(4)
         tedit.SetUseTabs(False)
         tedit.SetWrapMode(wx.stc.STC_WRAP_WORD)
