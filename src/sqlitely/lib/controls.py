@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    10.10.2024
+@modified    11.10.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -5172,6 +5172,7 @@ class HexByteCommand(wx.Command):
             self._ctrl.SetSelection(*state["Selection"])
             self._ctrl.ChooseCaretX() # Update sticky column for vertical movement
             self._ctrl.SetFirstVisibleLine(line_index)
+            self._ctrl.EnsureCaretVisible()
         finally: self._ctrl.Thaw()
         return True
 
@@ -5287,9 +5288,9 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED,      self.OnSysColourChange)
         self.Bind(wx.stc.EVT_STC_ZOOM,            self.OnZoom)
         self.Bind(wx.stc.EVT_STC_CLIPBOARD_COPY,  self.OnCopy) \
-        if hasattr(wx.stc, "EVT_STC_CLIPBOARD_COPY") else None
+            if hasattr(wx.stc, "EVT_STC_CLIPBOARD_COPY") else None
         self.Bind(wx.stc.EVT_STC_CLIPBOARD_PASTE, self.OnPaste) \
-        if hasattr(wx.stc, "EVT_STC_CLIPBOARD_PASTE") else None
+            if hasattr(wx.stc, "EVT_STC_CLIPBOARD_PASTE") else None
         self.Bind(wx.stc.EVT_STC_START_DRAG,      lambda e: e.SetString(""))
 
 
@@ -5573,17 +5574,17 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         def fix_content(cmd, byte_selection, line_index):
             if not self or not self.GetSelectionEmpty(): return
 
-            for bb in self._bytes, self._bytes0:
-                del bb[byte_selection[0]:byte_selection[1]]
+            if not self._fixed:
+                for bb in self._bytes, self._bytes0:
+                    del bb[byte_selection[0]:byte_selection[1]]
             self._Populate()
             self._ApplyPositions(byte_selection[0])
             self.SetFirstVisibleLine(line_index)
             cmd.Store()
 
-        if event.EventType == wx.stc.EVT_STC_CLIPBOARD_COPY.typeId:
-            cmd = HexByteCommand(self)
-            wx.CallAfter(fix_content, cmd, self.Selection, self.FirstVisibleLine)
-            self._QueueEvents()
+        cmd = HexByteCommand(self)
+        wx.CallAfter(fix_content, cmd, self.Selection, self.FirstVisibleLine)
+        self._QueueEvents()
 
 
     def OnPaste(self, event):
@@ -5605,6 +5606,22 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         and ord("Y") == event.KeyCode) or (event.ShiftDown() and ord("Z") == event.KeyCode):
             self.Redo(mirror=True)
             return
+
+        if event.CmdDown() and not event.AltDown() and not event.ShiftDown() \
+        and event.KeyCode == ord("X"): # Cut
+            if self.GetSelectionEmpty(): pass
+            elif hasattr(wx.stc, "EVT_STC_CLIPBOARD_COPY"):
+                event.Skip() # Allow default handling
+            else:
+                byte_pos1, byte_pos2 = self.Selection
+                content = bytes(self._bytes[byte_pos1:byte_pos2])
+                if wx.TheClipboard.Open():
+                    wx.TheClipboard.SetData(wx.TextDataObject(content))
+                    wx.TheClipboard.Close()
+                if not self._fixed:
+                    self.InsertInto("")
+                elif sys.version_info < (3, ): # Uncancelable in Py2
+                    wx.CallAfter(self._Populate)
 
         if event.CmdDown() and not event.AltDown() and (not event.ShiftDown()
         and ord("V") == event.KeyCode or event.ShiftDown() and event.KeyCode in KEYS.INSERT):
@@ -6229,10 +6246,10 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         self.Bind(wx.EVT_MOUSE_EVENTS,            self.OnMouse)
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED,      self.OnSysColourChange)
         self.Bind(wx.stc.EVT_STC_ZOOM,            self.OnZoom)
-        self.Bind(wx.stc.EVT_STC_CLIPBOARD_PASTE, self.OnPaste) \
-        if hasattr(wx.stc, "EVT_STC_CLIPBOARD_PASTE") else None
         self.Bind(wx.stc.EVT_STC_CLIPBOARD_COPY,  self.OnCopy) \
-        if hasattr(wx.stc, "EVT_STC_CLIPBOARD_COPY") else None
+            if hasattr(wx.stc, "EVT_STC_CLIPBOARD_COPY") else None
+        self.Bind(wx.stc.EVT_STC_CLIPBOARD_PASTE, self.OnPaste) \
+            if hasattr(wx.stc, "EVT_STC_CLIPBOARD_PASTE") else None
         self.Bind(wx.stc.EVT_STC_START_DRAG,      lambda e: e.SetString(""))
 
 
@@ -6462,10 +6479,16 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         else:
             self._bytes0[pos:pos] = [None] * len(v)
             self._bytes [pos:pos] = v
-        self._Populate()
-        self.SetSelection(selection[0] + len(v), selection[0] + len(v))
-        self.EnsureCaretVisible()
-        self.ChooseCaretX() # Update sticky column for vertical movement
+
+        first_line = self.FirstVisibleLine
+        self.Freeze()
+        try:
+            self._Populate()
+            self.SetFirstVisibleLine(first_line)
+            self.GotoPos(self._PosIn(selection[0] + len(v)))
+            self.EnsureCaretVisible()
+            self.ChooseCaretX() # Update sticky column for vertical movement
+        finally: self.Thaw()
         cmd.Store()
 
 
@@ -6476,18 +6499,23 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
             if not self: return
             if not self.GetSelectionEmpty(): return # Not cut if selection still on
 
-            for bb in self._bytes, self._bytes0:
-                del bb[byte_selection[0]:byte_selection[1]]
+            if not self._fixed:
+                for bb in self._bytes, self._bytes0:
+                    del bb[byte_selection[0]:byte_selection[1]]
             self._Populate()
             self.SetFirstVisibleLine(first_line)
             self.GotoPos(self._PosIn(byte_selection[0]))
+            self.EnsureCaretVisible()
             self.ChooseCaretX() # Update sticky column for vertical movement
             cmd.Store()
 
-        if event.EventType == wx.stc.EVT_STC_CLIPBOARD_COPY.typeId:
-            cmd = HexByteCommand(self)
-            wx.CallAfter(fix_content, cmd, self.Selection, self.FirstVisibleLine)
-            self._QueueEvents()
+        byte_pos1, byte_pos2 = self.Selection
+        content = self._bytes[byte_pos1:byte_pos2].decode("utf-8", errors="replace")
+        event.SetString(content)
+        cmd = HexByteCommand(self)
+        # No way to differentiate copy from cut, other than checking later if content changed
+        wx.CallAfter(fix_content, cmd, (byte_pos1, byte_pos2), self.FirstVisibleLine)
+        self._QueueEvents()
 
 
     def OnPaste(self, event):
@@ -6551,23 +6579,46 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
 
     def OnKeyDown(self, event):
         """Handler for key down, fires position change events."""
+        is_cmd, is_alt, is_shift = event.CmdDown(), event.AltDown(), event.ShiftDown()
 
-        if event.CmdDown() and not event.AltDown() and not event.ShiftDown() \
+        if is_cmd and not is_alt and not is_shift \
         and ord("Z") == event.KeyCode:
             self.Undo(mirror=True)
 
-        elif event.CmdDown() and not event.AltDown() and (not event.ShiftDown() \
-        and ord("Y") == event.KeyCode) or (event.ShiftDown() and ord("Z") == event.KeyCode):
+        elif is_cmd and not is_alt \
+        and (not is_shift and ord("Y") == event.KeyCode or is_shift and ord("Z") == event.KeyCode):
             self.Redo(mirror=True)
 
-        elif event.CmdDown() and not event.AltDown() and not event.ShiftDown() \
-        and event.KeyCode in KEYS.INSERT + (ord("C"), ):
-            if wx.TheClipboard.Open():
-                wx.TheClipboard.SetData(wx.TextDataObject(str(self._bytes)))
-                wx.TheClipboard.Close()
+        elif is_cmd and not is_alt and not is_shift \
+        and event.KeyCode in KEYS.INSERT + (ord("C"), ): # Copy
+            if self.GetSelectionEmpty(): pass
+            elif hasattr(wx.stc, "EVT_STC_CLIPBOARD_COPY"):
+                event.Skip() # Allow default handling
+            else:
+                byte_pos1, byte_pos2 = self.Selection
+                content = self._bytes[byte_pos1:byte_pos2].decode("utf-8", errors="replace")
+                if wx.TheClipboard.Open():
+                    wx.TheClipboard.SetData(wx.TextDataObject(content))
+                    wx.TheClipboard.Close()
 
-        elif event.CmdDown() and not event.AltDown() and (not event.ShiftDown()
-        and ord("V") == event.KeyCode or event.ShiftDown() and event.KeyCode in KEYS.INSERT):
+        elif is_cmd and not is_alt and not is_shift \
+        and event.KeyCode == ord("X"): # Cut
+            if self.GetSelectionEmpty(): pass
+            elif hasattr(wx.stc, "EVT_STC_CLIPBOARD_COPY"):
+                event.Skip() # Allow default handling
+            else:
+                byte_pos1, byte_pos2 = self.Selection
+                content = bytes(self._bytes[byte_pos1:byte_pos2])
+                if wx.TheClipboard.Open():
+                    wx.TheClipboard.SetData(wx.TextDataObject(content))
+                    wx.TheClipboard.Close()
+                if not self._fixed:
+                    self.InsertInto("")
+                elif sys.version_info < (3, ): # Uncancelable in Py2
+                    wx.CallAfter(self._Populate)
+
+        elif is_cmd and not is_alt and not is_shift and ord("V") == event.KeyCode \
+        or not is_cmd and not is_alt and is_shift and event.KeyCode in KEYS.INSERT:
             text = None
             if wx.TheClipboard.Open():
                 if wx.TheClipboard.IsSupported(wx.DataFormat(wx.DF_TEXT)):
