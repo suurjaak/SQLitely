@@ -5907,7 +5907,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         pos_in_triplet = 0 # Position index in byte triplet "XY "
         if self._fixed: # Ensure valid start position
             if has_selection or is_beyond_content:
-                byte_pos = len(self._bytes) - 1
+                byte_pos = selection[0] if has_selection else len(self._bytes) - 1
                 text_pos = byte_pos * 3 # Ensure position from first digit of byte
             else:
                 pos_in_triplet = self._GetPositionInLine(text_pos) % 3
