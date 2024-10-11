@@ -5908,14 +5908,16 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         if self._fixed: # Ensure valid start position
             if has_selection or is_beyond_content:
                 byte_pos = len(self._bytes) - 1
-            text_pos = byte_pos * 3 # Ensure position from first digit of byte
+                text_pos = byte_pos * 3 # Ensure position from first digit of byte
+            else:
+                pos_in_triplet = self._GetPositionInLine(text_pos) % 3
             is_beyond_content = False
         elif is_replacing_selection: # Reset positions to former selection start
             byte_pos = selection[0]
             text_pos = byte_pos * 3
         else:
             pos_in_line = self._GetPositionInLine(text_pos)
-            pos_in_triplet = pos_in_line % 3
+            pos_in_triplet = self._GetPositionInLine(text_pos) % 3
 
         if is_beyond_content: # At very end of free content: add new byte
             if self._bytes:
@@ -5953,8 +5955,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
                 self.StartStyling(byte_start_pos)
                 self.SetStyling(2, style)
         text_pos2 = text_pos + 1 + bool(pos_in_triplet) # Go to next digit, possibly next byte
-        sself.SetEmptySelection(text_pos2)
-        self.EnsureCaretVisible()
+        self.GotoPos(text_pos2)
         cmd.Store()
 
 
