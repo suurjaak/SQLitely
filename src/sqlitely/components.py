@@ -10421,7 +10421,7 @@ class ColumnDialog(wx.Dialog):
             def test_pnm(h, f):
                 return "pnm" if h[:1] == b"P" and h[1:2] in b"123456" and b"\x0A" in h[2:4] else None
             if not hasattr(is_known_format, "imghdr"):
-                import imghdr
+                import imghdr # Safe to import, invoked in Py2 only
                 imghdr.tests.extend((test_ico, test_pcx, test_pnm))
                 is_known_format.imghdr = imghdr
             fmt = is_known_format.imghdr.what(None, bb)
