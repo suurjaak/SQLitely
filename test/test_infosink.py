@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.09.2024
-@modified    30.09.2024
+@modified    11.10.2024
 ------------------------------------------------------------------------------
 """
 import io
@@ -79,25 +79,25 @@ class TestInfoSink(FileTest):
                     self.assertIn(header, content, "Expected header in output file: %r." % header)
 
 
-    def test_write_stats(self):
+    def test_write_statistics(self):
         """Verifies InfoSink statistics export."""
-        logger.info("Verifying InfoSink.write_stats().")
+        logger.info("Verifying InfoSink.write_statistics().")
         stats, diagram = self.make_statistics(), self.make_diagram()
         for fmt in STATS_FORMATS:
-            self.verify_write_stats(fmt, stats, diagram)
+            self.verify_write_statistics(fmt, stats, diagram)
         outfile = self.mktemp(".sql")
         with self.assertRaises(Exception, msg="Expected error on unsupported format."):
-            importexport.InfoSink(self._db, outfile).write_stats("xlsx", stats, diagram)
+            importexport.InfoSink(self._db, outfile).write_statistics("xlsx", stats, diagram)
 
 
-    def verify_write_stats(self, fmt, stats=None, diagram=None):
+    def verify_write_statistics(self, fmt, stats=None, diagram=None):
         """Verifies statistics output for given format."""
-        logger.info("Verifying InfoSink.write_stats() for %s.", fmt.upper())
+        logger.info("Verifying InfoSink.write_statistics() for %s.", fmt.upper())
         outfile = self.mktemp("." + fmt)
         sink = importexport.InfoSink(self._db, outfile)
 
-        result = sink.write_stats(fmt, stats, diagram)
-        self.assertTrue(result, "Unexpected failure from write_stats().")
+        result = sink.write_statistics(fmt, stats, diagram)
+        self.assertTrue(result, "Unexpected failure from write_statistics().")
         self.assertTrue(os.path.isfile(outfile), "Expected output file.")
         self.assertTrue(os.path.getsize(outfile), "Expected output file to have content.")
         with io.open(outfile, encoding="utf-8") as f:

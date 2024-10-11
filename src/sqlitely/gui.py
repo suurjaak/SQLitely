@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.10.2024
+@modified    11.10.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4326,7 +4326,7 @@ class DatabasePage(wx.Panel):
         """
         filename = os.path.splitext(os.path.basename(self.db.name))[0]
         filename = filename.rstrip() + " statistics"
-        wildcard = controls.make_dialog_filter(importexport.InfoSink.STATS_TEMPLATES,
+        wildcard = controls.make_dialog_filter(importexport.InfoSink.FORMATS,
                                                importexport.EXT_NAMES)
         dialog = wx.FileDialog(
             self, message="Save statistics as", defaultFile=filename, wildcard=wildcard,
@@ -4349,7 +4349,7 @@ class DatabasePage(wx.Panel):
                 layout.Redraw(wx.Rect(0, 0, *conf.Defaults["WindowSize"]), scheme.LayoutStyle.GRID)
                 diagrams = {"bmp": layout.MakeBitmap(),
                             "svg": layout.MakeTemplate("svg", embed=True)}
-            importexport.InfoSink(self.db, filename).write_stats(extname, data, diagrams)
+            importexport.InfoSink(self.db, filename).write_statistics(extname, data, diagrams)
             guibase.status('Exported to "%s".', filename, log=True)
             util.start_file(filename)
         except Exception as e:

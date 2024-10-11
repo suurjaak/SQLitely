@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.10.2024
+@modified    11.10.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -929,9 +929,9 @@ class DumpSink(Sink):
 class InfoSink(Sink):
     """Exports database statistics and arbitrary SQL to file."""
 
-    STATS_TEMPLATES = {"html": templates.DATA_STATISTICS_HTML,
-                       "sql":  templates.DATA_STATISTICS_SQL,
-                       "txt":  templates.DATA_STATISTICS_TXT}
+    FORMATS = {"html": templates.DATA_STATISTICS_HTML,
+               "sql":  templates.DATA_STATISTICS_SQL,
+               "txt":  templates.DATA_STATISTICS_TXT}
 
 
     def __init__(self, db, filename):
@@ -957,7 +957,7 @@ class InfoSink(Sink):
         return True
 
 
-    def write_stats(self, format, data, diagram=None):
+    def write_statistics(self, format, data, diagram=None):
         """
         Exports statistics to HTML or SQL or TXT file.
 
@@ -967,10 +967,10 @@ class InfoSink(Sink):
         @param   diagram  {"bmp": schema diagram as wx.Bitmap,
                            "svg": schema diagram as SVG string}
         """
-        if format not in self.STATS_TEMPLATES:
+        if format not in self.FORMATS:
             raise ValueError("Unknown format %r" % (format, ))
 
-        template = step.Template(self.STATS_TEMPLATES[format], postprocess=convert_lf,
+        template = step.Template(self.FORMATS[format], postprocess=convert_lf,
                                  strip=False, escape="html" == format)
         ns = {
             "title":  "Database statistics",

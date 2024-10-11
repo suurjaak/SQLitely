@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.10.2024
+@modified    11.10.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1761,7 +1761,7 @@ def run_stats(dbname, args):
             svg = layout.MakeTemplate("svg", embed=True)
             diagrams = {"bmp": bmp, "svg": svg}
         bar.update(afterword=" Writing output")
-        importexport.InfoSink(db, args.OUTFILE).write_stats(args.format, stats, diagrams)
+        importexport.InfoSink(db, args.OUTFILE).write_statistics(args.format, stats, diagrams)
         bar.stop()
         output()
     except Exception:
