@@ -8546,7 +8546,8 @@ def make_dialog_filter(formats=(), names=None, noun="file", group=False, merge=F
 
     Format name is taken from given names dictionary, or generated as "EXT noun".
 
-    @param   formats  file formats like ["csv", "txt"], any leading dots will be stripped
+    @param   formats  file formats like ["csv", "txt"], any leading dots will be stripped;
+                      may contain nested collections like ["bmp", ("jpg", "jpeg"), "png"]
     @param   names    dictionary with format names if any, as {format: informative name}
     @param   noun     general noun for files, used in generated names
     @param   group    whether to include an initial entry for all given formats, as "All nouns|*.*"
@@ -8555,18 +8556,21 @@ def make_dialog_filter(formats=(), names=None, noun="file", group=False, merge=F
     @return           text like "CSV spreadsheet (*.csv)|*.csv|Text document (*.txt)|*.txt"
     """
     entries = []
-    formats, names = [x.lstrip(".") for x in formats], (names or {})
+    formats = [[y.lstrip(".") for y in ([x] if isinstance(x, string_types) else x)] for x in formats]
+    if not names: names = {}
     if merge and formats:
-        exts = ";".join("*." + x for x in formats)
+        exts = ";".join("*." + y for x in formats for y in x)
         entry = "%s%s (%s)|%s" % (noun[0].upper(), noun[1:], exts, exts)
         entries.append(entry)
         formats = []
     if group and formats:
-        entry = "All {0}s ({1})|{1}".format(noun, ";".join("*." + x for x in formats))
+        entry = "All {0}s ({1})|{1}".format(noun, ";".join("*." + y for x in formats for y in x))
         entries.append(entry)
-    for fmt in formats:
+    for fmts in formats:
+        exts = ";".join("*." + x for x in fmts)
+        fmt = fmts[0]
         name = names.get(fmt) or "%s %s" % (fmt.upper(), noun)
-        entry = "%s%s (*.%s)|*.%s" % (name[0].upper(), name[1:], fmt, fmt)
+        entry = "%s%s (%s)|%s" % (name[0].upper(), name[1:], exts, exts)
         entries.append(entry)
     if blank:
         entry = "All files|*.*"

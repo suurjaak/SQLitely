@@ -9023,6 +9023,10 @@ class ColumnDialog(wx.Dialog):
     if wx.svg: IMAGE_FORMATS.update({
         0xFFFF:              "svg",
     })
+    IMAGE_EXTS = {
+        "jpg":               ("jpg",  "jif", "jpeg"),
+        "tiff":              ("tiff", "tif"),
+    }
 
     # Global controls.CallableManagerDialog instance
     FUNCTION_DIALOG = None
@@ -10676,15 +10680,13 @@ class ColumnDialog(wx.Dialog):
 
     def _OnLoad(self, event, name, handler=None):
         """Handler for loading view value from file."""
-        wildcard, filteridx, formats = controls.make_dialog_filter(blank=True), -1, ()
+        wildcard, formats = controls.make_dialog_filter(blank=True), ()
         if "image" == name:
-            formats = sorted(v for v in self.IMAGE_FORMATS.values())
+            formats = sorted(self.IMAGE_EXTS.get(v, (v, )) for v in self.IMAGE_FORMATS.values())
             wildcard = controls.make_dialog_filter(formats, noun="image", group=True, blank=True)
-            filteridx = 0
         dlg = wx.FileDialog(self, message="Open", defaultFile="", wildcard=wildcard,
             style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
-        controls.set_dialog_filter(dlg, filteridx, exts=formats)
         if wx.ID_OK != dlg.ShowModal(): return
         filename = dlg.GetPath()
         if handler: handler(filename, propagate=True)
