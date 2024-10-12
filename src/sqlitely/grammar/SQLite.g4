@@ -50,7 +50,8 @@
  *                add support for generated columns;
  *                add support for IS DISTINCT FROM and IS NOT DISTINCT FROM;
  *                add support for JSON operators -> and ->>;
- *                add support for UPSERT statements.
+ *                add support for UPSERT statements;
+ *                add support for window functions.
  *                
  * Updated for  : SQLitely, an SQLite database tool.
  * Updated by   : Erki Suurjaak, 2019-2024
@@ -254,17 +255,9 @@ simple_select_stmt
 
 select_stmt
  : with_clause?
-   select_or_values ( compound_operator select_or_values )*
+   select_core ( compound_operator select_core )*
    ( K_ORDER K_BY ordering_term ( ',' ordering_term )* )?
    ( K_LIMIT expr ( ( K_OFFSET | ',' ) expr )? )?
- ;
-
-select_or_values
- : K_SELECT ( K_DISTINCT | K_ALL )? result_column ( ',' result_column )*
-   ( K_FROM ( table_or_subquery ( ',' table_or_subquery )* | join_clause ) )?
-   ( K_WHERE expr )?
-   ( K_GROUP K_BY expr ( ',' expr )* ( K_HAVING expr )? )?
- | K_VALUES '(' expr ( ',' expr )* ')' ( ',' '(' expr ( ',' expr )* ')' )*
  ;
 
 update_stmt
@@ -365,7 +358,7 @@ expr
  | expr ( '=' | '==' | '!=' | '<>' | K_IS | K_IS K_NOT | K_IN | K_LIKE | K_GLOB | K_MATCH | K_REGEXP ) expr
  | expr K_AND expr
  | expr K_OR expr
- | function_name '(' ( K_DISTINCT? expr ( ',' expr )* | '*' )? ')'
+ | function_name '(' ( K_DISTINCT? expr ( ',' expr )* | '*' )? ')' filter_clause? over_clause?
  | '(' expr ')'
  | K_CAST '(' expr K_AS type_name ')'
  | expr K_COLLATE collation_name
@@ -384,6 +377,10 @@ expr
  | raise_function
  ;
 
+filter_clause
+ : K_FILTER '(' K_WHERE expr ')'
+;
+
 foreign_key_clause
  : K_REFERENCES foreign_table ( '(' column_name ( ',' column_name )* ')' )?
    ( ( K_ON ( K_DELETE | K_UPDATE ) ( K_SET K_NULL
@@ -399,6 +396,48 @@ foreign_key_clause
 
 generated_clause
  : ( K_GENERATED K_ALWAYS )? K_AS '(' expr ')' ( C_STORED | K_VIRTUAL )?
+ ;
+
+over_clause
+ : K_OVER ( window_name | window_defn )
+ ;
+
+window_defn
+ : '(' base_window_name? (K_PARTITION K_BY expr ( ',' expr )* )?
+       ( K_ORDER K_BY ordering_term ( ',' ordering_term )* )?
+       frame_spec?
+   ')'
+ ;
+
+frame_spec
+ : frame_clause ( K_EXCLUDE ( K_NO K_OTHERS | K_CURRENT K_ROW | K_GROUP | K_TIES ) )?
+ ;
+
+frame_clause
+ : ( K_RANGE | K_ROWS | K_GROUPS ) 
+   ( frame_single
+   | K_BETWEEN frame_left K_AND frame_right
+   )
+ ;
+
+frame_single
+ : expr K_PRECEDING
+ | K_UNBOUNDED K_PRECEDING
+ | K_CURRENT K_ROW
+ ;
+
+frame_left
+ : expr K_PRECEDING
+ | expr K_FOLLOWING
+ | K_CURRENT K_ROW
+ | K_UNBOUNDED K_PRECEDING
+ ;
+
+frame_right
+ : expr K_PRECEDING
+ | expr K_FOLLOWING
+ | K_CURRENT K_ROW
+ | K_UNBOUNDED K_FOLLOWING
  ;
 
 raise_function
@@ -498,6 +537,7 @@ select_core
    ( K_FROM ( table_or_subquery ( ',' table_or_subquery )* | join_clause ) )?
    ( K_WHERE expr )?
    ( K_GROUP K_BY expr ( ',' expr )* ( K_HAVING expr )? )?
+   ( K_WINDOW window_name K_AS window_defn ( ',' window_name K_AS window_defn )* )?
  | K_VALUES '(' expr ( ',' expr )* ')' ( ',' '(' expr ( ',' expr )* ')' )*
  ;
 
@@ -752,6 +792,14 @@ table_alias
  ;
 
 transaction_name
+ : any_name
+ ;
+
+window_name
+ : any_name
+ ;
+
+base_window_name
  : any_name
  ;
 

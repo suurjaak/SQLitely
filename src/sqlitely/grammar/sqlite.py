@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    23.08.2024
+@modified    12.10.2024
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -345,7 +345,7 @@ class CTX(object):
     EXPRESSION           = SQLiteParser.ExprContext
     FOREIGN_TABLE        = SQLiteParser.Foreign_tableContext
     FOREIGN_KEY          = SQLiteParser.Foreign_key_clauseContext
-    SELECT_OR_VALUES     = SQLiteParser.Select_or_valuesContext
+    SELECT_CORE          = SQLiteParser.Select_coreContext
 
 
 """Words that need quoting if in name context, e.g. table name."""
@@ -1095,7 +1095,7 @@ class Parser(object):
                                  for k, v in renames["column"].items()}
         for ctx in items:
             ownerctx = None
-            if isinstance(ctx, CTX.SELECT_OR_VALUES):
+            if isinstance(ctx, CTX.SELECT_CORE):
                 tables = ctx.table_or_subquery()
                 if len(tables) == 1 and tables[0].table_name():
                     ownerctx = tables[0].table_name
