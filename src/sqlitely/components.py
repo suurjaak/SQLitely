@@ -12697,6 +12697,7 @@ class ImportWizard(wx.adv.Wizard):
                 self.page2.log.AppendText(info)
             b = self.page2.FindWindowById(wx.ID_FORWARD)
             b.MinSize = b.BestSize # Will not widen button otherwise
+            b.SetFocus()
             self.Layout()
 
         if callable(callback): callback(self.page2.importing)
