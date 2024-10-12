@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    11.10.2024
+@modified    12.10.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -5180,7 +5180,7 @@ class HexByteCommand(wx.Command):
         """Updates linked control, if any."""
         if not self._ctrl.Mirror: return
         mirrorcmd = HexByteCommand(self._ctrl.Mirror)
-        mirrorcmd._state2 = {k: copy.deepcopy(state[k]) for k in ("_bytes", "_bytes0", "Selection")}
+        mirrorcmd._state2 = {k: state[k][:] for k in ("_bytes", "_bytes0", "Selection")}
         mirrorcmd._ctrl._undoredo.Submit(mirrorcmd)
         mirrorcmd._done = True
 
@@ -5449,13 +5449,14 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         maxlen = min(len(v), len(self._bytes) - bpos) if self._fixed else len(v)
         v = v[:maxlen]
 
-        if bpos + maxlen > len(self._bytes):
+        if self._show_changes and bpos + maxlen > len(self._bytes):
             self._bytes0.extend([None] * (bpos + maxlen - len(self._bytes)))
         if self.Overtype:
             self._bytes[bpos:bpos + maxlen] = v
         else:
             self._bytes [bpos:bpos] = v
-            self._bytes0[bpos:bpos] = [None] * len(v)
+            if self._show_changes:
+                self._bytes0[bpos:bpos] = [None] * len(v)
 
         self._Populate()
         self.SetSelection(selection[0] + len(v), selection[0] + len(v))
@@ -5483,10 +5484,11 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
                 v = v[:len(self._bytes) - from_]
             elif overflow < 0: # Pad underflow with 0-bytes
                 v += bytearray([0] * min(len(self._bytes) - from_, abs(overflow)))
-        elif overflow > 0:
-            self._bytes0[to_:to_] = [None] * overflow
-        elif overflow < 0:
-            del self._bytes0[to_ + overflow:to_]
+        elif self._show_changes:
+            if overflow > 0:
+                self._bytes0[to_:to_] = [None] * overflow
+            elif overflow < 0:
+                del self._bytes0[to_ + overflow:to_]
         self._bytes[from_:to_] = v
 
         self._Populate()
@@ -5575,8 +5577,9 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
             if not self or not self.GetSelectionEmpty(): return
 
             if not self._fixed:
-                for bb in self._bytes, self._bytes0:
-                    del bb[byte_selection[0]:byte_selection[1]]
+                del self._bytes[byte_selection[0]:byte_selection[1]]
+                if self._show_changes:
+                    del self._bytes0[byte_selection[0]:byte_selection[1]]
             self._Populate()
             self._ApplyPositions(byte_selection[0])
             self.SetFirstVisibleLine(line_index)
@@ -5838,7 +5841,8 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         selection = self.GetSelection()
         if selection[0] != selection[1]:
             del self._bytes [selection[0]:selection[1]]
-            del self._bytes0[selection[0]:selection[1]]
+            if self._show_changes:
+                del self._bytes0[selection[0]:selection[1]]
             self.SetSelection(selection[0], selection[0])
             cmd.Submit(mirror=True)
             return
@@ -5863,7 +5867,9 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
             if direction < 0: # Backspace at line end: apply on last byte of cursor line
                 byte_pos -= 1
             pos_in_triplet = 0
-        for bb in self._bytes, self._bytes0: del bb[byte_pos]
+        del self._bytes[byte_pos]
+        if self._show_changes:
+            del self._bytes0[byte_pos]
 
         needs_reflow = line_index < self.LineCount - 1 or (pos_in_line == 0 and direction < 0)
         if needs_reflow:
@@ -5898,7 +5904,8 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         is_replacing_selection = has_selection and not self._fixed
         if is_replacing_selection:
             del self._bytes [selection[0]:selection[1]]
-            del self._bytes0[selection[0]:selection[1]]
+            if self._show_changes:
+                del self._bytes0[selection[0]:selection[1]]
 
         sself = super(HexTextCtrl, self)
         byte_pos = self.CurrentPos
@@ -5922,13 +5929,15 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         if is_beyond_content: # At very end of free content: add new byte
             if self._bytes:
                 byte_pos, text_pos = len(self._bytes), len(self._bytes) * 3
-            self._bytes.append(0), self._bytes0.append(None)
+            self._bytes.append(0)
+            if self._show_changes: self._bytes0.append(None)
             pos_in_triplet = 0
         elif pos_in_triplet != 1: # At first digit of byte or at addressed line end
             text_pos = byte_pos * 3 # Ensure text pos from byte actual start pos
             pos_in_triplet = 0 # Set text pos to byte actual start pos
             if not self.Overtype: # Insert new byte at current position
-                self._bytes.insert(byte_pos, 0), self._bytes0.insert(byte_pos, None)
+                self._bytes.insert(byte_pos, 0)
+                if self._show_changes: self._bytes0.insert(byte_pos, None)
         byte_pos = min(byte_pos, len(self._bytes) - 1)
 
         byte = self._bytes[byte_pos]
@@ -6077,7 +6086,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         try:
             sself = super(HexTextCtrl, self)
             self.MarginTextClearAll()
-            for line in range((sself.Length + self.WIDTH - 1) // self.WIDTH):
+            for line in range(self.LineCount):
                 self.MarginSetStyle(line, self.STYLE_MARGIN)
                 self.MarginSetText (line, " %08X " % line)
         finally: self.SetModEventMask(eventmask0)
@@ -6093,8 +6102,8 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
     def _GetValueState(self, *value):
         """Returns value type and data dict, from current content or given value."""
         if not value:
-            state = {k: getattr(self, k) for k in ("_bytes", "_bytes0", "_fixed", "_type")}
-            return copy.deepcopy(state)
+            return {"_bytes": self._bytes[:], "_bytes0": self._bytes0[:],
+                    "_fixed": self._fixed, "_type": self._type}
 
         value = value[0]
         if isinstance(value, bool): value = int(value)
@@ -6118,10 +6127,11 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         if isinstance(value, bool): value = int(value)
         v = self._AdaptValue(value)
 
-        self._type      = type(value) if is_fixed(value) or isinstance(value, string_types) else str
-        self._fixed     = is_fixed(value) or value is None
-        self._bytes0[:] = [x if isinstance(x, int) else ord(x) for x in v]
-        self._bytes[:]  = v
+        self._type     = type(value) if is_fixed(value) or isinstance(value, string_types) else str
+        self._fixed    = is_fixed(value) or value is None
+        self._bytes[:] = v
+        if self._show_changes:
+            self._bytes0[:] = [x if isinstance(x, int) else ord(x) for x in v]
         if self._fixed and not self.Overtype: self.SetOvertype(True)
 
 
@@ -6467,20 +6477,22 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         selection = self.GetSelection()
         if selection[0] != selection[1] and not self._fixed:
             del self._bytes [selection[0]:selection[1]]
-            del self._bytes0[selection[0]:selection[1]]
+            if self._show_changes:
+                del self._bytes0[selection[0]:selection[1]]
 
         pos = selection[0]
         v = self._AdaptValue(text)
         maxlen = min(len(v), self.Length - pos) if self._fixed else len(v)
         v = v[:maxlen]
 
-        if pos + maxlen > len(self._bytes):
+        if self._show_changes and pos + maxlen > len(self._bytes):
             self._bytes0.extend([None] * (pos + maxlen - len(self._bytes)))
         if self.Overtype:
             self._bytes[pos:pos + maxlen] = v
         else:
-            self._bytes0[pos:pos] = [None] * len(v)
             self._bytes [pos:pos] = v
+            if self._show_changes:
+                self._bytes0[pos:pos] = [None] * len(v)
 
         first_line = self.FirstVisibleLine
         self.Freeze()
@@ -6502,8 +6514,9 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
             if not self.GetSelectionEmpty(): return # Not cut if selection still on
 
             if not self._fixed:
-                for bb in self._bytes, self._bytes0:
-                    del bb[byte_selection[0]:byte_selection[1]]
+                del self._bytes[byte_selection[0]:byte_selection[1]]
+                if self._show_changes:
+                    del self._bytes0[byte_selection[0]:byte_selection[1]]
             self._Populate()
             self.SetFirstVisibleLine(first_line)
             self.GotoPos(self._PosIn(byte_selection[0]))
@@ -6538,7 +6551,8 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
             self.SetSelection(byte_selection[0], byte_selection[0]) # Discard selection
         elif byte_selection[0] != byte_selection[1]:
             del self._bytes [byte_selection[0]:byte_selection[1]]
-            del self._bytes0[byte_selection[0]:byte_selection[1]]
+            if self._show_changes:
+                del self._bytes0[byte_selection[0]:byte_selection[1]]
             self.DeleteBack()
 
         sself = super(ByteTextCtrl, self)
@@ -6549,9 +6563,11 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
             pos_in_line = text_pos - self.PositionFromLine(self.LineFromPosition(text_pos))
 
             if byte_pos >= len(self._bytes) or text_pos >= self.GetLastPosition():
-                self._bytes0.append(None), self._bytes.append(0)
+                self._bytes.append(0)
+                if self._show_changes: self._bytes0.append(None)
             elif not self.Overtype:
-                self._bytes0.insert(byte_pos, None), self._bytes.insert(byte_pos, 0)
+                self._bytes.insert(byte_pos, 0)
+                if self._show_changes: self._bytes0.insert(byte_pos, None)
 
             if event.KeyCode == self._bytes[byte_pos] \
             and (byte_selection[0] == byte_selection[1] or self._fixed):
@@ -6669,7 +6685,8 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         byte_selection = list(self.GetSelection())
         if byte_selection[0] != byte_selection[1]:
             del self._bytes [byte_selection[0]:byte_selection[1]]
-            del self._bytes0[byte_selection[0]:byte_selection[1]]
+            if self._show_changes:
+                del self._bytes0[byte_selection[0]:byte_selection[1]]
             self.GotoPos(self._PosIn(byte_selection[0]))
             cmd.Submit(mirror=True)
             return
@@ -6685,7 +6702,9 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
             return
 
         byte_pos = self.CurrentPos - (1 if direction < 0 else 0)
-        for bb in self._bytes, self._bytes0: del bb[byte_pos]
+        del self._bytes[byte_pos]
+        if self._show_changes:
+            del self._bytes0[byte_pos]
 
         if line_index == self.LineCount - 1 and (direction > 0 or pos_in_line > 0):
             # Last line and not backspacing from first byte
@@ -6759,16 +6778,17 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
     def _GetValueState(self, *value):
         """Returns value type and data dict, from current content or given value."""
         if not value:
-            state = {k: getattr(self, k) for k in ("_bytes", "_bytes0", "_fixed", "_type")}
-            return copy.deepcopy(state)
+            return {"_bytes": self._bytes[:], "_bytes0": self._bytes0[:],
+                    "_fixed": self._fixed, "_type": self._type}
 
         value = value[0]
         if isinstance(value, bool): value = int(value)
         bytesvalue = self._AdaptValue(value)
         bytes0 = self._bytes0[:]
-        diff = len(bytesvalue) - len(bytes0)
-        if diff > 0:   bytes0.extend([None] * diff)
-        elif diff < 0: del bytes0[abs(diff):]
+        if self._show_changes:
+            diff = len(bytesvalue) - len(bytes0)
+            if diff > 0:   bytes0.extend([None] * diff)
+            elif diff < 0: del bytes0[abs(diff):]
 
         state = {
             "_bytes":  bytearray(bytesvalue),
@@ -6788,7 +6808,8 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         if not noreset:
             self._type  = type(value) if is_fixed(value) or isinstance(value, string_types) else str
             self._fixed = is_fixed(value) or value is None
-            self._bytes0[:] = [x if isinstance(x, int) else ord(x) for x in v]
+            if self._show_changes:
+                self._bytes0[:] = [x if isinstance(x, int) else ord(x) for x in v]
         if self._fixed and not self.Overtype: self.SetOvertype(True)
 
 
