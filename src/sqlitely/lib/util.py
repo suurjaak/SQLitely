@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.09.2024
+@modified    12.10.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -845,10 +845,10 @@ def img_wx_to_pil(image):
     (w, h), data = image.GetSize(), image.GetData()
 
     chans = [Image.new("L", (w, h)) for i in range(3)]
-    for i in range(3): chans[i].frombytes(str(data[i::3]))
+    for i in range(3): chans[i].frombytes(bytes(data[i::3]))
     if image.HasAlpha():
         chans += [Image.new("L", (w, h))]
-        chans[-1].frombytes(str(image.GetAlpha()))
+        chans[-1].frombytes(bytes(image.GetAlpha()))
 
     return Image.merge("RGBA"[:len(chans)], chans)
 

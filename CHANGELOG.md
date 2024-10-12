@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.4, 2024-10-08
+2.4, 2024-10-14
 ---------------
 - add support for generated columns
 - add find/replace dialog to data grids and column editors and database schema text
@@ -28,6 +28,7 @@ CHANGELOG
 - fix representing very large integers in column editor hex view
 - fix cutting text from column editor hex view
 - fix pasting text into column editor hex view
+- fix converting images to GIF in column editor image view
 - fix compatibility issues with Python 3.6
 - fix compatibility issues with Python 3.10+
 - fix opening third-party license link in snaps

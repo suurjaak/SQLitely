@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.10.2024
+@modified    12.10.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -10394,7 +10394,7 @@ class ColumnDialog(wx.Dialog):
                     # wxPython does not auto-decrease palette size, need to use PIL
                     pimg = util.img_wx_to_pil(img)
                     pimg2 = pimg.convert("P", palette=PIL.Image.ADAPTIVE)
-                    pimg2.save(stream)
+                    pimg2.save(stream, format="gif")
                 else:
                     if "svg" == state["format0"]:
                         img = load_svg(state["converts"]["svg"])
@@ -10429,7 +10429,10 @@ class ColumnDialog(wx.Dialog):
                 imghdr.tests.extend((test_ico, test_pcx, test_pnm))
                 is_known_format.imghdr = imghdr
             fmt = is_known_format.imghdr.what(None, bb)
-            return bool(fmt) and fmt in self.IMAGE_FORMATS.values()
+            if fmt:
+                if fmt in self.IMAGE_FORMATS.values(): return True
+                if any(fmt in exts for exts in self.IMAGE_EXTS.values()): return True
+            return False
 
         def update(value, reset=False, propagate=False):
             img, v = None, value
