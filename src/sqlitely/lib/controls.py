@@ -6544,6 +6544,8 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         """Handler for character input, displays printable character."""
         if self._fixed and not self._bytes: return # NULL number
 
+        if event.CmdDown() or event.AltDown(): return
+
         self._QueueEvents()
         cmd = HexByteCommand(self)
         byte_selection = self.GetSelection()
