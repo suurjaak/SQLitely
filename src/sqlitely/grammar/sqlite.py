@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    12.10.2024
+@modified    13.10.2024
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -228,6 +228,8 @@ def strip_and_collapse(sql, literals=True, upper=True):
     # Reduce identifiers to empty strings or placeholders
     sql = re.sub("`([^`]|``)*`",  "``" if literals else repl, sql)
     sql = re.sub(r"\[([^\]])*\]", "[]" if literals else repl, sql)
+    # Strip whitespace inside brackets
+    sql = re.sub(r"\(\s+", "(", re.sub(r"\s+\)", ")", sql))
     # Collapse all whitespace to single space and strip surrounding whitespace and semicolons
     sql = re.sub(r"\s+", " ", re.sub(r"^[\s;]+|[\s;]*$", "", sql.upper() if upper else sql))
     # Replace temporary placeholders with original literals if any
