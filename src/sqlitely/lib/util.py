@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.10.2024
+@modified    14.10.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -533,6 +533,7 @@ def memoize(*args, **kwargs):
                 if type(k1) is type(k2) and k1 == k2:
                     return returner(value)
         value = ns["func"](*args, **kwargs)
+        key2 = [copy.deepcopy(x) if isinstance(x, (dict, list, set, tuple)) else x for x in key2]
         tuples.append((key2, value))
         return returner(value)
 
