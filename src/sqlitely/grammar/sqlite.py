@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    13.10.2024
+@modified    14.10.2024
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -345,9 +345,11 @@ class CTX(object):
     TRIGGER_NAME         = SQLiteParser.Trigger_nameContext
     VIEW_NAME            = SQLiteParser.View_nameContext
     EXPRESSION           = SQLiteParser.ExprContext
+    LITERAL_VALUE        = SQLiteParser.Literal_valueContext
     FOREIGN_TABLE        = SQLiteParser.Foreign_tableContext
     FOREIGN_KEY          = SQLiteParser.Foreign_key_clauseContext
     SELECT_CORE          = SQLiteParser.Select_coreContext
+    RESULT_COLUMN        = SQLiteParser.Result_columnContext
 
 
 """Words that need quoting if in name context, e.g. table name."""
@@ -1017,7 +1019,7 @@ class Parser(object):
         result, ptr = None, ctx
         while ptr and ptr.parentCtx:
             ptr = ptr.parentCtx
-            if any(isinstance(ptr, x) for x in types):
+            if isinstance(ptr, tuple(types)):
                 result = ptr
                 if not top: break # while ptr
         return result
@@ -1119,14 +1121,21 @@ class Parser(object):
                     name = stack[0][1]
                 stack.append((ctx, name))
 
-            if isinstance(ctx, CTX.COLUMN_NAME) and stack:
-                c = ctx # Get the deepest terminal, the one holding name value
-                while not isinstance(c, TerminalNode): c = c.children[0]
-                v0 = self.u(c).lower()
-
-                v = renames["column"].get(stack and stack[-1][1])
-                for v1, v2 in v.items() if v else ():
-                    if v0 == v1.lower(): c.getSymbol().text = quote(v2)
+            if stack:
+                renamectx = None
+                if isinstance(ctx, CTX.COLUMN_NAME):
+                    renamectx = ctx
+                elif isinstance(ctx, CTX.LITERAL_VALUE) and isinstance(ctx.parentCtx, CTX.EXPRESSION):
+                    if self.get_parent(ctx, [CTX.RESULT_COLUMN]) and self.t(ctx) != self.u(ctx):
+                        # Interpret any quoted string in SELECT column context as potential column
+                        renamectx = ctx
+                if renamectx:
+                    terminal = renamectx # Get the deepest terminal, the one holding name value
+                    while not isinstance(terminal, TerminalNode): terminal = terminal.children[0]
+                    v0 = self.u(terminal).lower()
+                    v = renames["column"].get(stack and stack[-1][1])
+                    for v1, v2 in v.items() if v else ():
+                        if v0 == v1.lower(): terminal.getSymbol().text = quote(v2)
 
             if getattr(ctx, "children", None):
                 self.recurse_rename_column(ctx.children, renames, stack)
