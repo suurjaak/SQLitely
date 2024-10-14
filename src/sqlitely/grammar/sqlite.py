@@ -1095,8 +1095,9 @@ class Parser(object):
         """
         if stack is None:
             stack = []
-            renames["column"] = {k.lower(): {c1.lower(): c2 for c1, c2 in v.items()}
-                                 for k, v in renames["column"].items()}
+            lowercased = {k.lower(): {c1.lower(): c2 for c1, c2 in v.items()}
+                          for k, v in renames["column"].items()}
+            renames = dict(renames, column=lowercased)
         for ctx in items:
             ownerctx = None
             if isinstance(ctx, CTX.SELECT_CORE):
