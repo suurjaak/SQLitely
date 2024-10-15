@@ -26,7 +26,7 @@ CHANGELOG
 - use hourglass cursor while showing busy message
 - allow saving SVG image as SVG in column editor
 - fix rolling back changes on error in schema editor test and save
-- fix renaming quoted columns in related entities on column rename
+- fix renaming columns in related entities on column rename for quoted or complex expressions
 - fix representing very large integers in column editor hex view
 - fix cutting text from column editor hex view
 - fix pasting text into column editor hex view

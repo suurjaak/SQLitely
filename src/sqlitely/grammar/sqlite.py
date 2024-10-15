@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    14.10.2024
+@modified    15.10.2024
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -336,8 +336,10 @@ class CTX(object):
     SELECT_COMPOUND      = SQLiteParser.Compound_select_stmtContext
     SELECT_FACTORED      = SQLiteParser.Factored_select_stmtContext
     SELECT_SIMPLE        = SQLiteParser.Simple_select_stmtContext
+    JOIN_CLAUSE          = SQLiteParser.Join_clauseContext
     UPDATE               = SQLiteParser.Update_stmtContext
     UPDATE_LIMITED       = SQLiteParser.Update_stmt_limitedContext
+    COLUMN_DEF           = SQLiteParser.Column_defContext
     COLUMN_NAME          = SQLiteParser.Column_nameContext
     INDEX_NAME           = SQLiteParser.Index_nameContext
     SCHEMA_NAME          = SQLiteParser.Database_nameContext
@@ -1094,54 +1096,61 @@ class Parser(object):
         Recursively goes through all items and item children, renaming columns.
         """
         if stack is None:
-            stack = []
+            stack = [] # Nested ownerships as [(context, [entity nane, ])]
             lowercased = {k.lower(): {c1.lower(): c2 for c1, c2 in v.items()}
                           for k, v in renames["column"].items()}
             renames = dict(renames, column=lowercased)
         for ctx in items:
-            ownerctx = None
+            namectx = None # Single context with owner name, or a list for SELECT/JOIN tables
             if isinstance(ctx, CTX.SELECT_CORE):
                 tables = ctx.table_or_subquery()
-                if len(tables) == 1 and tables[0].table_name():
-                    ownerctx = tables[0].table_name
+                if ctx.join_clause(): tables += ctx.join_clause().table_or_subquery()
+                namectx = [c.table_name() for c in tables if c.table_name()]
+            elif isinstance(ctx, CTX.JOIN_CLAUSE):
+                tables = ctx.table_or_subquery()
+                namectx = [c.table_name() for c in tables if c.table_name()]
             elif isinstance(ctx, CTX.EXPRESSION):
-                if self.t(ctx.table_name): ownerctx = ctx.table_name
+                if self.t(ctx.table_name): namectx = ctx.table_name
             elif isinstance(ctx, CTX.FOREIGN_KEY):
-                ownerctx = ctx.foreign_table().any_name
+                namectx = ctx.foreign_table().any_name
             elif isinstance(ctx, CTX.CREATE_VIEW):
-                ownerctx = ctx.view_name
+                namectx = ctx.view_name
             elif isinstance(ctx, (CTX.UPDATE, CTX.DELETE)):
-                ownerctx = ctx.qualified_table_name().table_name
+                namectx = ctx.qualified_table_name().table_name
             elif isinstance(ctx, (CTX.CREATE_TABLE, CTX.CREATE_VIRTUAL_TABLE,
                                   CTX.CREATE_INDEX, CTX.CREATE_TRIGGER, CTX.INSERT)):
-                ownerctx = ctx.table_name
-            if ownerctx:
-                name = self.u(ownerctx).lower()
-                if SQL.CREATE_TRIGGER == self._category and name in ("old", "new") \
+                namectx = ctx.table_name
+            if namectx:
+                names = [self.u(c).lower() for c in util.tuplefy(namectx)]
+                if SQL.CREATE_TRIGGER == self._category and names in (["old"], ["new"]) \
                 and stack and isinstance(stack[0][0], CTX.CREATE_TRIGGER):
-                    name = stack[0][1]
-                stack.append((ctx, name))
+                    names = stack[0][1]
+                stack.append((ctx, names))
 
             if stack:
                 renamectx = None
                 if isinstance(ctx, CTX.COLUMN_NAME):
                     renamectx = ctx
                 elif isinstance(ctx, CTX.LITERAL_VALUE) and isinstance(ctx.parentCtx, CTX.EXPRESSION):
-                    if self.get_parent(ctx, [CTX.RESULT_COLUMN]) and self.t(ctx) != self.u(ctx):
-                        # Interpret any quoted string in SELECT column context as potential column
+                    PARENT_TYPES = [CTX.COLUMN_DEF, CTX.SELECT_CORE, CTX.UPDATE, CTX.DELETE]
+                    if self.get_parent(ctx, PARENT_TYPES) and self.t(ctx) != self.u(ctx):
+                        # Interpret any quoted string in potential column context as column
                         renamectx = ctx
                 if renamectx:
                     terminal = renamectx # Get the deepest terminal, the one holding name value
                     while not isinstance(terminal, TerminalNode): terminal = terminal.children[0]
-                    v0 = self.u(terminal).lower()
-                    v = renames["column"].get(stack and stack[-1][1])
-                    for v1, v2 in v.items() if v else ():
-                        if v0 == v1.lower(): terminal.getSymbol().text = quote(v2)
+                    text = self.u(terminal).lower()
+                    for ownername in stack[-1][1]:
+                        col_renames = renames["column"].get(ownername) or {}
+                        for name_old, name_new in col_renames.items():
+                            if text == name_old and not getattr(terminal, "__renamed__", False):
+                                terminal.getSymbol().text = quote(name_new)
+                                setattr(terminal, "__renamed__", True)
 
             if getattr(ctx, "children", None):
                 self.recurse_rename_column(ctx.children, renames, stack)
 
-            if ownerctx: stack.pop(-1)
+            if namectx: stack.pop(-1)
 
 
 
