@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     12.10.2024
-@modified    14.10.2024
+@modified    15.10.2024
 ------------------------------------------------------------------------------
 """
 import collections
@@ -30,7 +30,7 @@ logger = logging.getLogger()
 
 ## CREATE statements for testing, as {label: sql}
 CREATE_SQLS = collections.OrderedDict([
-    ("table", "CREATE TABLE mytable (mycol1, mycol2, mycol3)"),
+    ("table", """CREATE TABLE mytable (mycol1, mycol2, "my col3")"""),
     ("table with flags and comments", """
 -- comment
 CREATE TABLE -- comment
@@ -41,9 +41,8 @@ othertable (
   -- first line comment
   otherkey TEXT PRIMARY KEY,
   othercol1, -- comment
-  othercol2 TEXT,
-  othercol3 NOT NULL UNIQUE,
-  "other col4" INTEGER -- my comment
+  othercol2 TEXT NOT NULL UNIQUE,
+  "other col3" INTEGER -- my comment
   /* multiline
   comment */
   -- last line comment
@@ -57,57 +56,60 @@ WITHOUT ROWID -- comment
 CREATE TEMPORARY TABLE IF NOT EXISTS "mytable" (
   mykey           INTEGER NOT NULL DEFAULT (1 < 0),
   mycol1          INTEGER NOT NULL ON CONFLICT ABORT UNIQUE ON CONFLICT ROLLBACK DEFAULT /* uhuu */ -666.5,
-  mycol2          INTEGER COLLATE /* haha */ BiNARY CHECK (mycol3 IS /* hoho */ NULL),
-  mycol3          TEXT NOT NULL DEFAULT "double "" quoted" CHECK (LENGTH(mytable.mycol1) > 0),
-  "my col4"       TIMESTAMP WITH TIME ZONE,
+  mycol2          INTEGER COLLATE /* haha */ BiNARY CHECK ("my col3" IS /* hoho */ NULL),
+  "my col3"       TEXT NOT NULL DEFAULT "double "" quoted" CHECK (LENGTH(mytable."my col3") > 0),
   myfk            INTEGER REFERENCES othertable (otherkey) on update no action ON delete cascade match SIMPLE,
   myfk2           INTEGER,
   myfk3           INTEGER,
-  mycol5          DOUBLE TYPE,
+  mycol4          TIMESTAMP WITH TIME ZONE,
   PRIMARY KEY (mykey) ON CONFLICT ROLLBACK,
   FOREIGN KEY (myfk2, myfk3) REFERENCES othertable (othercol1, othercol2) ON UPDATE RESTRICT ON DELETE CASCADE,
   CONSTRAINT myconstraint CHECK (mycol1 != mycol2)
 )
 '''),
+    ("virtual table", u'''
+CREATE VIRTUAL TABLE IF NOT EXISTS main.mytable
+USING fts4 (mycol1, mycol2, "my col3");
+'''),
     ("index", u'''
 CREATE UNIQUE INDEX IF NOT EXISTS
 main.myindex ON mytable (mycol1, mycol2)
-WHERE mytable.mycol1 NOT BETWEEN mytable.mycol2 AND mytable.mycol3
+WHERE mytable.mycol1 NOT BETWEEN mytable.mycol2 AND mytable."my col3"
 '''),
     ("trigger", u'''
-CREATE TRIGGER main.mytriggér AFTER UPDATE OF mycol1 ON mytable
-WHEN 1 NOT IN (SELECT mycol2 FROM mytable)
+CREATE TRIGGER main.mytriggér AFTER UPDATE OF "my col3" ON mytable
+WHEN 1 NOT IN (SELECT "my col3" FROM mytable)
   BEGIN
-    SELECT mycol1, mycol2, mycol3, "my col4" FROM mytable;
-    SELECT myviewcol1, "myview col4" FROM myview;
+    SELECT mycol1, mycol2, "my col3" FROM mytable
+      JOIN othertable ON mycol1 == othercol1 AND "my col3" = "other col3"
+      WHERE mycol2 == othercol2 AND "my col3" == "other col3";
+    SELECT myviewcol1, "myview col3" FROM myview;
     UPDATE othertable SET othercol1 = NEW.mycol1 WHERE othercol2 = OLD.mycol2;
-    INSERT INTO othertable (othercol1) VALUES (42);
-    DELETE FROM othertable WHERE othercol2 != old.mycol2;
-    UPDATE othertable SET othercol2 = new.mycol2 WHERE othercol1 = old.mycol1;
+    INSERT INTO othertable (othercol1) VALUES (42)
+      ON CONFLICT (othercol1) DO UPDATE SET "other col3" = 43;
+    DELETE FROM othertable WHERE "other col3" != old."my col3";
+    UPDATE othertable SET othercol2 = new.mycol2 WHERE "other col3" = old."my col3";
   END;
-'''),
-    ("virtual table", u'''
-CREATE VIRTUAL TABLE IF NOT EXISTS main.mytable
-USING fts4 (mycol1, mycol2, mycol3);
 '''),
     ("view", u'''
 CREATE VIEW IF NOT EXISTS
-main.myview (myviewcol1, myviewcol2, myviewcol3, "myview col4")
-AS SELECT mycol1, mycol2, mycol3, "my col4" FROM mytable
+main.myview (myviewcol1, myviewcol2, "myview col3")
+AS SELECT mycol1, mycol2, "my col3" FROM mytable
 '''),
     ("temporary view", u'''
 CREATE TEMPORARY VIEW IF NOT EXISTS
-myview (myviewcol1, myviewcol2, myviewcol3, "myview col4")
-AS SELECT mycol1, mycol2, mycol3, "my col4" FROM mytable
+myview (myviewcol1, myviewcol2, "myview col3")
+AS SELECT mycol1, mycol2, "my col3" FROM mytable
+   JOIN othertable ON mytable."my col3" == othertable."other col3"
 '''),
     ("view with union", u'''
 CREATE VIEW IF NOT EXISTS
-main.myview (myviewcol1, myviewcol2, myviewcol3, "myview col4")
-AS SELECT mycol1, mycol2, mycol3, "my col4" FROM mytable
+main.myview (myviewcol1, myviewcol2, "myview col3")
+AS SELECT mycol1, mycol2, "my col3" FROM mytable
    UNION
-   SELECT othercol1, othercol2, othercol3, "other col4" FROM othertable
+   SELECT othercol1, othercol2, "other col3" FROM othertable
    UNION
-   SELECT 1 AS myview2col1, 2 AS myview2col2, 3 AS myviewcol3, 4 AS "myview2 col4"
+   SELECT 1 AS myview2col1, 2 AS myview2col2, 3 AS "myview2 col3"
 '''),
 ])
 
@@ -116,40 +118,11 @@ AS SELECT mycol1, mycol2, mycol3, "my col4" FROM mytable
 CREATE_ITEMS = {
     "table": {
         "name":           "mytable",
-        "columns":        [{"name": u"mycol1"}, {"name": u"mycol2"}, {"name": u"mycol3"}],
+        "columns":        [{"name": u"mycol1"}, {"name": u"mycol2"}, {"name": u"my col3"}],
         "__type__":       "CREATE TABLE",
         "__tables__":     [],
         "__terminated__": False,
         "__comments__":   {},
-    },
-
-    "index": {
-        "name":           "myindex",
-        "schema":         "main",
-        "columns":        [{"name": "mycol1"}, {"name": "mycol2"}],
-        "table":          "mytable",
-        "unique":         True,
-        "where":          "mytable.mycol1 NOT BETWEEN mytable.mycol2 AND mytable.mycol3",
-        "exists":         True,
-        "__type__":       "CREATE INDEX",
-        "__tables__":     ["mytable"],
-        "__terminated__": False,
-        "__comments__":   {},
-    },
-
-    "trigger": {
-          "name":        u"mytriggér",
-          "schema":       "main",
-          "body":        u'    SELECT mycol1, mycol2, mycol3, "my col4" FROM mytable;\n    SELECT myviewcol1, "myview col4" FROM myview;\n    UPDATE othertable SET othercol1 = NEW.mycol1 WHERE othercol2 = OLD.mycol2;\n    INSERT INTO othertable (othercol1) VALUES (42);\n    DELETE FROM othertable WHERE othercol2 != old.mycol2;\n    UPDATE othertable SET othercol2 = new.mycol2 WHERE othercol1 = old.mycol1;',
-          "when":           "1 NOT IN (SELECT mycol2 FROM mytable)",
-          "action":         "UPDATE",
-          "table":          "mytable",
-          "upon":           "AFTER",
-          "columns":        [{"name": "mycol1"}],
-          "__type__":       "CREATE TRIGGER",
-          "__tables__":     ["mytable", "myview", u"othertable"],
-          "__terminated__": False,
-          "__comments__":   {},
     },
 
     "table with flags and comments": {
@@ -158,9 +131,8 @@ CREATE_ITEMS = {
         "options":        [{"without": True}],
         "columns":        [{"name": "otherkey", "type": "TEXT", "pk": {}},
                            {"name": "othercol1"},
-                           {"name": "othercol2", "type": "TEXT"},
-                           {"name": "othercol3", "unique": {}, "notnull": {}},
-                           {"name": "other col4", "type": "INTEGER", "notnull": {}},
+                           {"name": "othercol2", "type": "TEXT", "unique": {}, "notnull": {}},
+                           {"name": "other col3", "type": "INTEGER", "notnull": {}},
         ],
         "__type__":       "CREATE TABLE",
         "__tables__":     [],
@@ -171,12 +143,12 @@ CREATE_ITEMS = {
                             61: "-- comment",
                             87: "-- first line comment",
                            151: "-- comment",
-                           232: "-- my comment",
-                           248: "/* multiline\n  comment */",
-                           276: "-- last line comment",
-                           310: "-- comment",
-                           335: "-- comment",
-                           346: "-- comment"},
+                           219: "-- my comment",
+                           235: "/* multiline\n  comment */",
+                           263: "-- last line comment",
+                           297: "-- comment",
+                           322: "-- comment",
+                           333: "-- comment"},
     },
 
     "table with columns and constraints": {
@@ -186,17 +158,16 @@ CREATE_ITEMS = {
                     {"name": "mycol1", "type": "INTEGER", "notnull": {"conflict": "ABORT"},
                      "unique": {"conflict": "ROLLBACK"}, "default": {"expr": "-666.5"}},
                     {"name": "mycol2", "type": "INTEGER", "collate": {"value": "BINARY"},
-                     "check": {"expr": "mycol3 IS /* hoho */ NULL"}},
-                    {"name": "mycol3", "type": "TEXT", "notnull": {},
-                     "check": {"expr": "LENGTH(mytable.mycol1) > 0"},
+                     "check": {"expr": '"my col3" IS /* hoho */ NULL'}},
+                    {"name": "my col3", "type": "TEXT", "notnull": {},
+                     "check": {"expr": 'LENGTH(mytable."my col3") > 0'},
                      "default": {"expr": '"double "" quoted"'}},
-                    {"name": "my col4", "type": "TIMESTAMP WITH TIME ZONE"},
                     {"name": "myfk", "type": "INTEGER",
                      "fk": {"action": {"UPDATE": "NO ACTION", "DELETE": "CASCADE"},
                             "table": "othertable", "match": "SIMPLE", "key": "otherkey"}},
                     {"name": "myfk2", "type": "INTEGER"},
                     {"name": "myfk3", "type": "INTEGER"},
-                    {"name": "mycol5", "type": "DOUBLE TYPE"}
+                    {"name": "mycol4", "type": "TIMESTAMP WITH TIME ZONE"}
         ],
         "exists":         True,
         "temporary":      True,
@@ -212,14 +183,14 @@ CREATE_ITEMS = {
         "__terminated__": False,
         "__comments__":   {191: "/* uhuu */",
                            244: "/* haha */",
-                           279: "/* hoho */",
+                           282: "/* hoho */",
         },
     },
 
     "virtual table": {
         "name":           "mytable",
         "schema":         "main",
-        "module":         {"name": "fts4", "arguments": ["mycol1", "mycol2", "mycol3"]},
+        "module":         {"name": "fts4", "arguments": ["mycol1", "mycol2", '"my col3"']},
         "exists":         True,
         "__type__":       "CREATE VIRTUAL TABLE",
         "__tables__":     ["mytable"],
@@ -227,12 +198,40 @@ CREATE_ITEMS = {
         "__comments__":   {},
     },
 
+    "index": {
+        "name":           "myindex",
+        "schema":         "main",
+        "columns":        [{"name": "mycol1"}, {"name": "mycol2"}],
+        "table":          "mytable",
+        "unique":         True,
+        "where":          'mytable.mycol1 NOT BETWEEN mytable.mycol2 AND mytable."my col3"',
+        "exists":         True,
+        "__type__":       "CREATE INDEX",
+        "__tables__":     ["mytable"],
+        "__terminated__": False,
+        "__comments__":   {},
+    },
+
+    "trigger": {
+          "name":        u"mytriggér",
+          "schema":       "main",
+          "body":        u'    SELECT mycol1, mycol2, "my col3" FROM mytable\n      JOIN othertable ON mycol1 == othercol1 AND "my col3" = "other col3"\n      WHERE mycol2 == othercol2 AND "my col3" == "other col3";\n    SELECT myviewcol1, "myview col3" FROM myview;\n    UPDATE othertable SET othercol1 = NEW.mycol1 WHERE othercol2 = OLD.mycol2;\n    INSERT INTO othertable (othercol1) VALUES (42)\n      ON CONFLICT (othercol1) DO UPDATE SET "other col3" = 43;\n    DELETE FROM othertable WHERE "other col3" != old."my col3";\n    UPDATE othertable SET othercol2 = new.mycol2 WHERE "other col3" = old."my col3";',
+          "when":           '1 NOT IN (SELECT "my col3" FROM mytable)',
+          "action":         "UPDATE",
+          "table":          "mytable",
+          "upon":           "AFTER",
+          "columns":        [{"name": "my col3"}],
+          "__type__":       "CREATE TRIGGER",
+          "__tables__":     ["mytable", "othertable", "myview"],
+          "__terminated__": False,
+          "__comments__":   {},
+    },
+
     "view": {
         "name":           "myview",
         "schema":         "main",
-        "select":         'SELECT mycol1, mycol2, mycol3, "my col4" FROM mytable',
-        "columns":        [{"name": "myviewcol1"}, {"name": "myviewcol2"}, {"name": "myviewcol3"},
-                           {"name": "myview col4"}],
+        "select":         'SELECT mycol1, mycol2, "my col3" FROM mytable',
+        "columns":        [{"name": "myviewcol1"}, {"name": "myviewcol2"}, {"name": "myview col3"}],
         "exists":         True,
         "__tables__":     ["mytable"],
         "__type__":       "CREATE VIEW",
@@ -244,11 +243,10 @@ CREATE_ITEMS = {
         "name":           "myview",
         "temporary":      True,
         "exists":         True,
-        "select":         'SELECT mycol1, mycol2, mycol3, "my col4" FROM mytable',
-        "columns":        [{"name": "myviewcol1"}, {"name": "myviewcol2"}, {"name": "myviewcol3"},
-                           {"name": "myview col4"}],
+        "select":         'SELECT mycol1, mycol2, "my col3" FROM mytable\n   JOIN othertable ON mytable."my col3" == othertable."other col3"',
+        "columns":        [{"name": "myviewcol1"}, {"name": "myviewcol2"}, {"name": "myview col3"}],
         "__type__":       "CREATE VIEW",
-        "__tables__":     ["mytable"],
+        "__tables__":     ["mytable", "othertable"],
         "__terminated__": False,
         "__comments__":   {},
     },
@@ -256,9 +254,8 @@ CREATE_ITEMS = {
     "view with union": {
         "name":           "myview",
         "schema":         "main",
-        "select":         'SELECT mycol1, mycol2, mycol3, "my col4" FROM mytable\n   UNION\n   SELECT othercol1, othercol2, othercol3, "other col4" FROM othertable\n   UNION\n   SELECT 1 AS myview2col1, 2 AS myview2col2, 3 AS myviewcol3, 4 AS "myview2 col4"',
-        "columns":        [{"name": "myviewcol1"}, {"name": "myviewcol2"}, {"name": "myviewcol3"},
-                           {"name": "myview col4"}],
+        "select":         'SELECT mycol1, mycol2, "my col3" FROM mytable\n   UNION\n   SELECT othercol1, othercol2, "other col3" FROM othertable\n   UNION\n   SELECT 1 AS myview2col1, 2 AS myview2col2, 3 AS "myview2 col3"',
+        "columns":        [{"name": "myviewcol1"}, {"name": "myviewcol2"}, {"name": "myview col3"}],
         "exists":         True,
         "__type__":       "CREATE VIEW",
         "__tables__":     ["mytable", "othertable"],
@@ -273,9 +270,9 @@ CREATE_NAMES = {
     "table":                              "mytable",
     "table with flags and comments":      "othertable",
     "table with columns and constraints": "mytable",
+    "virtual table":                      "mytable",
     "index":                              "myindex",
     "trigger":                           u"mytriggér",
-    "virtual table":                      "mytable",
     "view":                               "myview",
     "temporary view":                     "myview",
     "view with union":                    "myview",
@@ -288,21 +285,22 @@ RENAMES = {
     "trigger": {u"mytriggér":            u"renämed mytriggér"},
     "view":    {"myview":                u"renämed myview"},
     "column":  {"renamed mytable": {
-                    "mycol1":             "renamed mycol1",
-                    "mycol2":             "renamed mycol2",
-                    "mycol3":             "renamed mycol3",
-                    "my col4":            "renamed my col4",
-                    "mykey":              "renamed mykey",
-                    "myfk2":              "renamed myfk2",
+                    "mycol1":             "myrenamedcol1",
+                    "mycol2":             "myrenamedcol2",
+                    "my col3":            "myrenamed col3",
+                    "mycol4":             "myrenamedcol4",
+                    "mykey":              "myrenamedkey",
+                    "myfk2":              "myrenamed fk2",
                 },
                 "renamed othertable": {
-                    "othercol1":          "renamed othercol1",
-                    "othercol2":          "renamed othercol2",
-                    "otherkey":           "renamed otherkey",
+                    "othercol1":          "otherrenamedcol1",
+                    "othercol2":          "otherrenamedcol2",
+                    "other col3":         "other renamed col3",
+                    "otherkey":           "otherrenamedkey",
                 },
                 u"renämed myview":  {
-                    "myviewcol1":         "renamed myviewcol1",
-                    "myview col4":        "renamed myview col4",
+                    "myviewcol1":         "myviewrenamedcol1",
+                    "myview col3":        "myview renamed col3",
                 },
     },
 }
@@ -418,7 +416,7 @@ class TestGrammar(unittest.TestCase):
     def test_transform_renames(self):
         """Verifies grammar.transform(renames={..})."""
         logger.info("Verifying grammar.transform(renames={..}).")
-        renamed_schema = {} # {name: CREATE SQL}
+        renamed_schema = {} # {name: CREATE SQL} for required entities in database testing
         for label, create_sql in CREATE_SQLS.items():
             logger.info("Verifying grammar.transform(renames={..}) for %s.", label)
             transformed_sql, err = grammar.transform(create_sql, renames=RENAMES)
@@ -436,6 +434,8 @@ class TestGrammar(unittest.TestCase):
                             if col1 not in create_sql: continue # for col1,
                             self.assertIn(col2, transformed_sql,
                                           "Expected renamed column in transformed %s." % label)
+                            self.assertNotIn(col1, transformed_sql,
+                                          "Unexpected original column in transformed %s." % label)
                 else:
                     for name1, name2 in RENAMES[category].items():
                         if name1 in create_sql:
