@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.10.2024
+@modified    16.10.2024
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1040,7 +1040,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             if sys.version_info < (3, ) and datatype is buffer:  # Py2
                 result[name] = str(result[name]).decode("latin1")
             elif datatype is memoryview:
-                result[name] = datatype.to_bytes().decode("latin1")
+                result[name] = datatype.tobytes().decode("latin1")
             elif datatype is six.binary_type:
                 try:
                     result[name] = result[name].decode("utf-8")
