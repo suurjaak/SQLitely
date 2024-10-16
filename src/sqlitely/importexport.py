@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.10.2024
+@modified    16.10.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -2043,17 +2043,28 @@ class csv_reader(object):
     def open(self):
         """Opens file if not already open."""
         if not self._file:
-            self._file   = codecs.open(self.filename, encoding=self.encoding)
-            self._reader = csv.reader(self._reencoder() if six.PY2 else self._file, self.dialect)
+            self._file = codecs.open(self.filename, encoding=self.encoding)
+            csvfile = self._reencoder() if six.PY2 else self._reliner()
+            self._reader = csv.reader(csvfile, self.dialect)
 
 
     def _reencoder(self):
         """Yields lines from file re-encoded as UTF-8; Py2 workaround."""
         if "utf-16" in (self.encoding or "").lower(): # Strip byte order mark if any
-            line = next(self._file)
+            line = next(self._file, "")
             if line.startswith((u"\uFEFF", u"\uFFFE")): line = line[1:]
             yield line.encode("utf-8")
         for line in self._file: yield line.encode("utf-8")
+
+
+    def _reliner(self):
+        """Yields lines from file, ensuring no mixed linefeeds; Py3 workaround."""
+        line = next(self._file, "")
+        while line:
+            yield line
+            line, prevline = next(self._file, ""), line
+            if prevline[-1:] == "\r" and prevline[-2:] != "\r\n" and line == "\r\n":
+                line = next(self._file, "") # Skip invalid lines mixing Windows and Unix linefeeds
 
 
     def close(self):

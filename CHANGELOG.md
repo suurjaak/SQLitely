@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.4, 2024-10-14
+2.4, 2024-10-16
 ---------------
 - add support for generated columns
 - add find/replace dialog to data grids and column editors and database schema text
@@ -25,6 +25,7 @@ CHANGELOG
 - mark changed pragma values with asterisks
 - use hourglass cursor while showing busy message
 - allow saving SVG image as SVG in column editor
+- provide workaround for importing CSVs with mixed Windows and Unix linefeeds (issue #3)
 - fix rolling back changes on error in schema editor test and save
 - fix renaming columns in related entities on column rename for quoted or complex expressions
 - fix representing very large integers in column editor hex view
