@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     12.10.2024
-@modified    15.10.2024
+@modified    16.10.2024
 ------------------------------------------------------------------------------
 """
 import collections
@@ -318,17 +318,27 @@ class TestGrammar(unittest.TestCase):
         except Exception: pass
 
 
-    def test_parse(self):
-        """Verifies grammar.parse()."""
-        logger.info("Verifying grammar.parse().")
+    def test_format(self):
+        """Verifies grammar.format()."""
+        logger.info("Verifying grammar.format().")
+        expecteds = [(42,         "42"),
+                     (None,       "NULL"),
+                     ("word",     "'word'"),
+                     ("\x00\x01", "X'0001'"),
+                     (u"é",       u"'\xC3\xA9'"),
+                     ]
+        for original, expected in expecteds:
+            received = grammar.format(original)
+            self.assertEqual(received, expected, "Unexpected result from format(%r)." % original)
 
-        for label, create_sql in CREATE_SQLS.items():
-            logger.info("Verifying grammar.parse() for %s.", label)
-            logger.debug("Parsing %s SQL:\n%s", label, create_sql)
-            item, err = grammar.parse(create_sql)
-            self.assertFalse(err, "Unexpected failure from parsing %s." % label)
-            logger.debug("Parsed structure for %s:\n%s", label, json.dumps(item, indent=2))
-            self.assertEqual(item, CREATE_ITEMS[label], "Unexpected result for parsed %s." % label)
+        coldata = {"type": "json"}
+        expecteds = [('[ ]',           "'[]'"),
+                     ('{\n  "a":  4}', '\'{"a": 4}\''),
+                     ("0.300",         "'0.3'")]
+        for original, expected in expecteds:
+            received = grammar.format(original, coldata=coldata)
+            self.assertEqual(received, expected,
+                             "Unexpected result from format(%r, coldata=%r)." % (original, coldata))
 
 
     def test_generate(self):
@@ -348,6 +358,105 @@ class TestGrammar(unittest.TestCase):
             stripped = [re.sub(r'[\s"]', "", x.upper()) for x in stripped]
             self.assertEqual(stripped[0], stripped[1], "Unexpected result for generated %s." % label)
             self.verify_sql(label, CREATE_SQLS[label], generated_sql)
+
+
+    def test_get_type(self):
+        """Verifies grammar.get_type()."""
+        logger.info("Verifying grammar.get_type(sql).")
+        expecteds = [("/* */\nSeLect 1;",                  grammar.SQL.SELECT),
+                     ("INSERT\nINTO\nmytable VALUES (1)",  grammar.SQL.INSERT),
+                     ("UPDATE/* */mytable SET mycol1 = 1", grammar.SQL.UPDATE),
+                     ("DELETE -- \nFROM mytable",          grammar.SQL.DELETE),
+                     ('SELECT*FROM"x"',                    grammar.SQL.SELECT),
+                     ('SELECT',                            None)]
+        for sql, expected in expecteds:
+            received = grammar.get_type(sql)
+            self.assertEqual(received, expected, "Unexpected result from get_type(%r)." % sql)
+
+
+    def test_parse(self):
+        """Verifies grammar.parse()."""
+        logger.info("Verifying grammar.parse().")
+
+        for label, create_sql in CREATE_SQLS.items():
+            logger.info("Verifying grammar.parse() for %s.", label)
+            logger.debug("Parsing %s SQL:\n%s", label, create_sql)
+            item, err = grammar.parse(create_sql)
+            self.assertFalse(err, "Unexpected failure from parsing %s." % label)
+            logger.debug("Parsed structure for %s:\n%s", label, json.dumps(item, indent=2))
+            self.assertEqual(item, CREATE_ITEMS[label], "Unexpected result for parsed %s." % label)
+
+
+    def test_quote(self):
+        """Verifies grammar.quote()."""
+        logger.info("Verifying grammar.quote().")
+        expecteds = [("SELECT",    '"SELECT"'),
+                     ("word",      "word"),
+                     ("two words", '"two words"'),
+                     ('wo"rd',     '"wo""rd"'),
+                     ('""',        '""""""'),
+                     (" ",         '" "'),
+                     (14,          '"14"'),
+                     (None,         ""),
+                     ("14a",       '"14a"'),
+                     (u"m#",       '"m#"')]
+        for original, expected in expecteds:
+            received = grammar.quote(original)
+            self.assertEqual(received, expected, "Unexpected result from quote(%r)." % original)
+
+        expecteds = [("word",      '"word"'),
+                     ("two words", '"two words"')]
+        for original, expected in expecteds:
+            received = grammar.quote(original, force=True)
+            self.assertEqual(received, expected,
+                             "Unexpected result from quote(%r, force=True)." % original)
+
+        expecteds = [("word",      "word"),
+                     ("two words", "two words"),
+                     ("14a",       "14a"),
+                     (" leading",  '" leading"'),
+                     ("trailing ",  '"trailing "')]
+        for original, expected in expecteds:
+            received = grammar.quote(original, embed=True)
+            self.assertEqual(received, expected,
+                             "Unexpected result from quote(%r, embed=True)." % original)
+
+        expecteds = [(("func()", "()"),   "func()"),
+                     (("two words", " "), "two words")]
+        for (original, allow), expected in expecteds:
+            received = grammar.quote(original, allow=allow)
+            self.assertEqual(received, expected,
+                             "Unexpected result from quote(%r, allow=%r)." % (original, allow))
+
+
+    def test_strip_and_collapse(self):
+        """Verifies grammar.strip_and_collapse()."""
+        logger.info("Verifying grammar.strip_and_collapse().")
+        expecteds = [('/* */select --\n  *  from "my table"  ; ;', 'SELECT * FROM ""'),
+                     ('insert  into  foo  VALUES  ( 1,   2 )',     "INSERT INTO FOO VALUES (1, 2)")]
+        for original, expected in expecteds:
+            received = grammar.strip_and_collapse(original)
+            self.assertEqual(received, expected,
+                             "Unexpected result from strip_and_collapse(%r)." % original)
+
+        expecteds = [('SELECT   "a  b"  from  "my  table"; ', 'SELECT "a  b" from "my  table"'),
+                     ('insert into foo VALUES  ("  ( 3 )" )', 'insert into foo VALUES ("  ( 3 )")')]
+        for original, expected in expecteds:
+            received = grammar.strip_and_collapse(original, literals=False, upper=False)
+            self.assertEqual(received, expected, "Unexpected result from "
+                             "strip_and_collapse(%r, literals=False, upper=False)." % original)
+
+
+    def test_terminate(self):
+        """Verifies grammar.terminate()."""
+        logger.info("Verifying grammar.terminate().")
+        expecteds = [("SELECT * FROM a",      "SELECT * FROM a;"),
+                     ("SELECT * FROM a;\n\n", "SELECT * FROM a;"),
+                     ("SELECT * FROM a --",   "SELECT * FROM a --\n;")]
+        for original, expected in expecteds:
+            received = grammar.terminate(original)
+            self.assertEqual(received, expected,
+                             "Unexpected result from terminate(%r)." % original)
 
 
     def test_transform_flags(self):
@@ -444,6 +553,22 @@ class TestGrammar(unittest.TestCase):
             if CREATE_NAMES[label] in ("mytable", "othertable"):
                 renamed_schema.setdefault(CREATE_NAMES[label], transformed_sql)
             self.verify_sql(label, transformed_sql, baseschema=list(renamed_schema.values()))
+
+
+    def test_unquote(self):
+        """Verifies grammar.unquote()."""
+        logger.info("Verifying grammar.unquote().")
+        expecteds = [("word",      "word"),
+                     ('"word"',    "word"),
+                     ('[word]',    "word"),
+                     ("'word'",    "word"),
+                     ('"wo""rd"',  'wo"rd'),
+                     (14,          "14"),
+                     (None,        "")]
+        for original, expected in expecteds:
+            received = grammar.unquote(original)
+            self.assertEqual(received, expected, "Unexpected result from unquote(%r)." % original)
+
 
 
     def verify_sql(self, label, *create_sqls, **kwargs):
