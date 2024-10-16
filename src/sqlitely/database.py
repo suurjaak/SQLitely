@@ -597,7 +597,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         # {"table|index|view|trigger":
         #   {name:
         #     {name: str, sql: str, ?table: str, ?columns: [], ?count: int,
-        #      __id__: unique, ?__parsed__: bool,
+        #      __id__: unique, ?__parsed__: bool, ?__parse_error__: str,
         #      ?meta: {full metadata}}}}
         self.schema = defaultdict(CaselessDict)
         self.connection = None
@@ -1164,9 +1164,12 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 # Parse metainfo from SQL if commanded and not already available
                 meta, sql = None, None
                 if parse and not opts.get("__parsed__"):
-                    meta, _ = grammar.parse(opts["sql0"])
+                    opts.pop("__parse_error__", None)
+                    meta, err = grammar.parse(opts["sql0"])
                     if meta:
                         opts["__parsed__"] = True
+                    else:
+                        opts["__parse_error__"] = err
                     if meta and "table" == mycategory:
                         if "columns" in opts and "columns" in meta \
                         and (len(opts["columns"]) != len(opts["columns"]) or any(

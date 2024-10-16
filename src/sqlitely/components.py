@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.10.2024
+@modified    16.10.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -3640,9 +3640,10 @@ class SchemaObjectPage(wx.Panel):
         self._splitter.SetSashPosition(pos)
         self._splitter.SashInvisible = not has_cols
 
+        parsing_done = self._item.get("__parsed__") or self._item.get("__parse_error__")
         self._label_error.Show(not self._hasmeta)
         self._label_error.Label = "" if self._hasmeta else \
-                                  "Error parsing SQL" if self._item.get("__parsed__") else \
+                                  "Error parsing SQL" if parsing_done else \
                                   "Schema not parsed yet"
         if not self._hasmeta and "trigger" != self._category:
             self._panel_columnswrapper.Parent.Shown = True
