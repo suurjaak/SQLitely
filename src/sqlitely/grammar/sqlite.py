@@ -167,7 +167,7 @@ def quote(val, force=False, allow="", embed=False):
 def unquote(val):
     """
     Returns unquoted string, if string within '' or "" or `` or [].
-    Convers value to string if not already.
+    Converts value to string if not already.
     """
     result = uni(val) or ""
     if re.match(r"^([\"].*[\"])|([\'].*[\'])|([\`].*[\`])|([\[].*[\]])$", result, re.DOTALL):
