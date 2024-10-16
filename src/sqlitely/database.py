@@ -1092,7 +1092,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     continue # for row
 
             sqlraw = row["sql"].strip().replace("\r\n", "\n")
-            sql = re.sub("\n\s+\)(?=[\s;]*$)", "\n)", sqlraw) # "\n  );\n" -> "\n)"
+            sql = re.sub("\n\\s+\\)(?=[\\s;]*$)", "\n)", sqlraw) # "\n  );\n" -> "\n)"
             row["sql"], row["sql0"], row["sqlraw"] = sql, sql, sqlraw
             self.schema[row["type"]][row["name"]] = row
 
