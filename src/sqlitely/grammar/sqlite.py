@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    15.10.2024
+@modified    16.10.2024
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -1334,137 +1334,7 @@ class Generator(object):
         return self.token(val, "CM") if val else ""
 
 
-
-def test():
-    logging.basicConfig()
-
-    TEST_STATEMENTS = [
-        u'''
-        CREATE UNIQUE INDEX IF NOT EXISTS
-        myschema.myindex ON mytable (mytablecol1, mytablecol2) WHERE mytable.mytablecol1 NOT BETWEEN mytable.mytablecol2 AND mytable.mytablecol3
-        ''',
-
-
-        """
-        -- comment
-        CREATE TEMP TABLE -- comment
-        -- comment
-        IF NOT EXISTS
-        -- comment
-        mytable (
-            -- first line comment
-            mytablecol1 TEXT PRIMARY KEY AUTOINCREMENT,
-            "mytable col2" INTEGER NOT NULL, -- my comment
-            mytablecol3
-            /* multiline
-            comment */
-            -- last line comment
-            UNIQUE NOT NULL
-        ) -- comment
-        WITHOUT ROWID -- comment
-        -- comment
-
-        """,
-
-
-        u'''
-        CREATE TABLE IF NOT EXISTS "mytable" (
-            mytablekey    INTEGER NOT NULL DEFAULT (mytablecol1),
-            mytablecol1   INTEGER NOT NULL ON CONFLICT ABORT DEFAULT /* uhuu */ -666.5 UNIQUE ON CONFLICT ROLLBACK,
-            mytablecol2   INTEGER CHECK (mytablecol3 IS /* hoho */ NULL) COLLATE /* haha */ BiNARY,
-            mytablecol3   TEXT NOT NULL DEFAULT "double "" quoted" CHECK (LENGTH(mytable.mytablecol1) > 0),
-            mytablecol4   TIMESTAMP WITH TIME ZONE,
-            mytablefk     INTEGER REFERENCES mytable2 (mytable2key) ON delete cascade on update no action match SIMPLE,
-            mytablefk2    INTEGER,
-            mytablefk3    INTEGER,
-            mytablecol5   DOUBLE TYPE,
-            PRIMARY KEY (mytablekey) ON CONFLICT ROLLBACK,
-            FOREIGN KEY (mytablefk2, mytablefk3) REFERENCES mytable2 (mytable2col1, mytable2col2) ON DELETE CASCADE ON UPDATE RESTRICT,
-            CONSTRAINT myconstraint CHECK (mytablecol1 != mytablecol2)
-        )
-        ''',
-
-
-        u'''
-        CREATE TRIGGER myschema.mytriggér AFTER UPDATE OF mytablecol1 ON mytable
-        WHEN 1 NOT IN (SELECT mytablecol2 FROM mytable)
-          BEGIN
-            SELECT mytablecol1, mytablecol2, "mytable col3" FROM mytable;
-            SELECT myviewcol1, myviewcol2 FROM myview;
-            UPDATE "my täble2" SET mytable2col1 = NEW.mytablecol1 WHERE mytable2col2 = OLD.mytablecol2;
-            INSERT INTO mytable2 (mytable2col1) VALUES (42);
-            DELETE FROM mytable2 WHERE mytable2col2 != old.mytablecol2;
-            UPDATE mytable2 SET mytable2col2 = new.mytablecol2 WHERE mytable2col1 = old.mytablecol1;
-          END;
-        ''',
-
-
-        u'''
-            CREATE TEMPORARY VIEW IF NOT EXISTS
-            myschema.myview (myviewcol1, myviewcol2, "myview col3")
-            AS SELECT mytablecol1, mytablecol2, "mytable col3" FROM mytable
-        ''',
-
-
-        u'''
-            CREATE TEMPORARY VIEW IF NOT EXISTS
-            myschema.myview (myviewcol1, myviewcol2, "myview col3")
-            AS SELECT mytablecol1, mytablecol2, "mytable col3" FROM mytable
-               UNION
-               SELECT mytable2col1, mytable2col2, "mytable2 col3" FROM mytable2
-               UNION
-               SELECT myview2col1, myview2col2, "myview2 col3" FROM myview2
-        ''',
-
-
-        u'''
-        CREATE VIRTUAL TABLE IF NOT EXISTS myschemaname.mytable
-        USING mymodule (myargument1, myargument2);
-        ''',
-    ]
-
-
-    indent = "  "
-    renames = {"table":   {"mytable": "renamed mytable", "mytable2": "renamed mytable2"},
-               "trigger": {u"mytriggér": u"renämed mytriggér"},
-               "index":   {"myindex":  u"renämed myindex"},
-               "view":    {"myview":  u"renämed myview",
-                           "myview2": u"renämed myview2"},
-               "column":  {
-                           "renamed mytable":  {"mytablecol1": u"renamed mytablecol1", "mytable col2": "renamed mytable col2", "mytablecol2": "renamed mytablecol2", "mytablecol3": "renamed mytablecol3", "mytable col3": "renamed mytable col3", "mytablekey": "renamed mytablekey", "mytablefk2": "renamed mytablefk2"},
-                           "renamed mytable2": {"mytable2col1": u"renamed mytable2col1", "mytable2col2": u"renamed mytable2col2", "mytable2key": "renamed mytable2key", "mytablefk2": "renamed mytablefk2"},
-                           u"renämed myview":  {"myviewcol1": "renamed myviewcol1", "myview col3": "renamed myview col3"},
-                           u"renämed myview2": {"myview2col1": "renamed myview2col1", "myview2 col3": "renamed myview2 col3"},
-               },
-               "schema":  u"renämed schéma"}
-    for sql1 in TEST_STATEMENTS:
-        print("\n%s\nORIGINAL:\n" % ("-" * 70))
-        print(sql1.encode("utf-8"))
-
-        x, err = parse(sql1)
-        if not x:
-            print("ERROR: %s" % err)
-            continue # for sql1
-
-        print("\n%s\nPARSED:" % ("-" * 70))
-        print(json.dumps(x, indent=2))
-        sql2, err2 = generate(x, indent)
-        if sql2:
-            print("\n%s\nGENERATED:\n" % ("-" * 70))
-            print(sql2.encode("utf-8") if sql2 else sql2)
-
-            print("\n%s\nTRANSFORMED:\n" % ("-" * 70))
-            sql3, err3 = transform(sql2, renames=renames, indent=indent)
-            print(sql3.encode("utf-8") if sql3 else sql3)
-
-
-
 __all__ = [
     "CTX", "Generator", "ParseError", "Parser", "SQL", "format", "generate", "get_type",
     "parse", "quote", "strip_and_collapse", "terminate", "transform", "unquote",
 ]
-
-
-
-if __name__ == '__main__':
-    test()
