@@ -498,7 +498,8 @@ pragma_value
  ;
 
 common_table_expression
- : table_name ( '(' column_name ( ',' column_name )* ')' )? K_AS '(' select_stmt ')'
+ : table_name ( '(' column_name ( ',' column_name )* ')' )?
+   K_AS ( K_NOT? K_MATERIALIZED )? '(' select_stmt ')'
  ;
 
 result_column

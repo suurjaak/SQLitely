@@ -10,6 +10,7 @@ CHANGELOG
 - add support for IS DISTINCT FROM and IS NOT DISTINCT FROM (Python 3.9+)
 - add support for SQLite JSON operators -> and ->> (Python 3.9+)
 - add support for SQLite window functions
+- add support for MATERIALIZED in SQLite common table expressions
 - update known and deprecated pragma directives up to SQLite version 3.44
 - upgrade embedded sqlite3_analyzer Windows binary from 3.29 to 3.43
 - upgrade ANTLR version from 4.9 to 4.13
