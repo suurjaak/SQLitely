@@ -52,7 +52,8 @@
  *                add support for JSON operators -> and ->>;
  *                add support for UPSERT statements;
  *                add support for window functions;
- *                add support from UPDATE FROM.
+ *                add support from UPDATE FROM;
+ *                add support RIGHT and FULL JOIN.
  *                
  * Updated for  : SQLitely, an SQLite database tool.
  * Updated by   : Erki Suurjaak, 2019-2024
@@ -530,7 +531,7 @@ join_clause
 
 join_operator
  : ','
- | K_NATURAL? ( K_LEFT K_OUTER? | K_INNER | K_CROSS )? K_JOIN
+ | K_NATURAL? ( ( K_LEFT | K_RIGHT | K_FULL ) K_OUTER? | K_INNER | K_CROSS )? K_JOIN
  ;
 
 join_constraint
