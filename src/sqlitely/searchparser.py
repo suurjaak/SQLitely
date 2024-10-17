@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.07.2024
+@modified    17.10.2024
 """
 import calendar
 import collections
@@ -166,8 +166,8 @@ class SearchQueryParser(object):
                 kw_sql = self._makeKeywordsSQL(keywords, params, item, case)
                 result = "SELECT * FROM %s%s%s%s%s" % (
                          grammar.quote(item["name"]),
-                         " WHERE " if result else "", result,
-                         " AND " if result and kw_sql else "", kw_sql)
+                         " WHERE " if result or  kw_sql else "", result,
+                         " AND "   if result and kw_sql else "", kw_sql)
         else:
             kw_sql = self._makeKeywordsSQL(keywords, params, item, case)
         if not item and kw_sql:
@@ -467,7 +467,7 @@ def test():
         print("\n%s\n" % ("-" * 60) if i else "")
         print("QUERY: %s" % repr(text))
         d1 = datetime.datetime.now()
-        r = parser.Parse(text, item)
+        r = parser.Parse(text, item=item)
         d2 = datetime.datetime.now()
         print("\n".join(loglines))
         print("PARSE DURATION: %s" % (d2 - d1))

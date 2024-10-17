@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.4, 2024-10-16
+2.4, 2024-10-17
 ---------------
 - add support for generated columns
 - add find/replace dialog to data grids and column editors and database schema text
@@ -28,6 +28,7 @@ CHANGELOG
 - provide workaround for importing CSVs with mixed Windows and Unix linefeeds (issue #3)
 - fix rolling back changes on error in schema editor test and save
 - fix renaming columns in related entities on column rename for quoted or complex expressions
+- fix error on keyword-only search
 - fix representing very large integers in column editor hex view
 - fix cutting text from column editor hex view
 - fix pasting text into column editor hex view
