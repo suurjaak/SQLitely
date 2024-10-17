@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.10.2024
+@modified    17.10.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -649,7 +649,7 @@ class DatabaseSink(Sink):
     def _export_query(self, table, query, params=(), cursor=None, create_sql=None):
         """Creates and populates query results table, returns number of rows inserted."""
         count = 0
-        is_select = grammar.strip_and_collapse(query).startswith("SELECT")
+        is_select = grammar.strip_and_collapse(query)[:6] in ("SELECT", "VALUES")
         sql, cursor = self._prepare_query_table(table, query, params, is_select, cursor, create_sql)
         if is_select and not cursor:
             count = self._db.execute(sql, params).rowcount
