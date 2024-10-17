@@ -51,7 +51,8 @@
  *                add support for IS DISTINCT FROM and IS NOT DISTINCT FROM;
  *                add support for JSON operators -> and ->>;
  *                add support for UPSERT statements;
- *                add support for window functions.
+ *                add support for window functions;
+ *                add support from UPDATE FROM.
  *                
  * Updated for  : SQLitely, an SQLite database tool.
  * Updated by   : Erki Suurjaak, 2019-2024
@@ -266,7 +267,9 @@ update_stmt
                          | K_OR K_REPLACE
                          | K_OR K_FAIL
                          | K_OR K_IGNORE )? qualified_table_name
-   K_SET column_name '=' expr ( ',' column_name '=' expr )* ( K_WHERE expr )?
+   K_SET column_name '=' expr ( ',' column_name '=' expr )*
+   ( K_FROM ( table_or_subquery ( ',' table_or_subquery )* | join_clause ) )?
+   ( K_WHERE expr )?
  ;
 
 update_stmt_limited
@@ -275,7 +278,9 @@ update_stmt_limited
                          | K_OR K_REPLACE
                          | K_OR K_FAIL
                          | K_OR K_IGNORE )? qualified_table_name
-   K_SET column_name '=' expr ( ',' column_name '=' expr )* ( K_WHERE expr )?
+   K_SET column_name '=' expr ( ',' column_name '=' expr )*
+   ( K_FROM ( table_or_subquery ( ',' table_or_subquery )* | join_clause ) )?
+   ( K_WHERE expr )?
    ( ( K_ORDER K_BY ordering_term ( ',' ordering_term )* )?
      K_LIMIT expr ( ( K_OFFSET | ',' ) expr )? 
    )?
