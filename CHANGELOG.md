@@ -20,6 +20,7 @@ CHANGELOG
 - show STRICT checkbox for STRICT table in schema editor even if current SQLite does not support it
 - add ANY as possible column type if SQLite version supports STRICT
 - add SQL functions to SQL editors auto-completes
+- add PRAGMA names as last column to PRAGMA window
 - improve converting changed values in table grids to original type for untyped columns
 - fix and improve editing and movement in hex editor
 - tweak initial size of resizable text controls in data grid row dialog

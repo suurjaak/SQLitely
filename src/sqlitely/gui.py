@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.10.2024
+@modified    18.10.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3144,9 +3144,9 @@ class DatabasePage(wx.Panel):
                                                                         style=wx.TE_PROCESS_ENTER)
         edit_filter.ToolTip = "Filter PRAGMA directive list (%s-F)" % controls.KEYS.NAME_CTRL
 
-        def on_help(ctrl, text, event):
+        def on_help(text, event):
             """Handler for clicking help bitmap, shows text popup."""
-            wx.TipWindow(ctrl, text, maxLength=300)
+            wx.TipWindow(event.EventObject, text, maxLength=300)
 
         bmp = wx.ArtProvider.GetBitmap(wx.ART_QUESTION, wx.ART_TOOLBAR, (16, 16))
         cursor_pointer = wx.Cursor(wx.CURSOR_HAND)
@@ -3194,34 +3194,40 @@ class DatabasePage(wx.Panel):
                 ctrl.Bind(wx.EVT_TEXT, self.on_pragma_change)
             label_text = wx.StaticText(panel_pragma, label=opts["short"])
             help_bmp = wx.StaticBitmap(panel_pragma, bitmap=bmp)
+            label_identifier = wx.StaticText(panel_pragma, label=name)
 
             if opts.get("deprecated"):
                 ColourManager.Manage(label, "ForegroundColour", "DisabledColour")
                 ColourManager.Manage(label_text, "ForegroundColour", "DisabledColour")
-            for c in label, ctrl, label_text: c.ToolTip = description
-            help_bmp.SetCursor(cursor_pointer)
-            help_bmp.Bind(wx.EVT_LEFT_UP, functools.partial(on_help, help_bmp, description))
+            for c in (label, ctrl, label_text): c.ToolTip = description
+            for help_ctrl in (help_bmp, label_identifier):
+                help_ctrl.SetCursor(cursor_pointer)
+                help_ctrl.Bind(wx.EVT_LEFT_UP, functools.partial(on_help, description))
+            ColourManager.Manage(label_identifier, "ForegroundColour", "DisabledColour")
 
             if "table" != opts["type"]: ctrl.Disable()
             self.pragma_ctrls[name] = ctrl
 
             if opts.get("deprecated") \
             and bool(lastopts.get("deprecated")) != bool(opts.get("deprecated")):
-                for i in range(4): sizer_pragma.AddSpacer(20)
+                for i in range(sizer_pragma.Cols): sizer_pragma.AddSpacer(20)
                 label_deprecated = self.label_deprecated = wx.StaticText(panel_pragma, label="DEPRECATED:")
                 ColourManager.Manage(label_deprecated, "ForegroundColour", "DisabledColour")
                 sizer_pragma.Add(label_deprecated, border=10, flag=wx.LEFT)
-                for i in range(3): sizer_pragma.AddSpacer(20)
+                for i in range(sizer_pragma.Cols - 1): sizer_pragma.AddSpacer(20)
 
             sizer_pragma.Add(label, border=10, flag=wx.LEFT)
             sizer_pragma.Add(ctrl)
             sizer_pragma.Add(label_text)
-            sizer_pragma.Add(help_bmp)
-            self.pragma_items[name] = [label, ctrl, label_text, help_bmp]
+            end_sizer = wx.BoxSizer(wx.HORIZONTAL)
+            end_sizer.Add(help_bmp)
+            end_sizer.Add(label_identifier, border=5, flag=wx.LEFT)
+            sizer_pragma.Add(end_sizer)
+            self.pragma_items[name] = [label, ctrl, label_text, help_bmp, label_identifier]
             lastopts = opts
 
         # Set uniform width to all columns, avoiding reposition on filter
-        widths = {i: 0 for i in range(4)}
+        widths = {i: 0 for i in range(5)}
         for xx in self.pragma_items.values():
             for i, x in enumerate(xx): widths[i] = max(widths[i], x.Size[0])
         for xx in self.pragma_items.values():
