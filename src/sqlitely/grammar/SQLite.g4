@@ -53,7 +53,8 @@
  *                add support for UPSERT statements;
  *                add support for window functions;
  *                add support from UPDATE FROM;
- *                add support RIGHT and FULL JOIN.
+ *                add support RIGHT and FULL JOIN;
+ *                add support for ORDER BY in function calls.
  *                
  * Updated for  : SQLitely, an SQLite database tool.
  * Updated by   : Erki Suurjaak, 2019-2024
@@ -365,7 +366,7 @@ expr
  | expr ( '=' | '==' | '!=' | '<>' | K_IS | K_IS K_NOT | K_IN | K_LIKE | K_GLOB | K_MATCH | K_REGEXP ) expr
  | expr K_AND expr
  | expr K_OR expr
- | function_name '(' ( K_DISTINCT? expr ( ',' expr )* | '*' )? ')' filter_clause? over_clause?
+ | function_name '(' function_arguments? ')' filter_clause? over_clause?
  | '(' expr ( ',' expr )* ')'
  | K_CAST '(' expr K_AS type_name ')'
  | expr K_COLLATE collation_name
@@ -383,7 +384,7 @@ expr
 
 filter_clause
  : K_FILTER '(' K_WHERE expr ')'
-;
+ ;
 
 foreign_key_clause
  : K_REFERENCES foreign_table ( '(' column_name ( ',' column_name )* ')' )?
@@ -396,6 +397,12 @@ foreign_key_clause
      ) 
    )*
    ( K_NOT? K_DEFERRABLE ( K_INITIALLY K_DEFERRED | K_INITIALLY K_IMMEDIATE )? )?
+ ;
+
+function_arguments
+ :  K_DISTINCT? expr ( ',' expr )*
+    ( K_ORDER K_BY ordering_term ( ',' ordering_term )* )?
+ | '*' 
  ;
 
 generated_clause
