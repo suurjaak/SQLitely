@@ -54,7 +54,8 @@
  *                add support for window functions;
  *                add support from UPDATE FROM;
  *                add support RIGHT and FULL JOIN;
- *                add support for ORDER BY in function calls.
+ *                add support for ORDER BY in function calls;
+ *                add support for VACUUM INTO.
  *                
  * Updated for  : SQLitely, an SQLite database tool.
  * Updated by   : Erki Suurjaak, 2019-2024
@@ -289,7 +290,7 @@ update_stmt_limited
  ;
 
 vacuum_stmt
- : K_VACUUM
+ : K_VACUUM ( K_INTO filename )?
  ;
 
 column_def
@@ -812,6 +813,10 @@ window_name
  ;
 
 base_window_name
+ : any_name
+ ;
+
+filename
  : any_name
  ;
 
