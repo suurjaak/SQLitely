@@ -55,7 +55,8 @@
  *                add support from UPDATE FROM;
  *                add support RIGHT and FULL JOIN;
  *                add support for ORDER BY in function calls;
- *                add support for VACUUM INTO.
+ *                add support for VACUUM INTO;
+ *                add support for RETURNING.
  *                
  * Updated for  : SQLitely, an SQLite database tool.
  * Updated by   : Erki Suurjaak, 2019-2024
@@ -176,6 +177,7 @@ create_virtual_table_stmt
 delete_stmt
  : with_clause? K_DELETE K_FROM qualified_table_name 
    ( K_WHERE expr )?
+   returning_clause?
  ;
 
 delete_stmt_limited
@@ -226,6 +228,7 @@ insert_stmt
    | select_stmt upsert_clause?
    | K_DEFAULT K_VALUES
    )
+   returning_clause?
  ;
 
 pragma_stmt
@@ -272,7 +275,7 @@ update_stmt
                          | K_OR K_IGNORE )? qualified_table_name
    K_SET column_name '=' expr ( ',' column_name '=' expr )*
    ( K_FROM ( table_or_subquery ( ',' table_or_subquery )* | join_clause ) )?
-   ( K_WHERE expr )?
+   ( K_WHERE expr )? returning_clause?
  ;
 
 update_stmt_limited
@@ -412,6 +415,10 @@ generated_clause
 
 over_clause
  : K_OVER ( window_name | window_defn )
+ ;
+
+returning_clause
+ : K_RETURNING ( '*' | expr ( K_AS? column_alias )? ) ( ',' ( '*' | expr ( K_AS? column_alias )? ) )*
  ;
 
 window_defn
