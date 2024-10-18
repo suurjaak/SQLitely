@@ -342,11 +342,12 @@ conflict_clause
     lowest precedence:
 
     ||
+    -> ->>
     *    /    %
     +    -
     <<   >>   &    |
     <    <=   >    >=
-    =    ==   !=   <>   IS   IS NOT   IN   LIKE   GLOB   MATCH   REGEXP
+    =    ==   !=   <>   IS   IS NOT   IS DISTINCT FROM   IS NOT DISTINCT FROM   IN   LIKE   GLOB   MATCH   REGEXP
     AND
     OR
 */
@@ -365,19 +366,16 @@ expr
  | expr K_AND expr
  | expr K_OR expr
  | function_name '(' ( K_DISTINCT? expr ( ',' expr )* | '*' )? ')' filter_clause? over_clause?
- | '(' expr ')'
+ | '(' expr ( ',' expr )* ')'
  | K_CAST '(' expr K_AS type_name ')'
  | expr K_COLLATE collation_name
  | expr K_NOT? ( K_LIKE | K_GLOB | K_REGEXP | K_MATCH ) expr ( K_ESCAPE expr )?
  | expr ( K_ISNULL | K_NOTNULL | K_NOT K_NULL )
- | expr K_IS K_NOT? expr
- | expr K_IS K_NOT? K_DISTINCT K_FROM expr
+ | expr K_IS K_NOT? ( K_DISTINCT K_FROM )? expr
  | expr K_NOT? K_BETWEEN expr K_AND expr
- | expr K_NOT? K_IN ( '(' ( select_stmt
-                          | expr ( ',' expr )*
-                          )? 
-                      ')'
+ | expr K_NOT? K_IN ( '(' ( select_stmt | expr ( ',' expr )* )?  ')'
                     | ( database_name '.' )? table_name )
+                    | ( database_name '.' table_function_name '(' ( expr ( ',' expr )* )? ')' )
  | ( ( K_NOT )? K_EXISTS )? '(' select_stmt ')'
  | K_CASE expr? ( K_WHEN expr K_THEN expr )+ ( K_ELSE expr )? K_END
  | raise_function
