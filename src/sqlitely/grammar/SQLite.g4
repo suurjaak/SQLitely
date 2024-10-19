@@ -56,7 +56,8 @@
  *                add support RIGHT and FULL JOIN;
  *                add support for ORDER BY in function calls;
  *                add support for VACUUM INTO;
- *                add support for RETURNING.
+ *                add support for RETURNING;
+ *                add support for ALTER TABLE DROP/RENAME column.
  *                
  * Updated for  : SQLitely, an SQLite database tool.
  * Updated by   : Erki Suurjaak, 2019-2024
@@ -110,8 +111,10 @@ sql_stmt
 
 alter_table_stmt
  : K_ALTER K_TABLE ( database_name '.' )? table_name
-   ( K_RENAME K_TO new_table_name
+   ( K_RENAME K_TO new_table_name = table_name
+   | K_RENAME K_COLUMN? old_column_name = column_name K_TO new_column_name = column_name
    | K_ADD K_COLUMN? column_def
+   | K_DROP K_COLUMN? column_def
    )
  ;
 
@@ -758,10 +761,6 @@ table_name
  ;
 
 table_or_index_name 
- : any_name
- ;
-
-new_table_name 
  : any_name
  ;
 
