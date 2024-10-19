@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.4, 2024-10-18
+2.4, 2024-10-19
 ---------------
 - add support for generated columns
 - add find/replace dialog to data grids and column editors and database schema text
@@ -14,6 +14,8 @@ CHANGELOG
 - add support from UPDATE FROM in trigger body
 - add support for RIGHT and FULL JOIN in SELECT statements
 - add support for ORDER BY in function calls
+- add support for table alias in INSERT
+- add support for column name list in UPDATE
 - update known and deprecated pragma directives up to SQLite version 3.44
 - upgrade embedded sqlite3_analyzer Windows binary from 3.29 to 3.43
 - upgrade ANTLR version from 4.9 to 4.13

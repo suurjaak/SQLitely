@@ -57,7 +57,9 @@
  *                add support for ORDER BY in function calls;
  *                add support for VACUUM INTO;
  *                add support for RETURNING;
- *                add support for ALTER TABLE DROP/RENAME column.
+ *                add support for ALTER TABLE DROP/RENAME column;
+ *                add support for table alias in INSERT.
+ *                add support for column name list in UPDATE.
  *                
  * Updated for  : SQLitely, an SQLite database tool.
  * Updated by   : Erki Suurjaak, 2019-2024
@@ -185,7 +187,7 @@ delete_stmt
 
 delete_stmt_limited
  : with_clause? K_DELETE K_FROM qualified_table_name 
-   ( K_WHERE expr )?
+   ( K_WHERE expr )? returning_clause?
    ( ( K_ORDER K_BY ordering_term ( ',' ordering_term )* )?
      K_LIMIT expr ( ( K_OFFSET | ',' ) expr )?
    )?
@@ -226,7 +228,8 @@ insert_stmt
                 | K_INSERT K_OR K_ABORT
                 | K_INSERT K_OR K_FAIL
                 | K_INSERT K_OR K_IGNORE ) K_INTO
-   ( database_name '.' )? table_name ( '(' column_name ( ',' column_name )* ')' )?
+   ( database_name '.' )? table_name (K_AS table_alias)?
+   ( '(' column_name ( ',' column_name )* ')' )?
    ( K_VALUES '(' expr ( ',' expr )* ')' ( ',' '(' expr ( ',' expr )* ')' )* upsert_clause?
    | select_stmt upsert_clause?
    | K_DEFAULT K_VALUES
@@ -276,7 +279,8 @@ update_stmt
                          | K_OR K_REPLACE
                          | K_OR K_FAIL
                          | K_OR K_IGNORE )? qualified_table_name
-   K_SET column_name '=' expr ( ',' column_name '=' expr )*
+   K_SET ( column_name | column_name_list ) '=' expr
+         ( ',' ( column_name | column_name_list ) '=' expr )*
    ( K_FROM ( table_or_subquery ( ',' table_or_subquery )* | join_clause ) )?
    ( K_WHERE expr )? returning_clause?
  ;
@@ -287,9 +291,10 @@ update_stmt_limited
                          | K_OR K_REPLACE
                          | K_OR K_FAIL
                          | K_OR K_IGNORE )? qualified_table_name
-   K_SET column_name '=' expr ( ',' column_name '=' expr )*
+   K_SET ( column_name | column_name_list ) '=' expr
+         ( ',' ( column_name | column_name_list ) '=' expr )*
    ( K_FROM ( table_or_subquery ( ',' table_or_subquery )* | join_clause ) )?
-   ( K_WHERE expr )?
+   ( K_WHERE expr )? returning_clause?
    ( ( K_ORDER K_BY ordering_term ( ',' ordering_term )* )?
      K_LIMIT expr ( ( K_OFFSET | ',' ) expr )? 
    )?
@@ -469,9 +474,7 @@ raise_function
  ;
 
 indexed_column
- : ( column_name ( K_COLLATE collation_name )? ( K_ASC | K_DESC )? )
- | ( expr        ( K_COLLATE collation_name )  ( K_ASC | K_DESC )? )
- | ( expr        ( K_COLLATE collation_name )? ( K_ASC | K_DESC )? )
+ : ( column_name | expr ) ( K_COLLATE collation_name )? ( K_ASC | K_DESC )?
  ;
 
 table_constraint
@@ -532,11 +535,9 @@ result_column
 
 table_or_subquery
  : ( database_name '.' )? table_name ( K_AS? table_alias )?
-   ( K_INDEXED K_BY index_name
-   | K_NOT K_INDEXED )?
+   ( K_INDEXED K_BY index_name | K_NOT K_INDEXED )?
  | ( database_name '.' )? table_function_name '(' ( expr ( ',' expr )* )? ')' ( K_AS? table_alias )?
- | '(' ( table_or_subquery ( ',' table_or_subquery )*
-       | join_clause )
+ | '(' ( table_or_subquery ( ',' table_or_subquery )* | join_clause )
    ')' ( K_AS? table_alias )?
  | '(' select_stmt ')' ( K_AS? table_alias )?
  ;
