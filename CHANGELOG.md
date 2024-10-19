@@ -6,17 +6,7 @@ CHANGELOG
 - add support for generated columns
 - add find/replace dialog to data grids and column editors and database schema text
 - add dialog to manage shown and filtered columns in data grids; add EXACT- and NOT-option to column filter
-- add support for UPSERT statements
-- add support for IS DISTINCT FROM and IS NOT DISTINCT FROM (Python 3.9+)
-- add support for SQLite JSON operators -> and ->> (Python 3.9+)
-- add support for SQLite window functions
-- add support for MATERIALIZED in SQLite common table expressions
-- add support from UPDATE FROM in trigger body
-- add support for RIGHT and FULL JOIN in SELECT statements
-- add support for ORDER BY in function calls
-- add support for table alias in INSERT
-- add support for column name list in UPDATE
-- update known and deprecated pragma directives up to SQLite version 3.44
+- update known and deprecated pragma directives up to SQLite version 3.46
 - upgrade embedded sqlite3_analyzer Windows binary from 3.29 to 3.43
 - upgrade ANTLR version from 4.9 to 4.13
 - show STRICT checkbox for STRICT table in schema editor even if current SQLite does not support it
@@ -47,6 +37,10 @@ CHANGELOG
 - fix pragma editor not disabling controls afterwards
 - fix not having counts/bytes on schema diagram in statistics export
 - refactor import-export functionality to classes
+- update SQL grammar up to SQLite version 3.46
+  (UPSERT, operator IS NOT? DISTINCT FROM, JSON operators -> ->>, window functions,
+   MATERIALIZED in common table expression, UPDATE FROM in trigger body, RIGHT JOIN, FULL JOIN,
+   ORDER BY in function calls, table alias in INSERT, column name list in UPDATE, all 147 keywords)
 
 
 2.3, 2024-07-08

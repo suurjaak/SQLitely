@@ -64,7 +64,7 @@
  *
  * Updated for  : SQLitely, an SQLite database tool.
  * Updated by   : Erki Suurjaak, 2019-2024
- * Update to:   : compatible with SQLite up to version 3.46.
+ * Update to:   : full coverage of SQLite grammar up to version 3.46.
  */
 grammar SQLite;
 
@@ -618,6 +618,7 @@ keyword
  | K_AFTER
  | K_ALL
  | K_ALTER
+ | K_ALWAYS
  | K_ANALYZE
  | K_AND
  | K_AS
@@ -639,6 +640,7 @@ keyword
  | K_CONSTRAINT
  | K_CREATE
  | K_CROSS
+ | K_CURRENT
  | K_CURRENT_DATE
  | K_CURRENT_TIME
  | K_CURRENT_TIMESTAMP
@@ -650,23 +652,29 @@ keyword
  | K_DESC
  | K_DETACH
  | K_DISTINCT
+ | K_DO
  | K_DROP
  | K_EACH
  | K_ELSE
  | K_END
  | K_ESCAPE
  | K_EXCEPT
+ | K_EXCLUDE
  | K_EXCLUSIVE
  | K_EXISTS
  | K_EXPLAIN
  | K_FAIL
+ | K_FILTER
  | K_FIRST
+ | K_FOLLOWING
  | K_FOR
  | K_FOREIGN
  | K_FROM
  | K_FULL
+ | K_GENERATED
  | K_GLOB
  | K_GROUP
+ | K_GROUPS
  | K_HAVING
  | K_IF
  | K_IGNORE
@@ -689,9 +697,11 @@ keyword
  | K_LIKE
  | K_LIMIT
  | K_MATCH
+ | K_MATERIALIZED
  | K_NATURAL
  | K_NO
  | K_NOT
+ | K_NOTHING
  | K_NOTNULL
  | K_NULL
  | K_NULLS
@@ -700,12 +710,17 @@ keyword
  | K_ON
  | K_OR
  | K_ORDER
+ | K_OTHERS
  | K_OUTER
+ | K_OVER
+ | K_PARTITION
  | K_PLAN
  | K_PRAGMA
+ | K_PRECEDING
  | K_PRIMARY
  | K_QUERY
  | K_RAISE
+ | K_RANGE
  | K_RECURSIVE
  | K_REFERENCES
  | K_REGEXP
@@ -714,9 +729,11 @@ keyword
  | K_RENAME
  | K_REPLACE
  | K_RESTRICT
+ | K_RETURNING
  | K_RIGHT
  | K_ROLLBACK
  | K_ROW
+ | K_ROWS
  | K_SAVEPOINT
  | K_SELECT
  | K_SET
@@ -724,9 +741,11 @@ keyword
  | K_TEMP
  | K_TEMPORARY
  | K_THEN
+ | K_TIES
  | K_TO
  | K_TRANSACTION
  | K_TRIGGER
+ | K_UNBOUNDED
  | K_UNION
  | K_UNIQUE
  | K_UPDATE
@@ -737,6 +756,7 @@ keyword
  | K_VIRTUAL
  | K_WHEN
  | K_WHERE
+ | K_WINDOW
  | K_WITH
  | K_WITHOUT
  ;
