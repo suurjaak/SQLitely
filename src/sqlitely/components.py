@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.10.2024
+@modified    19.10.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -2206,17 +2206,17 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
                 self._grid.SetTable(grid_data, takeOwnership=True)
                 self._tbgrid.EnableTool(wx.ID_SETUP, True)
                 self._tbgrid.EnableTool(wx.ID_RESET, True)
+                self._tbgrid.EnableTool(wx.ID_FIND,  True)
                 self._dialog_find_grid.SetTarget(self._grid)
                 self._button_export.Enabled = bool(cursor.description)
                 self._button_close.Enabled  = True
-            else: # Action query or script
+            else: # Action query with no returning, or script
                 self._db.log_query("SQL", sql)
                 self._grid.Table = None
-                self._grid.Enabled = False
-                self._dialog_find_grid.SetTarget(None)
                 self._dialog_find_grid.Hide()
                 self._tbgrid.EnableTool(wx.ID_SETUP, False)
                 self._tbgrid.EnableTool(wx.ID_RESET, False)
+                self._tbgrid.EnableTool(wx.ID_FIND,  False)
                 self._button_export.Enabled = False
                 if cursor and cursor.rowcount >= 0:
                     self._grid.CreateGrid(1, 1)
@@ -2502,7 +2502,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
     def _OnFindGrid(self, event):
         """Handler for toggling find dialog for data grid."""
-        if not self._grid.Enabled:
+        if not self._tbgrid.GetToolEnabled(wx.ID_FIND):
             self._OnFindSQL(event)
             return
         dlg = self._dialog_find_grid
