@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    16.10.2024
+@modified    19.10.2024
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -16,7 +16,6 @@ from collections import defaultdict
 import json
 import logging
 import re
-import sys
 import traceback
 import uuid
 
@@ -420,8 +419,6 @@ class Parser(object):
                          CTX.SELECT, CTX.SELECT_COMPOUND, CTX.SELECT_FACTORED, CTX.SELECT_SIMPLE,
                          CTX.UPDATE, CTX.UPDATE_LIMITED]
 
-    class ReparseException(Exception): pass
-
     class ErrorListener(object):
         """Collects errors during parsing."""
         def __init__(self): self._errors, self._stack = [], []
@@ -437,9 +434,9 @@ class Parser(object):
             self._errors.append(ParseError(err, line - 1, column)) # Line is 1-based
             if not self._stack:
                 stack = traceback.extract_stack()[:-1]
-                for i, (f, l, fn, t) in enumerate(stack):
-                    if f == __file__:
-                        del stack[:max(i-1, 0)]
+                for i, (filename, lineno, functionname, linetext) in enumerate(stack):
+                    if filename == __file__: # Retain only the stack from this file and lower
+                        del stack[:max(i - 1, 0)]
                         break # for i, (..)
                 self._stack = traceback.format_list(stack)
 
@@ -453,7 +450,6 @@ class Parser(object):
         self._category = None # "CREATE TABLE" etc
         self._stream   = None # antlr TokenStream
         self._tree     = None # Parsed context tree
-        self._repls    = []   # [(start index, end index, replacement)]
 
 
     def parse(self, sql, category=None, renames=None):
@@ -475,76 +471,79 @@ class Parser(object):
         @return            ({..}, None) or (None, error)
 
         """
-        def parse_tree(sql):
-            self._stream = CommonTokenStream(SQLiteLexer(InputStream(sql)))
-            parser, listener = SQLiteParser(self._stream), self.ErrorListener()
-            parser.removeErrorListeners()
-            parser.addErrorListener(listener)
-
-            tree = parser.parse()
-            if parser.getNumberOfSyntaxErrors():
-                logger.error('Errors parsing SQL "%s":\n\n%s', sql,
-                             listener.getErrors(stack=True))
-                return None, listener.getErrors()
-
-            if sum(not isinstance(x, TerminalNode) for x in tree.children) > 1 \
-            or sum(not isinstance(x, TerminalNode) for x in tree.children[0].children) > 1:
-                stmts = [x for x in tree.children if not isinstance(x, TerminalNode)] or \
-                        [x for x in tree.children[0].children if not isinstance(x, TerminalNode)]
-                logger.error('Error parsing SQL "%s":\n\n'
-                             "encountered %s statements where one was expected.", sql, len(stmts))
-                return None, "Too many statements"
-
-            # parse ctx -> statement list ctx -> statement ctx -> specific type ctx
-            ctx = tree.children[0].children[0].children[0]
-            name = self.CTXS.get(type(ctx))
-            categoryname = self.CATEGORIES.get(category)
-            if category and name != categoryname or name not in self.BUILDERS:
-                error = "Unexpected statement category: '%s'%s."% (name,
-                         " (expected '%s')" % (categoryname or category)
-                         if category else "")
-                logger.error(error)
-                return None, error
-            self._category = name
-            self._tree = tree
-            return ctx, None
-
-        def build(ctx):
-            if renames: self.recurse_rename([ctx], renames)
-            result = self.BUILDERS[self._category](self, ctx)
-            result["__type__"] = self._category
-            ctxitems, ctxtypes = [ctx], [CTX.TABLE_NAME]
-            if SQL.CREATE_TABLE == self._category: ctxtypes = [CTX.FOREIGN_TABLE]
-            if SQL.CREATE_TRIGGER == self._category: # Skip trigger header
-                ctxitems = [ctx.expr()] + ctx.select_stmt() + ctx.update_stmt() + \
-                           ctx.insert_stmt() + ctx.delete_stmt()
-            result["__tables__"] = self.recurse_collect(ctxitems, ctxtypes)
-            if renames and "schema" in renames:
-                if isinstance(renames["schema"], dict):
-                    for v1, v2 in renames["schema"].items():
-                        if util.lceq(result.get("schema"), v1):
-                            if v2: result["schema"] = v2
-                            else: result.pop("schema", None)
-                elif renames["schema"]: result["schema"] = renames["schema"]
-                else: result.pop("schema", None)
-                self.rename_schema(ctx, renames)
-
-            cc = self._stream.filterForChannel(0, len(self._stream.tokens) - 1, channel=2) or []
-            result["__comments__"] = {x.start: x.text for x in cc}
-            result["__terminated__"] = any(isinstance(x, TerminalNode) and ";" == x.getText() and
-                                           any(x.getSourceInterval()[0] < c.start for c in cc)
-                                           for x in self._tree.children[0].children[1:])
-            return result
-
-        result, error, tries = None, None, 0
-        while not result and not error:
-            ctx, error = parse_tree(sql)
-            if error: break # while
-            try: result = build(ctx)
-            except self.ReparseException as e:
-                sql, tries = e.message, tries + 1
-                if tries > 1: error = "Failed to parse SQL"
+        ctx, error = self.parse_tree(sql, category)
+        result = None if error else self.build(ctx, renames)
         return result, error
+
+
+    def parse_tree(self, sql, category=None):
+        """
+        Parses the SQL statement, returns (root context, error).
+
+        @param   sql       source SQL string
+        @param   category  expected statement category if any, like "table"
+        """
+        self._stream = CommonTokenStream(SQLiteLexer(InputStream(sql)))
+        parser, listener = SQLiteParser(self._stream), self.ErrorListener()
+        parser.removeErrorListeners()
+        parser.addErrorListener(listener)
+
+        tree = parser.parse()
+        if parser.getNumberOfSyntaxErrors():
+            logger.error('Errors parsing SQL "%s":\n\n%s', sql,
+                         listener.getErrors(stack=True))
+            return None, listener.getErrors()
+
+        if sum(not isinstance(x, TerminalNode) for x in tree.children) > 1 \
+        or sum(not isinstance(x, TerminalNode) for x in tree.children[0].children) > 1:
+            stmts = [x for x in tree.children if not isinstance(x, TerminalNode)] or \
+                    [x for x in tree.children[0].children if not isinstance(x, TerminalNode)]
+            logger.error('Error parsing SQL "%s":\n\n'
+                         "encountered %s statements where one was expected.", sql, len(stmts))
+            return None, "Too many statements"
+
+        # parse ctx -> statement list ctx -> statement ctx -> specific type ctx
+        ctx = tree.children[0].children[0].children[0]
+        name = self.CTXS.get(type(ctx))
+        categoryname = self.CATEGORIES.get(category)
+        if category and name != categoryname or name not in self.BUILDERS:
+            error = "Unexpected statement category: '%s'%s."% (name,
+                     " (expected '%s')" % (categoryname or category)
+                     if category else "")
+            logger.error(error)
+            return None, error
+        self._category = name
+        self._tree = tree
+        return ctx, None
+
+
+    def build(self, ctx, renames=None):
+        """Returns data structure built from CREATE context, with renames applied if any."""
+        if renames: self.recurse_rename([ctx], renames)
+        result = self.BUILDERS[self._category](self, ctx)
+        result["__type__"] = self._category
+        ctxitems, ctxtypes = [ctx], [CTX.TABLE_NAME]
+        if SQL.CREATE_TABLE == self._category: ctxtypes = [CTX.FOREIGN_TABLE]
+        if SQL.CREATE_TRIGGER == self._category: # Skip trigger header
+            ctxitems = [ctx.expr()] + ctx.select_stmt() + ctx.update_stmt() + \
+                       ctx.insert_stmt() + ctx.delete_stmt()
+        result["__tables__"] = self.recurse_collect(ctxitems, ctxtypes)
+        if renames and "schema" in renames:
+            if isinstance(renames["schema"], dict):
+                for v1, v2 in renames["schema"].items():
+                    if util.lceq(result.get("schema"), v1):
+                        if v2: result["schema"] = v2
+                        else: result.pop("schema", None)
+            elif renames["schema"]: result["schema"] = renames["schema"]
+            else: result.pop("schema", None)
+            self.rename_schema(ctx, renames)
+
+        cc = self._stream.filterForChannel(0, len(self._stream.tokens) - 1, channel=2) or []
+        result["__comments__"] = {x.start: x.text for x in cc}
+        result["__terminated__"] = any(isinstance(x, TerminalNode) and ";" == x.getText() and
+                                       any(x.getSourceInterval()[0] < c.start for c in cc)
+                                       for x in self._tree.children[0].children[1:])
+        return result
 
 
     def rename_schema(self, ctx, renames):
@@ -675,17 +674,8 @@ class Parser(object):
         if ctx.K_EXISTS(): result["exists"]  = True
 
         result["columns"] = [self.build_table_column(x) for x in ctx.column_def()]
-        if self._repls:
-            sql, shift = self._stream.getText(0, sys.maxsize), 0
-            for start, end, repl in self._repls:
-                sql = sql[:start + shift] + repl + sql[end + shift:]
-                shift = len(repl) - end + start
-            del self._repls[:]
-            raise self.ReparseException(sql)
-
         if ctx.table_constraint():
-            result["constraints"] = [self.build_table_constraint(x)
-                                     for x in ctx.table_constraint()]
+            result["constraints"] = [self.build_table_constraint(x) for x in ctx.table_constraint()]
 
         for optctx in ctx.table_option():
             for flag, key in ((optctx.K_WITHOUT, "without"), (optctx.C_STRICT, "strict")):
@@ -1007,7 +997,7 @@ class Parser(object):
     def get_conflict(self, ctx):
         """Returns ctx.conflict_clause value like "ROLLBACK", if any."""
         conflict = ctx.conflict_clause()
-        if not conflict: return
+        if not conflict: return None
         action = (conflict.K_ROLLBACK() or
             conflict.K_ABORT() or conflict.K_FAIL() or conflict.K_IGNORE()
         )
@@ -1115,7 +1105,7 @@ class Parser(object):
                 namectx = ctx.foreign_table().any_name
             elif isinstance(ctx, CTX.CREATE_VIEW):
                 namectx = ctx.view_name
-            elif isinstance(ctx, (CTX.UPDATE, CTX.DELETE)):
+            elif isinstance(ctx, (CTX.UPDATE, CTX.UPDATE_LIMITED, CTX.DELETE, CTX.DELETE_LIMITED)):
                 namectx = ctx.qualified_table_name().table_name
             elif isinstance(ctx, (CTX.CREATE_TABLE, CTX.CREATE_VIRTUAL_TABLE,
                                   CTX.CREATE_INDEX, CTX.CREATE_TRIGGER, CTX.INSERT)):
