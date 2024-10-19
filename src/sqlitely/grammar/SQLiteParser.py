@@ -1013,7 +1013,7 @@ class SQLiteParser ( Parser ):
     RULE_keyword = 77
     RULE_name = 78
     RULE_function_name = 79
-    RULE_database_name = 80
+    RULE_schema_name = 80
     RULE_table_function_name = 81
     RULE_table_name = 82
     RULE_table_or_index_name = 83
@@ -1057,7 +1057,7 @@ class SQLiteParser ( Parser ):
                    u"join_constraint", u"select_core", u"compound_operator", 
                    u"signed_number", u"literal_value", u"unary_operator", 
                    u"error_message", u"module_argument", u"column_alias", 
-                   u"keyword", u"name", u"function_name", u"database_name", 
+                   u"keyword", u"name", u"function_name", u"schema_name", 
                    u"table_function_name", u"table_name", u"table_or_index_name", 
                    u"column_name", u"column_name_list", u"collation_name", 
                    u"foreign_table", u"index_name", u"trigger_name", u"view_name", 
@@ -1836,8 +1836,8 @@ class SQLiteParser ( Parser ):
         def K_DROP(self):
             return self.getToken(SQLiteParser.K_DROP, 0)
 
-        def database_name(self):
-            return self.getTypedRuleContext(SQLiteParser.Database_nameContext,0)
+        def schema_name(self):
+            return self.getTypedRuleContext(SQLiteParser.Schema_nameContext,0)
 
 
         def DOT(self):
@@ -1882,7 +1882,7 @@ class SQLiteParser ( Parser ):
             la_ = self._interp.adaptivePredict(self._input,8,self._ctx)
             if la_ == 1:
                 self.state = 273
-                self.database_name()
+                self.schema_name()
                 self.state = 274
                 self.match(SQLiteParser.DOT)
 
@@ -1969,8 +1969,8 @@ class SQLiteParser ( Parser ):
         def K_ANALYZE(self):
             return self.getToken(SQLiteParser.K_ANALYZE, 0)
 
-        def database_name(self):
-            return self.getTypedRuleContext(SQLiteParser.Database_nameContext,0)
+        def schema_name(self):
+            return self.getTypedRuleContext(SQLiteParser.Schema_nameContext,0)
 
 
         def table_or_index_name(self):
@@ -2007,7 +2007,7 @@ class SQLiteParser ( Parser ):
             la_ = self._interp.adaptivePredict(self._input,13,self._ctx)
             if la_ == 1:
                 self.state = 303
-                self.database_name()
+                self.schema_name()
 
             elif la_ == 2:
                 self.state = 304
@@ -2015,7 +2015,7 @@ class SQLiteParser ( Parser ):
 
             elif la_ == 3:
                 self.state = 305
-                self.database_name()
+                self.schema_name()
                 self.state = 306
                 self.match(SQLiteParser.DOT)
                 self.state = 307
@@ -2047,8 +2047,8 @@ class SQLiteParser ( Parser ):
         def K_AS(self):
             return self.getToken(SQLiteParser.K_AS, 0)
 
-        def database_name(self):
-            return self.getTypedRuleContext(SQLiteParser.Database_nameContext,0)
+        def schema_name(self):
+            return self.getTypedRuleContext(SQLiteParser.Schema_nameContext,0)
 
 
         def K_DATABASE(self):
@@ -2089,7 +2089,7 @@ class SQLiteParser ( Parser ):
             self.state = 316
             self.match(SQLiteParser.K_AS)
             self.state = 317
-            self.database_name()
+            self.schema_name()
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
@@ -2505,8 +2505,8 @@ class SQLiteParser ( Parser ):
         def K_EXISTS(self):
             return self.getToken(SQLiteParser.K_EXISTS, 0)
 
-        def database_name(self):
-            return self.getTypedRuleContext(SQLiteParser.Database_nameContext,0)
+        def schema_name(self):
+            return self.getTypedRuleContext(SQLiteParser.Schema_nameContext,0)
 
 
         def DOT(self):
@@ -2575,7 +2575,7 @@ class SQLiteParser ( Parser ):
             la_ = self._interp.adaptivePredict(self._input,30,self._ctx)
             if la_ == 1:
                 self.state = 383
-                self.database_name()
+                self.schema_name()
                 self.state = 384
                 self.match(SQLiteParser.DOT)
 
@@ -2668,8 +2668,8 @@ class SQLiteParser ( Parser ):
         def K_EXISTS(self):
             return self.getToken(SQLiteParser.K_EXISTS, 0)
 
-        def database_name(self):
-            return self.getTypedRuleContext(SQLiteParser.Database_nameContext,0)
+        def schema_name(self):
+            return self.getTypedRuleContext(SQLiteParser.Schema_nameContext,0)
 
 
         def DOT(self):
@@ -2756,7 +2756,7 @@ class SQLiteParser ( Parser ):
             la_ = self._interp.adaptivePredict(self._input,35,self._ctx)
             if la_ == 1:
                 self.state = 415
-                self.database_name()
+                self.schema_name()
                 self.state = 416
                 self.match(SQLiteParser.DOT)
 
@@ -2884,11 +2884,11 @@ class SQLiteParser ( Parser ):
         def K_EXISTS(self):
             return self.getToken(SQLiteParser.K_EXISTS, 0)
 
-        def database_name(self, i=None):
+        def schema_name(self, i=None):
             if i is None:
-                return self.getTypedRuleContexts(SQLiteParser.Database_nameContext)
+                return self.getTypedRuleContexts(SQLiteParser.Schema_nameContext)
             else:
-                return self.getTypedRuleContext(SQLiteParser.Database_nameContext,i)
+                return self.getTypedRuleContext(SQLiteParser.Schema_nameContext,i)
 
 
         def DOT(self, i=None):
@@ -3036,7 +3036,7 @@ class SQLiteParser ( Parser ):
             la_ = self._interp.adaptivePredict(self._input,43,self._ctx)
             if la_ == 1:
                 self.state = 462
-                self.database_name()
+                self.schema_name()
                 self.state = 463
                 self.match(SQLiteParser.DOT)
 
@@ -3111,7 +3111,7 @@ class SQLiteParser ( Parser ):
             la_ = self._interp.adaptivePredict(self._input,48,self._ctx)
             if la_ == 1:
                 self.state = 491
-                self.database_name()
+                self.schema_name()
                 self.state = 492
                 self.match(SQLiteParser.DOT)
 
@@ -3221,8 +3221,8 @@ class SQLiteParser ( Parser ):
         def K_EXISTS(self):
             return self.getToken(SQLiteParser.K_EXISTS, 0)
 
-        def database_name(self):
-            return self.getTypedRuleContext(SQLiteParser.Database_nameContext,0)
+        def schema_name(self):
+            return self.getTypedRuleContext(SQLiteParser.Schema_nameContext,0)
 
 
         def DOT(self):
@@ -3308,7 +3308,7 @@ class SQLiteParser ( Parser ):
             la_ = self._interp.adaptivePredict(self._input,55,self._ctx)
             if la_ == 1:
                 self.state = 531
-                self.database_name()
+                self.schema_name()
                 self.state = 532
                 self.match(SQLiteParser.DOT)
 
@@ -3387,8 +3387,8 @@ class SQLiteParser ( Parser ):
         def K_EXISTS(self):
             return self.getToken(SQLiteParser.K_EXISTS, 0)
 
-        def database_name(self):
-            return self.getTypedRuleContext(SQLiteParser.Database_nameContext,0)
+        def schema_name(self):
+            return self.getTypedRuleContext(SQLiteParser.Schema_nameContext,0)
 
 
         def DOT(self):
@@ -3457,7 +3457,7 @@ class SQLiteParser ( Parser ):
             la_ = self._interp.adaptivePredict(self._input,59,self._ctx)
             if la_ == 1:
                 self.state = 561
-                self.database_name()
+                self.schema_name()
                 self.state = 562
                 self.match(SQLiteParser.DOT)
 
@@ -3773,8 +3773,8 @@ class SQLiteParser ( Parser ):
         def K_DETACH(self):
             return self.getToken(SQLiteParser.K_DETACH, 0)
 
-        def database_name(self):
-            return self.getTypedRuleContext(SQLiteParser.Database_nameContext,0)
+        def schema_name(self):
+            return self.getTypedRuleContext(SQLiteParser.Schema_nameContext,0)
 
 
         def K_DATABASE(self):
@@ -3811,7 +3811,7 @@ class SQLiteParser ( Parser ):
 
 
             self.state = 632
-            self.database_name()
+            self.schema_name()
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
@@ -3843,8 +3843,8 @@ class SQLiteParser ( Parser ):
         def K_EXISTS(self):
             return self.getToken(SQLiteParser.K_EXISTS, 0)
 
-        def database_name(self):
-            return self.getTypedRuleContext(SQLiteParser.Database_nameContext,0)
+        def schema_name(self):
+            return self.getTypedRuleContext(SQLiteParser.Schema_nameContext,0)
 
 
         def DOT(self):
@@ -3889,7 +3889,7 @@ class SQLiteParser ( Parser ):
             la_ = self._interp.adaptivePredict(self._input,74,self._ctx)
             if la_ == 1:
                 self.state = 640
-                self.database_name()
+                self.schema_name()
                 self.state = 641
                 self.match(SQLiteParser.DOT)
 
@@ -3927,8 +3927,8 @@ class SQLiteParser ( Parser ):
         def K_EXISTS(self):
             return self.getToken(SQLiteParser.K_EXISTS, 0)
 
-        def database_name(self):
-            return self.getTypedRuleContext(SQLiteParser.Database_nameContext,0)
+        def schema_name(self):
+            return self.getTypedRuleContext(SQLiteParser.Schema_nameContext,0)
 
 
         def DOT(self):
@@ -3973,7 +3973,7 @@ class SQLiteParser ( Parser ):
             la_ = self._interp.adaptivePredict(self._input,76,self._ctx)
             if la_ == 1:
                 self.state = 653
-                self.database_name()
+                self.schema_name()
                 self.state = 654
                 self.match(SQLiteParser.DOT)
 
@@ -4011,8 +4011,8 @@ class SQLiteParser ( Parser ):
         def K_EXISTS(self):
             return self.getToken(SQLiteParser.K_EXISTS, 0)
 
-        def database_name(self):
-            return self.getTypedRuleContext(SQLiteParser.Database_nameContext,0)
+        def schema_name(self):
+            return self.getTypedRuleContext(SQLiteParser.Schema_nameContext,0)
 
 
         def DOT(self):
@@ -4057,7 +4057,7 @@ class SQLiteParser ( Parser ):
             la_ = self._interp.adaptivePredict(self._input,78,self._ctx)
             if la_ == 1:
                 self.state = 666
-                self.database_name()
+                self.schema_name()
                 self.state = 667
                 self.match(SQLiteParser.DOT)
 
@@ -4095,8 +4095,8 @@ class SQLiteParser ( Parser ):
         def K_EXISTS(self):
             return self.getToken(SQLiteParser.K_EXISTS, 0)
 
-        def database_name(self):
-            return self.getTypedRuleContext(SQLiteParser.Database_nameContext,0)
+        def schema_name(self):
+            return self.getTypedRuleContext(SQLiteParser.Schema_nameContext,0)
 
 
         def DOT(self):
@@ -4141,7 +4141,7 @@ class SQLiteParser ( Parser ):
             la_ = self._interp.adaptivePredict(self._input,80,self._ctx)
             if la_ == 1:
                 self.state = 679
-                self.database_name()
+                self.schema_name()
                 self.state = 680
                 self.match(SQLiteParser.DOT)
 
@@ -4381,8 +4381,8 @@ class SQLiteParser ( Parser ):
             return self.getTypedRuleContext(SQLiteParser.With_clauseContext,0)
 
 
-        def database_name(self):
-            return self.getTypedRuleContext(SQLiteParser.Database_nameContext,0)
+        def schema_name(self):
+            return self.getTypedRuleContext(SQLiteParser.Schema_nameContext,0)
 
 
         def DOT(self):
@@ -4511,7 +4511,7 @@ class SQLiteParser ( Parser ):
             la_ = self._interp.adaptivePredict(self._input,89,self._ctx)
             if la_ == 1:
                 self.state = 741
-                self.database_name()
+                self.schema_name()
                 self.state = 742
                 self.match(SQLiteParser.DOT)
 
@@ -4665,8 +4665,8 @@ class SQLiteParser ( Parser ):
             return self.getTypedRuleContext(SQLiteParser.Pragma_nameContext,0)
 
 
-        def database_name(self):
-            return self.getTypedRuleContext(SQLiteParser.Database_nameContext,0)
+        def schema_name(self):
+            return self.getTypedRuleContext(SQLiteParser.Schema_nameContext,0)
 
 
         def DOT(self):
@@ -4712,7 +4712,7 @@ class SQLiteParser ( Parser ):
             la_ = self._interp.adaptivePredict(self._input,100,self._ctx)
             if la_ == 1:
                 self.state = 807
-                self.database_name()
+                self.schema_name()
                 self.state = 808
                 self.match(SQLiteParser.DOT)
 
@@ -4770,8 +4770,8 @@ class SQLiteParser ( Parser ):
             return self.getTypedRuleContext(SQLiteParser.Index_nameContext,0)
 
 
-        def database_name(self):
-            return self.getTypedRuleContext(SQLiteParser.Database_nameContext,0)
+        def schema_name(self):
+            return self.getTypedRuleContext(SQLiteParser.Schema_nameContext,0)
 
 
         def DOT(self):
@@ -4812,7 +4812,7 @@ class SQLiteParser ( Parser ):
                 la_ = self._interp.adaptivePredict(self._input,102,self._ctx)
                 if la_ == 1:
                     self.state = 823
-                    self.database_name()
+                    self.schema_name()
                     self.state = 824
                     self.match(SQLiteParser.DOT)
 
@@ -6678,8 +6678,8 @@ class SQLiteParser ( Parser ):
             else:
                 return self.getToken(SQLiteParser.DOT, i)
 
-        def database_name(self):
-            return self.getTypedRuleContext(SQLiteParser.Database_nameContext,0)
+        def schema_name(self):
+            return self.getTypedRuleContext(SQLiteParser.Schema_nameContext,0)
 
 
         def unary_operator(self):
@@ -6922,7 +6922,7 @@ class SQLiteParser ( Parser ):
                     la_ = self._interp.adaptivePredict(self._input,159,self._ctx)
                     if la_ == 1:
                         self.state = 1139
-                        self.database_name()
+                        self.schema_name()
                         self.state = 1140
                         self.match(SQLiteParser.DOT)
 
@@ -7015,7 +7015,7 @@ class SQLiteParser ( Parser ):
 
             elif la_ == 8:
                 self.state = 1183
-                self.database_name()
+                self.schema_name()
                 self.state = 1184
                 self.match(SQLiteParser.DOT)
                 self.state = 1185
@@ -7524,7 +7524,7 @@ class SQLiteParser ( Parser ):
                             la_ = self._interp.adaptivePredict(self._input,183,self._ctx)
                             if la_ == 1:
                                 self.state = 1328
-                                self.database_name()
+                                self.schema_name()
                                 self.state = 1329
                                 self.match(SQLiteParser.DOT)
 
@@ -9679,8 +9679,8 @@ class SQLiteParser ( Parser ):
             return self.getTypedRuleContext(SQLiteParser.Table_nameContext,0)
 
 
-        def database_name(self):
-            return self.getTypedRuleContext(SQLiteParser.Database_nameContext,0)
+        def schema_name(self):
+            return self.getTypedRuleContext(SQLiteParser.Schema_nameContext,0)
 
 
         def DOT(self):
@@ -9724,7 +9724,7 @@ class SQLiteParser ( Parser ):
             la_ = self._interp.adaptivePredict(self._input,243,self._ctx)
             if la_ == 1:
                 self.state = 1682
-                self.database_name()
+                self.schema_name()
                 self.state = 1683
                 self.match(SQLiteParser.DOT)
 
@@ -10166,8 +10166,8 @@ class SQLiteParser ( Parser ):
             return self.getTypedRuleContext(SQLiteParser.Table_nameContext,0)
 
 
-        def database_name(self):
-            return self.getTypedRuleContext(SQLiteParser.Database_nameContext,0)
+        def schema_name(self):
+            return self.getTypedRuleContext(SQLiteParser.Schema_nameContext,0)
 
 
         def DOT(self):
@@ -10261,7 +10261,7 @@ class SQLiteParser ( Parser ):
                 la_ = self._interp.adaptivePredict(self._input,256,self._ctx)
                 if la_ == 1:
                     self.state = 1751
-                    self.database_name()
+                    self.schema_name()
                     self.state = 1752
                     self.match(SQLiteParser.DOT)
 
@@ -10314,7 +10314,7 @@ class SQLiteParser ( Parser ):
                 la_ = self._interp.adaptivePredict(self._input,260,self._ctx)
                 if la_ == 1:
                     self.state = 1770
-                    self.database_name()
+                    self.schema_name()
                     self.state = 1771
                     self.match(SQLiteParser.DOT)
 
@@ -11976,10 +11976,10 @@ class SQLiteParser ( Parser ):
         return localctx
 
 
-    class Database_nameContext(ParserRuleContext):
+    class Schema_nameContext(ParserRuleContext):
 
         def __init__(self, parser, parent=None, invokingState=-1):
-            super(SQLiteParser.Database_nameContext, self).__init__(parent, invokingState)
+            super(SQLiteParser.Schema_nameContext, self).__init__(parent, invokingState)
             self.parser = parser
 
         def any_name(self):
@@ -11987,23 +11987,23 @@ class SQLiteParser ( Parser ):
 
 
         def getRuleIndex(self):
-            return SQLiteParser.RULE_database_name
+            return SQLiteParser.RULE_schema_name
 
         def enterRule(self, listener):
-            if hasattr(listener, "enterDatabase_name"):
-                listener.enterDatabase_name(self)
+            if hasattr(listener, "enterSchema_name"):
+                listener.enterSchema_name(self)
 
         def exitRule(self, listener):
-            if hasattr(listener, "exitDatabase_name"):
-                listener.exitDatabase_name(self)
+            if hasattr(listener, "exitSchema_name"):
+                listener.exitSchema_name(self)
 
 
 
 
-    def database_name(self):
+    def schema_name(self):
 
-        localctx = SQLiteParser.Database_nameContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 160, self.RULE_database_name)
+        localctx = SQLiteParser.Schema_nameContext(self, self._ctx, self.state)
+        self.enterRule(localctx, 160, self.RULE_schema_name)
         try:
             self.enterOuterAlt(localctx, 1)
             self.state = 1987

@@ -341,7 +341,7 @@ class CTX(object):
     COLUMN_DEF           = SQLiteParser.Column_defContext
     COLUMN_NAME          = SQLiteParser.Column_nameContext
     INDEX_NAME           = SQLiteParser.Index_nameContext
-    SCHEMA_NAME          = SQLiteParser.Database_nameContext
+    SCHEMA_NAME          = SQLiteParser.Schema_nameContext
     TABLE_NAME           = SQLiteParser.Table_nameContext
     TRIGGER_NAME         = SQLiteParser.Trigger_nameContext
     VIEW_NAME            = SQLiteParser.View_nameContext
@@ -634,7 +634,7 @@ class Parser(object):
 
         result["name"]  = self.u(ctx.index_name)
         result["table"] = self.u(ctx.table_name)
-        if ctx.database_name(): result["schema"] = self.u(ctx.database_name)
+        if ctx.schema_name(): result["schema"] = self.u(ctx.schema_name)
         if ctx.K_UNIQUE(): result["unique"]  = True
         if ctx.K_EXISTS(): result["exists"]  = True
 
@@ -669,7 +669,7 @@ class Parser(object):
         result = {}
 
         result["name"] = self.u(ctx.table_name)
-        if ctx.database_name(): result["schema"]  = self.u(ctx.database_name)
+        if ctx.schema_name(): result["schema"]  = self.u(ctx.schema_name)
         if ctx.K_TEMP() or ctx.K_TEMPORARY(): result["temporary"] = True
         if ctx.K_EXISTS(): result["exists"]  = True
 
@@ -704,7 +704,7 @@ class Parser(object):
         result = {}
 
         result["name"] = self.u(ctx.trigger_name)
-        if ctx.database_name(0): result["schema"]  = self.u(ctx.database_name(0))
+        if ctx.schema_name(0): result["schema"]  = self.u(ctx.schema_name(0))
         if ctx.K_TEMP() or ctx.K_TEMPORARY(): result["temporary"] = True
         if ctx.K_EXISTS(): result["exists"]  = True
 
@@ -748,7 +748,7 @@ class Parser(object):
         result = {}
 
         result["name"] = self.u(ctx.view_name)
-        if ctx.database_name(): result["schema"]  = self.u(ctx.database_name)
+        if ctx.schema_name(): result["schema"]  = self.u(ctx.schema_name)
         if ctx.K_TEMP() or ctx.K_TEMPORARY(): result["temporary"] = True
         if ctx.K_EXISTS(): result["exists"]  = True
 
@@ -772,7 +772,7 @@ class Parser(object):
         result = {}
 
         result["name"] = self.u(ctx.table_name)
-        if ctx.database_name(): result["schema"]  = self.u(ctx.database_name)
+        if ctx.schema_name(): result["schema"]  = self.u(ctx.schema_name)
         if ctx.K_EXISTS(): result["exists"]  = True
         result["module"] = {"name":  self.u(ctx.module_name)}
         args = ctx.module_argument()

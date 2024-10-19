@@ -59,7 +59,8 @@
  *                add support for RETURNING;
  *                add support for ALTER TABLE DROP/RENAME column;
  *                add support for table alias in INSERT.
- *                add support for column name list in UPDATE.
+ *                add support for column name list in UPDATE;
+ *                rename database_name to schema_name.
  *                
  * Updated for  : SQLitely, an SQLite database tool.
  * Updated by   : Erki Suurjaak, 2019-2024
@@ -112,7 +113,7 @@ sql_stmt
  ;
 
 alter_table_stmt
- : K_ALTER K_TABLE ( database_name '.' )? table_name
+ : K_ALTER K_TABLE ( schema_name '.' )? table_name
    ( K_RENAME K_TO new_table_name = table_name
    | K_RENAME K_COLUMN? old_column_name = column_name K_TO new_column_name = column_name
    | K_ADD K_COLUMN? column_def
@@ -121,11 +122,11 @@ alter_table_stmt
  ;
 
 analyze_stmt
- : K_ANALYZE ( database_name | table_or_index_name | database_name '.' table_or_index_name )?
+ : K_ANALYZE ( schema_name | table_or_index_name | schema_name '.' table_or_index_name )?
  ;
 
 attach_stmt
- : K_ATTACH K_DATABASE? expr K_AS database_name
+ : K_ATTACH K_DATABASE? expr K_AS schema_name
  ;
 
 begin_stmt
@@ -145,13 +146,13 @@ compound_select_stmt
 
 create_index_stmt
  : K_CREATE K_UNIQUE? K_INDEX ( K_IF K_NOT K_EXISTS )?
-   ( database_name '.' )? index_name K_ON table_name '(' indexed_column ( ',' indexed_column )* ')'
+   ( schema_name '.' )? index_name K_ON table_name '(' indexed_column ( ',' indexed_column )* ')'
    ( K_WHERE expr )?
  ;
 
 create_table_stmt
  : K_CREATE ( K_TEMP | K_TEMPORARY )? K_TABLE ( K_IF K_NOT K_EXISTS )?
-   ( database_name '.' )? table_name
+   ( schema_name '.' )? table_name
    ( '(' column_def ( ',' column_def )*? ( ',' table_constraint )* ')'
    ( table_option ( ',' table_option )* )?
    | K_AS select_stmt
@@ -160,22 +161,22 @@ create_table_stmt
 
 create_trigger_stmt
  : K_CREATE ( K_TEMP | K_TEMPORARY )? K_TRIGGER ( K_IF K_NOT K_EXISTS )?
-   ( database_name '.' )? trigger_name ( K_BEFORE  | K_AFTER | K_INSTEAD K_OF )? 
-   ( K_DELETE | K_INSERT | K_UPDATE ( K_OF column_name ( ',' column_name )* )? ) K_ON ( database_name '.' )? table_name
+   ( schema_name '.' )? trigger_name ( K_BEFORE  | K_AFTER | K_INSTEAD K_OF )? 
+   ( K_DELETE | K_INSERT | K_UPDATE ( K_OF column_name ( ',' column_name )* )? ) K_ON ( schema_name '.' )? table_name
    ( K_FOR K_EACH K_ROW )? ( K_WHEN expr )?
    K_BEGIN ( ( update_stmt | insert_stmt | delete_stmt | select_stmt ) ';' )+ K_END
  ;
 
 create_view_stmt
  : K_CREATE ( K_TEMP | K_TEMPORARY )? K_VIEW ( K_IF K_NOT K_EXISTS )?
-   ( database_name '.' )? view_name 
+   ( schema_name '.' )? view_name 
    ( '(' column_name ( ',' column_name )* ')' )?
    K_AS select_stmt
  ;
 
 create_virtual_table_stmt
  : K_CREATE K_VIRTUAL K_TABLE ( K_IF K_NOT K_EXISTS )?
-   ( database_name '.' )? table_name
+   ( schema_name '.' )? table_name
    K_USING module_name ( '(' module_argument ( ',' module_argument )* ')' )?
  ;
 
@@ -194,23 +195,23 @@ delete_stmt_limited
  ;
 
 detach_stmt
- : K_DETACH K_DATABASE? database_name
+ : K_DETACH K_DATABASE? schema_name
  ;
 
 drop_index_stmt
- : K_DROP K_INDEX ( K_IF K_EXISTS )? ( database_name '.' )? index_name
+ : K_DROP K_INDEX ( K_IF K_EXISTS )? ( schema_name '.' )? index_name
  ;
 
 drop_table_stmt
- : K_DROP K_TABLE ( K_IF K_EXISTS )? ( database_name '.' )? table_name
+ : K_DROP K_TABLE ( K_IF K_EXISTS )? ( schema_name '.' )? table_name
  ;
 
 drop_trigger_stmt
- : K_DROP K_TRIGGER ( K_IF K_EXISTS )? ( database_name '.' )? trigger_name
+ : K_DROP K_TRIGGER ( K_IF K_EXISTS )? ( schema_name '.' )? trigger_name
  ;
 
 drop_view_stmt
- : K_DROP K_VIEW ( K_IF K_EXISTS )? ( database_name '.' )? view_name
+ : K_DROP K_VIEW ( K_IF K_EXISTS )? ( schema_name '.' )? view_name
  ;
 
 factored_select_stmt
@@ -228,7 +229,7 @@ insert_stmt
                 | K_INSERT K_OR K_ABORT
                 | K_INSERT K_OR K_FAIL
                 | K_INSERT K_OR K_IGNORE ) K_INTO
-   ( database_name '.' )? table_name (K_AS table_alias)?
+   ( schema_name '.' )? table_name (K_AS table_alias)?
    ( '(' column_name ( ',' column_name )* ')' )?
    ( K_VALUES '(' expr ( ',' expr )* ')' ( ',' '(' expr ( ',' expr )* ')' )* upsert_clause?
    | select_stmt upsert_clause?
@@ -238,13 +239,13 @@ insert_stmt
  ;
 
 pragma_stmt
- : K_PRAGMA ( database_name '.' )? pragma_name ( '=' pragma_value
+ : K_PRAGMA ( schema_name '.' )? pragma_name ( '=' pragma_value
                                                | '(' pragma_value ')' )?
  ;
 
 reindex_stmt
  : K_REINDEX ( collation_name
-             | ( database_name '.' )? ( table_name | index_name )
+             | ( schema_name '.' )? ( table_name | index_name )
              )?
  ;
 
@@ -367,7 +368,7 @@ conflict_clause
 expr
  : literal_value
  | BIND_PARAMETER
- | ( ( database_name '.' )? table_name '.' )? column_name
+ | ( ( schema_name '.' )? table_name '.' )? column_name
  | unary_operator expr
  | expr '||' expr
  | expr ( '*' | '/' | '%' ) expr
@@ -387,8 +388,8 @@ expr
  | expr K_IS K_NOT? ( K_DISTINCT K_FROM )? expr
  | expr K_NOT? K_BETWEEN expr K_AND expr
  | expr K_NOT? K_IN ( '(' ( select_stmt | expr ( ',' expr )* )?  ')'
-                    | ( database_name '.' )? table_name )
-                    | ( database_name '.' table_function_name '(' ( expr ( ',' expr )* )? ')' )
+                    | ( schema_name '.' )? table_name )
+                    | ( schema_name '.' table_function_name '(' ( expr ( ',' expr )* )? ')' )
  | ( ( K_NOT )? K_EXISTS )? '(' select_stmt ')'
  | K_CASE expr? ( K_WHEN expr K_THEN expr )+ ( K_ELSE expr )? K_END
  | raise_function
@@ -508,7 +509,7 @@ with_clause
  ;
 
 qualified_table_name
- : ( database_name '.' )? table_name ( K_INDEXED K_BY index_name
+ : ( schema_name '.' )? table_name ( K_INDEXED K_BY index_name
                                      | K_NOT K_INDEXED )?
  ;
 
@@ -534,9 +535,9 @@ result_column
  ;
 
 table_or_subquery
- : ( database_name '.' )? table_name ( K_AS? table_alias )?
+ : ( schema_name '.' )? table_name ( K_AS? table_alias )?
    ( K_INDEXED K_BY index_name | K_NOT K_INDEXED )?
- | ( database_name '.' )? table_function_name '(' ( expr ( ',' expr )* )? ')' ( K_AS? table_alias )?
+ | ( schema_name '.' )? table_function_name '(' ( expr ( ',' expr )* )? ')' ( K_AS? table_alias )?
  | '(' ( table_or_subquery ( ',' table_or_subquery )* | join_clause )
    ')' ( K_AS? table_alias )?
  | '(' select_stmt ')' ( K_AS? table_alias )?
@@ -749,7 +750,7 @@ function_name
  : any_name
  ;
 
-database_name
+schema_name
  : any_name
  ;
 
