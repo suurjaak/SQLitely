@@ -61,9 +61,10 @@
  *                add support for table alias in INSERT.
  *                add support for column name list in UPDATE;
  *                rename database_name to schema_name.
- *                
+ *
  * Updated for  : SQLitely, an SQLite database tool.
  * Updated by   : Erki Suurjaak, 2019-2024
+ * Update to:   : compatible with SQLite up to version 3.46.
  */
 grammar SQLite;
 
