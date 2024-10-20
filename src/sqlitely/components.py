@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.10.2024
+@modified    20.10.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -11382,11 +11382,11 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
 
             for item in copymenu.MenuItems: menu.Bind(wx.EVT_MENU, on_copy, item)
 
-            menu.Bind(wx.EVT_MENU, cmd("export", "tables",    *names), item_export_indiv)
-            menu.Bind(wx.EVT_MENU, cmd("export", "combined",  *names), item_export_combine) if item_export_combine else None
-            menu.Bind(wx.EVT_MENU, cmd("export", "data",      *names), item_export_data) if item_export_data else None
-            menu.Bind(wx.EVT_MENU, cmd("export", "structure", *names), item_export_schema)
-            menu.Bind(wx.EVT_MENU, cmd("export", "diagram",   *names), item_export_image)
+            menu.Bind(wx.EVT_MENU, cmd("export", "individual", None, *names), item_export_indiv)
+            menu.Bind(wx.EVT_MENU, cmd("export", "combined",   None, *names), item_export_combine) if item_export_combine else None
+            menu.Bind(wx.EVT_MENU, cmd("export", "data",       None, *names), item_export_data) if item_export_data else None
+            menu.Bind(wx.EVT_MENU, cmd("export", "structure",  None, *names), item_export_schema)
+            menu.Bind(wx.EVT_MENU, cmd("export", "diagram",    None, *names), item_export_image)
 
             if item_reidx:
                 menu.Bind(wx.EVT_MENU, cmd("reindex",  "table", *[o["name"] for o in categories["table"]]), item_reidx)
