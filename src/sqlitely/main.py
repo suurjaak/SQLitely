@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.10.2024
+@modified    20.10.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1141,9 +1141,8 @@ def run_export(dbname, args):
         os.path.exists(args.OUTFILE) and os.unlink(args.OUTFILE)
 
     if "db" == args.format and os.path.exists(args.OUTFILE):
-        db2 = database.Database(args.OUTFILE)
-        allitems2 = util.CaselessDict((n, True) for nn in db2.schema.values() for n in nn)
-        db2.close()
+        with database.Database(args.OUTFILE) as db2:
+            allitems2 = util.CaselessDict((n, True) for nn in db2.schema.values() for n in nn)
         for name, item in entities.items():
             name2 = util.make_unique(name, allitems2) if name in allitems2 else name
             if name != name2: renames[item["type"]][name] = name2
@@ -1559,7 +1558,6 @@ def run_pragma(dbname, args):
     infoput("Opening database %s (%s).", dbname, util.format_bytes(database.get_size(dbname)))
     db = database.Database(dbname)
     pragmas = db.get_pragma_values()
-    db.close()
 
     if args.FILTER:
         rgx_filters = [re.compile(re.escape(x), flags=re.I) for x in args.FILTER.split()]
@@ -1573,6 +1571,7 @@ def run_pragma(dbname, args):
         sys.exit("No %spragmas to output." % ("matching " if args.FILTER else ""))
 
     content = step.Template(templates.PRAGMA_SQL, strip=False).expand(pragma=pragmas, db=db)
+    db.close()
 
     if args.OUTFILE:
         with io.open(args.OUTFILE, "w", encoding="utf-8") as f:
