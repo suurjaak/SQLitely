@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    12.10.2024
+@modified    20.10.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -2175,7 +2175,7 @@ class FormDialog(wx.Dialog):
         for f in self._props: self._AddField(f)
 
         for f in self._props: self._PopulateField(f)
-        if not sizer.IsColGrowable(sizer.Cols - 2):
+        if sizer.Cols > 1 and not sizer.IsColGrowable(sizer.Cols - 2):
             sizer.AddGrowableCol(sizer.Cols - 2, proportion=1)
         if len(self._comps) == 1 and not sizer.IsRowGrowable(0):
             sizer.AddGrowableRow(0, proportion=1)
