@@ -7558,6 +7558,7 @@ class TabbedHtmlWindow(wx.Panel):
 
         def after():
             if not self: return
+            if tab not in self._tabs: return
             self._tabs.remove(tab)
             if 1 == pagecount: # Was the only page, reuse as default
                 nb.SetPageText(0, "")
