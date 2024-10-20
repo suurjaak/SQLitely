@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.10.2024
+@modified    20.10.2024
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -650,6 +650,17 @@ WARNING: misuse can easily result in a corrupt database file.""",
         self.filename = filename
         if not self.temporary: self.name = filename
         self.open()
+
+
+    def __enter__(self):
+        """Context manager entry, ensures database is opened, returns self."""
+        self.open()
+        return self
+
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Context manager exit, closes database."""
+        self.close()
 
 
     def check_integrity(self):
