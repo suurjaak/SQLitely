@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.10.2024
+@modified    20.10.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -46,6 +46,7 @@ import step
 
 from . lib import util
 from . import conf
+from . import database
 from . import grammar
 from . import templates
 
@@ -574,7 +575,6 @@ class DatabaseSink(Sink):
         for category, mapping in list(renames.items()):
             if isinstance(mapping, dict) and not isinstance(mapping, util.CaselessDict):
                 renames[category] = util.CaselessDict(mapping)
-        if self._state["schema2"]: renames.update(schema=self._state["schema2"])
 
         entities = [self._db.schema[c][n] for c in self._db.CATEGORIES for n in schema.get(c, [])]
         for item in entities:
@@ -604,22 +604,13 @@ class DatabaseSink(Sink):
         """
         created, count = False, 0
         category, name = item["type"], item["name"]
-        create_sql, err = self._prepare_target_entity(item, name2, renames)
-        if err:
-            if self._check_cancel(name=name, error=err):
-                return None, count
-            return created, count
-        label = "%s %s" % (category, grammar.quote(name, force=True))
-        if name != name2: label += " as %s" % grammar.quote(name2, force=True)
-        logger.info("Creating %s in %s.", label, self._filename)
-        self._db.execute(create_sql)
-        self._state["sql_logs"].append((create_sql, None))
-        self._state["allnames2"][name2] = category
-        created = True
-        if not self._flags["data"] or category != "table":
+        created = self._create_target_entity(category, name, name2, item["sql"], renames)
+        if not created or not self._flags["data"] or category != "table":
             return created, count
 
         insert_sql = self._make_data_insert(name, name2, totalcount, selects)
+        label = "%s %s" % (category, grammar.quote(name, force=True))
+        if name != name2: label += " as %s" % grammar.quote(name2, force=True)
         logger.info("Copying data to %s in %s.", label, self._filename)
         count = self._db.execute(insert_sql).rowcount
         self._db.connection.commit()
@@ -698,19 +689,15 @@ class DatabaseSink(Sink):
         self._state["fullname"] = fullname
         if is_select and not cursor:
             if create_sql:
-                sql = create_sql
-                if not self._state["samefile"]:
-                    renames = {"schema": self._state["schema2"]}
-                    sql, _ = grammar.transform(create_sql, renames=renames)
-                self._db.executescript(sql)
-                self._state["sql_logs"].append((sql, None))
+                if not self._create_target_entity("table", table, table, create_sql):
+                    raise Exception("Failed to create target table %r" % table)
 
                 self._populate_target_columns(table)
                 peek_cursor = self._db.execute(query, params)
                 if len(peek_cursor.description) == len(self._state["columnnames"]):
                     action_sql = "INSERT INTO %s %s" % (fullname, query)
                     peek_cursor.close()
-                else: # Table has more or less columns than query: insert each row manually
+                else: # Table has more or fewer columns than query: insert each row manually
                     colstr = ", ".join(grammar.quote(x[0]) for x in peek_cursor.description)
                     paramstr = ", ".join(["?"] * len(peek_cursor.description))
                     action_sql = "INSERT INTO %s (%s) VALUES (%s)" % (fullname, colstr, paramstr)
@@ -732,11 +719,28 @@ class DatabaseSink(Sink):
         return action_sql, cursor
 
 
-    def _prepare_target_entity(self, item, name2, renames=None):
-        """Returns (CREATE SQL, error) for entity in target database; drops existing if any."""
+    def _create_target_entity(self, category, name, name2, create_sql, renames=None):
+        """
+        Creates entity in target database, drops existing if any.
+        
+        @return  success as True/False, or None on error and cancel
+        """
+        do_separate_connection = False
+        myrenames = dict(renames or {})
         fullname = grammar.quote(name2)
-        if not self._state["samefile"]: fullname = "%s.%s" % (self._state["schema2"], fullname)
-        self._state["fullname"] = fullname
+        if not self._state["samefile"]:
+            myrenames["schema"] = self._state["schema2"]
+            fullname = "%s.%s" % (self._state["schema2"], fullname)
+        if myrenames:
+            create_sql2, err = grammar.transform(create_sql, renames=myrenames)
+            if err: # Fails if original SQL is not parseable: create separately if possible
+                if self._check_cancel(name=name, error=err):
+                    return None
+                if renames:
+                    return False
+                do_separate_connection = True
+            else:
+                create_sql = create_sql2
 
         if self._state["allnames2"] is None:
             self._populate_target_schema()
@@ -744,15 +748,23 @@ class DatabaseSink(Sink):
             category2 = self._state["allnames2"][name2]
             logger.info("Dropping %s %s in %s.",
                         category2, grammar.quote(name2, force=True), self._filename)
-            sql = "DROP %s %s" % (category2.upper(), fullname)
-            self._db.execute(sql)
-            self._state["sql_logs"].append((sql, None))
+            drop_sql = "DROP %s %s" % (category2.upper(), fullname)
+            self._db.execute(drop_sql)
+            self._state["sql_logs"].append((drop_sql, None))
             self._populate_target_schema() # Repopulate for cascaded drops
 
-        sql, err = item["sql"], None
-        if renames:
-            sql, err = grammar.transform(item["sql"], renames=renames)
-        return sql, err
+        label = "%s %s" % (category, grammar.quote(name, force=True))
+        if name != name2: label += " as %s" % grammar.quote(name2, force=True)
+        logger.info("Creating %s in %s.", label, self._filename)
+        if do_separate_connection:
+            with database.Database(self._filename) as db2:
+                db2.execute(create_sql)
+        else:
+            self._db.execute(create_sql)
+        self._state["sql_logs"].append((create_sql, None))
+        self._state["allnames2"][name2] = category
+        self._state["fullname"] = fullname
+        return True
 
 
     def _process_error(self, exc, table=None, query=None):
