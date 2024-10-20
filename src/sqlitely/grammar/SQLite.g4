@@ -60,7 +60,8 @@
  *                add support for ALTER TABLE DROP/RENAME column;
  *                add support for table alias in INSERT.
  *                add support for column name list in UPDATE;
- *                rename database_name to schema_name.
+ *                rename database_name to schema_name;
+ *                add support for underscore separator in numeric literals.
  *
  * Updated for  : SQLitely, an SQLite database tool.
  * Updated by   : Erki Suurjaak, 2019-2024
@@ -1055,8 +1056,12 @@ IDENTIFIER
  ;
 
 NUMERIC_LITERAL
- : DIGIT+ ( '.' DIGIT* )? ( E [-+]? DIGIT+ )?
- | '.' DIGIT+ ( E [-+]? DIGIT+ )?
+ : NUMBER ( '.' NUMBER? )? ( E [-+]? NUMBER )?
+ | '.' NUMBER ( E [-+]? NUMBER )?
+ ;
+
+NUMBER
+ : DIGIT ( '_'* DIGIT )*
  ;
 
 BIND_PARAMETER

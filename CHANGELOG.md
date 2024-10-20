@@ -40,7 +40,8 @@ CHANGELOG
 - update SQL grammar up to SQLite version 3.46
   (UPSERT, operator IS NOT? DISTINCT FROM, JSON operators -> ->>, window functions,
    MATERIALIZED in common table expression, UPDATE FROM in trigger body, RIGHT JOIN, FULL JOIN,
-   ORDER BY in function calls, table alias in INSERT, column name list in UPDATE, all 147 keywords)
+   ORDER BY in function calls, table alias in INSERT, column name list in UPDATE,
+   underscore separator in numeric literals, all 147 keywords)
 
 
 2.3, 2024-07-08
