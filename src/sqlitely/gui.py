@@ -3988,7 +3988,12 @@ class DatabasePage(wx.Panel):
                 renames = {category: {name: name2}}
                 rels = self.db.get_related(category, name, own=True)
 
-                create_sql = grammar.transform(item["sql"], renames=renames)[0]
+                create_sql, err = grammar.transform(item["sql"], renames=renames)
+                if err:
+                    busy.Close()
+                    wx.MessageBox("Failed to clone %s %s.\n\nError transforming CREATE SQL." %
+                                  (category, sname), conf.Title, wx.OK | wx.ICON_ERROR)
+                    return
                 rel_sqls = []
                 for relitem in (x for xx in rels.values() for x in xx.values()):
                     relname2 = util.make_unique(relitem["name"], allnames)
