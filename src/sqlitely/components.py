@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    20.10.2024
+@modified    21.10.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -3294,8 +3294,9 @@ class SchemaObjectPage(wx.Panel):
         "trigger": {"name": "new_trigger"},
         "view":    {"name": "new_view"},
     }
-    CASCADE_INTERVAL = 1000 # Interval in millis after which to cascade name/column updates
-    ALTER_INTERVAL   =  500 # Interval in millis after which to re-create ALTER statement
+    CASCADE_INTERVAL  = 1000 # Interval in millis after which to cascade name/column updates
+    GENERATE_INTERVAL =  200 # Interval in millis after which to re-generate CREATE statement
+    ALTER_INTERVAL    =  500 # Interval in millis after which to re-create ALTER statement
     GRID_ROW_HEIGHT = 30 if "linux" in sys.platform else 23
 
 
@@ -3332,10 +3333,11 @@ class SchemaObjectPage(wx.Panel):
         self._ctrls    = {}  # {}
         self._buttons  = {}  # {name: wx.Button}
         self._sizers   = {}  # {child sizer: parent sizer}
-        self._cascader    = None # Table name and column update cascade callback timer
-        self._alter_sqler = None # ALTER SQL populate callback timer
+        self._cascader      = None # Table name and column update cascade callback timer
+        self._sql_generator = None # CREATE statement SQL generation callback timer
+        self._alter_sqler   = None # ALTER SQL populate callback timer
         # Pending column updates as {__id__: {col: {}, ?rename: newname, ?remove: bool}}
-        self._cascades    = {}   # Pending updates: table and column renames and drops
+        self._cascades      = {}   # Pending updates: table and column renames and drops
         self._ignore_change = False
         self._has_alter     = False
         self._show_alter    = False
@@ -4747,6 +4749,7 @@ class SchemaObjectPage(wx.Panel):
         self._PopulateAutoComp()
         self._ctrls["alter"].Show(edit and self._has_alter)
         self._ctrls["alter"].ContainingSizer.Layout()
+
         def layout_panels():
             if not self: return
             self.Freeze()
@@ -4796,17 +4799,24 @@ class SchemaObjectPage(wx.Panel):
                     ctrl.AutoCompAddSubWords(name, columns)
 
 
-    def _PopulateSQL(self):
-        """Populates CREATE SQL window."""
+    def _PopulateSQL(self, block=False):
+        """
+        Populates CREATE SQL window, generating fresh SQL from item if editmode.
+
+        @param   block  if true, ALTER SQL is populated immediately instead of background
+        """
 
         def set_sql(sql):
             if not self._cascader: self._ToggleControls(self._editmode)
             if sql is None: return
             scrollpos = self._ctrls["sql"].GetScrollPos(wx.VERTICAL)
-            self._ctrls["sql"].SetReadOnly(False)
-            self._ctrls["sql"].SetText(sql.rstrip() + "\n")
-            self._ctrls["sql"].SetReadOnly(True)
-            self._ctrls["sql"].ScrollToLine(scrollpos)
+            self.Freeze()
+            try:
+                self._ctrls["sql"].SetReadOnly(False)
+                self._ctrls["sql"].SetText(sql.rstrip() + "\n")
+                self._ctrls["sql"].SetReadOnly(True)
+                self._ctrls["sql"].ScrollToLine(scrollpos)
+            finally: self.Thaw()
 
         def set_alter_sql():
             self._alter_sqler = None
@@ -4814,16 +4824,23 @@ class SchemaObjectPage(wx.Panel):
             except Exception: sql = "-- Incomplete configuration"
             set_sql(sql)
 
+        was_timered = bool(self._sql_generator)
+        if self._sql_generator:
+            self._sql_generator.Stop()
+        self._sql_generator = None
         if self._editmode:
             sql, _ = grammar.generate(self._item["meta"])
             if sql is not None: self._item["sql"] = sql
         sql = self._item["sql0" if self._sql0_applies else "sql"]
 
         if self._show_alter:
-            if "table" == self._category:
+            if not block and "table" == self._category:
                 if not self._cascader:
                     if self._alter_sqler: self._alter_sqler.Stop()
-                    self._alter_sqler = wx.CallLater(self.ALTER_INTERVAL, set_alter_sql)
+                    if was_timered:
+                        self._alter_sqler = wx.CallAfter(set_alter_sql)
+                    else:
+                        self._alter_sqler = wx.CallLater(self.ALTER_INTERVAL, set_alter_sql)
             else: set_alter_sql()
         else:
             set_sql(sql)
@@ -5630,8 +5647,8 @@ class SchemaObjectPage(wx.Panel):
 
         value = src.Value
         if isinstance(value, six.string_types) \
-        and (not isinstance(src, wx.stc.StyledTextCtrl) or
-             not value.strip()): value = value.strip()
+        and (not isinstance(src, wx.stc.StyledTextCtrl) or not value.strip()):
+            value = value.strip()
         if isinstance(src, wx.ComboBox) and src.HasClientData():
             value = src.GetClientData(src.Selection)
         if isinstance(value0, list) and not isinstance(value, list):
@@ -5640,7 +5657,7 @@ class SchemaObjectPage(wx.Panel):
         if value == value0: return
         util.setval(meta, value, path)
 
-        do_cascade = False
+        do_cascade, do_generate = False, True
         if "trigger" == self._category:
             # Trigger special: INSTEAD OF UPDATE triggers on a view
             if ["action"] == path and grammar.SQL.UPDATE in (value0, value) \
@@ -5688,10 +5705,15 @@ class SchemaObjectPage(wx.Panel):
                     if col2.get("fk") and util.lceq(col2["fk"].get("table"), self.Name) \
                     and util.lceq(col2["fk"].get("key"), value0):
                         col2["fk"]["key"] = value
-        elif ["table"] == path:
+        elif ["table"] == path: # Changing table name on item root
             rebuild = meta.get("columns") or "index" == self._category
             if not rebuild: self._PopulateAutoComp()
             meta.pop("columns", None)
+
+        if isinstance(src, wx.stc.StyledTextCtrl):
+            do_generate = False
+            if self._sql_generator: self._sql_generator.Stop()
+            self._sql_generator = wx.CallLater(self.GENERATE_INTERVAL, self._PopulateSQL)
 
         if do_cascade:
             if self._cascader: self._cascader.Stop()
@@ -5700,7 +5722,7 @@ class SchemaObjectPage(wx.Panel):
             self._ToggleControls(self._editmode)
 
         self._sql0_applies = False
-        self._Populate() if rebuild else self._PopulateSQL()
+        self._Populate() if rebuild else self._PopulateSQL() if do_generate else None
         self._PostEvent(modified=True)
 
 
@@ -6092,6 +6114,7 @@ class SchemaObjectPage(wx.Panel):
         """
         Handler for saving SQL to file, opens file dialog and saves content.
         """
+        if self._sql_generator: self._PopulateSQL(block=True)
         action, category = "CREATE", self._category.upper()
         name = self._item["meta"].get("name") or self._item["name"]
         if self._show_alter:
@@ -6142,6 +6165,7 @@ class SchemaObjectPage(wx.Panel):
             wx.MessageBox("Failed to parse SQL.\n\n%s" % err,
                           conf.Title, wx.OK | wx.ICON_ERROR)
 
+        if self._sql_generator: self._PopulateSQL()
         props = [{"name": "sql", "label": "SQL:", "component": controls.SQLiteTextCtrl,
                   "tb": [{"type": "numbers", "help": "Show line numbers",
                           "toggle": True, "bmp": images.ToolbarNumbered.Bitmap,
@@ -6294,6 +6318,7 @@ class SchemaObjectPage(wx.Panel):
         Handler for clicking to close the item, confirms discarding changes if any,
         sends message to parent. Returns whether page closed.
         """
+        if self._sql_generator: self._PopulateSQL(block=True)
         if self._editmode and self.IsChanged():
             if self._newmode: msg = "Do you want to save the new %s?" % self._category
             else: msg = "Do you want to save changes to %s %s?" % (
