@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     12.10.2024
-@modified    16.10.2024
+@modified    21.10.2024
 ------------------------------------------------------------------------------
 """
 import collections
@@ -385,6 +385,12 @@ class TestGrammar(unittest.TestCase):
             self.assertFalse(err, "Unexpected failure from parsing %s." % label)
             logger.debug("Parsed structure for %s:\n%s", label, json.dumps(item, indent=2))
             self.assertEqual(item, CREATE_ITEMS[label], "Unexpected result for parsed %s." % label)
+
+        logger.debug("Verifying grammar.ParseError.")
+        item, errors = grammar.Parser().parse_tree("CREATE INDEX ON")
+        self.assertFalse(item, "Unexpected success for invalid SQL: %s" % item)
+        self.assertTrue(any(isinstance(e, grammar.ParseError) for e in errors),
+                        "Expected ParseError for invalid SQL.")
 
 
     def test_quote(self):

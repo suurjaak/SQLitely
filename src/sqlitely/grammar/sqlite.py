@@ -380,12 +380,7 @@ class ParseError(Exception):
         Exception.__init__(self, message)
         self.message, self.line, self.column = message, line, column
 
-    def __getattribute__(self, name):
-        if name in dir(str): return getattr(self.message, name)
-        return Exception.__getattribute__(self, name)
-
-    def __repr__(self):           return repr(self.message)
-    def __str__ (self):           return str(self.message)
+    def __str__ (self): return str(self.message)
 
 
 
@@ -440,10 +435,9 @@ class Parser(object):
                         break # for i, (..)
                 self._stack = traceback.format_list(stack)
 
-        def getErrors(self, stack=False):
-            es = self._errors
-            res = es[0] if len(es) == 1 else "\n\n".join(e.message for e in es)
-            return "%s\n%s" % (res, "".join(self._stack)) if stack else res
+        def getErrors(self): return self._errors[:]
+
+        def getStack(self):  return self._stack[:]
 
 
     def __init__(self):
@@ -471,14 +465,16 @@ class Parser(object):
         @return            ({..}, None) or (None, error)
 
         """
-        ctx, error = self.parse_tree(sql, category)
-        result = None if error else self.build(ctx, renames)
-        return result, error
+        result, err = None, None
+        ctx, errors = self.parse_tree(sql, category)
+        if not errors: result = self.build(ctx, renames)
+        else: err = "\n\n".join(e.message if isinstance(e, ParseError) else e for e in errors)
+        return result, err
 
 
     def parse_tree(self, sql, category=None):
         """
-        Parses the SQL statement, returns (root context, error).
+        Parses the SQL statement, returns (root context, [ParseError or str, ] or None).
 
         @param   sql       source SQL string
         @param   category  expected statement category if any, like "table"
@@ -490,9 +486,10 @@ class Parser(object):
 
         tree = parser.parse()
         if parser.getNumberOfSyntaxErrors():
-            logger.error('Errors parsing SQL "%s":\n\n%s', sql,
-                         listener.getErrors(stack=True))
-            return None, listener.getErrors()
+            errors = listener.getErrors()
+            logger.error('Errors parsing SQL "%s":\n\n%s\n%s',
+                         sql, "\n\n".join(e.message for e in errors), "".join(listener.getStack()))
+            return None, errors
 
         if sum(not isinstance(x, TerminalNode) for x in tree.children) > 1 \
         or sum(not isinstance(x, TerminalNode) for x in tree.children[0].children) > 1:
@@ -500,7 +497,7 @@ class Parser(object):
                     [x for x in tree.children[0].children if not isinstance(x, TerminalNode)]
             logger.error('Error parsing SQL "%s":\n\n'
                          "encountered %s statements where one was expected.", sql, len(stmts))
-            return None, "Too many statements"
+            return None, ["Too many statements"]
 
         # parse ctx -> statement list ctx -> statement ctx -> specific type ctx
         ctx = tree.children[0].children[0].children[0]
@@ -511,7 +508,7 @@ class Parser(object):
                      " (expected '%s')" % (categoryname or category)
                      if category else "")
             logger.error(error)
-            return None, error
+            return None, [error]
         self._category = name
         self._tree = tree
         return ctx, None
