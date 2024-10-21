@@ -6142,28 +6142,35 @@ class SchemaObjectPage(wx.Panel):
     def _OnImportSQL(self, event=None):
         """Handler for editing SQL directly, opens dialog."""
 
-        def onclose(mydata):
-            sql = mydata.get("sql", "")
-            if sql.strip() in ("", data["sql"]): return True
-            meta, err = grammar.parse(sql, self._category)
+        def parse_check(sql):
+            """Returns (stripped SQL or None if no change, meta, error)."""
+            sql, sql0 = re.sub(r"[\s;]+$", "", sql.replace("\r\n", "\n").strip()), sql
+            if not sql or data["sql"] == sql0 or data["sql"].rstrip(";") == sql:
+                return None, None, None
 
-            if not err and "INSTEAD OF" == meta.get("upon") and "table" in meta \
-            and not any(util.lceq(meta["table"], x) for x in self._views):
-                err = "No such view: %s" % fmt_entity(meta["table"])
-            if not err and "table" in meta \
-            and not any(util.lceq(meta["table"], x) for x in self._tables):
-                err = "No such table: %s" % fmt_entity(meta["table"])
-            if not err: return True
+            meta, err = grammar.parse(sql, self._category)
+            if not err and "table" in meta:
+                if "INSTEAD OF" == meta.get("upon") \
+                and not any(util.lceq(meta["table"], x) for x in self._views):
+                    err = "No such view: %s" % fmt_entity(meta["table"])
+                elif not any(util.lceq(meta["table"], x) for x in self._tables):
+                    err = "No such table: %s" % fmt_entity(meta["table"])
+            return sql, meta, err
+
+        def onclose(mydata):
+            sql, meta, err = parse_check(mydata.get("sql", ""))
+            if sql is None or not err: return True
 
             if isinstance(err, grammar.ParseError):
-                lines = sql.split("\n")
+                lines = sql_raw.split("\n")
                 start = sum(len(l) + 1 for l in lines[:err.line]) + err.column
                 end   = start + len(lines[err.line]) - err.column
                 ctrl  = dlg._comps[("sql", )][0]
                 ctrl.SetSelection(start, end)
                 ctrl.SetFocus()
-            wx.MessageBox("Failed to parse SQL.\n\n%s" % err,
+            wx.MessageBox("Cannot apply SQL.\n\n%s" % err,
                           conf.Title, wx.OK | wx.ICON_ERROR)
+            return False
 
         if self._sql_generator: self._PopulateSQL()
         props = [{"name": "sql", "label": "SQL:", "component": controls.SQLiteTextCtrl,
@@ -6203,13 +6210,15 @@ class SchemaObjectPage(wx.Panel):
         dlg = controls.FormDialog(self.TopLevelParent, "Edit SQL",
                                   props, data, autocomp=autocomp, onclose=onclose, format=format)
         wx_accel.accelerate(dlg)
-        if wx.ID_OK != dlg.ShowModal(): return dlg.Destroy()
-        sql = dlg.GetData().get("sql", "").strip().replace("\r\n", "\n").rstrip(";")
-        dlg.Destroy()
-        if not sql or sql == data["sql"]: return
+        with dlg:
+            if wx.ID_OK != dlg.ShowModal(): return
+            sql, meta, err = parse_check(dlg.GetData().get("sql", ""))
+        if err:
+            wx.MessageBox("Cannot apply SQL.\n\n%s" % err,
+                          conf.Title, wx.OK | wx.ICON_ERROR)
+        if err or sql is None: return
 
         logger.info("Importing %s definition from SQL:\n\n%s", self._category, sql)
-        meta, _ = grammar.parse(sql, self._category)
         sql = grammar.terminate(sql, meta)
         self._item.update(sql=sql, sql0=sql, meta=self._AssignColumnIDs(meta))
         self._sql0_applies = True
