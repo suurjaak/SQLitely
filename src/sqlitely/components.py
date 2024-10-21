@@ -6148,7 +6148,16 @@ class SchemaObjectPage(wx.Panel):
             if not sql or data["sql"] == sql0 or data["sql"].rstrip(";") == sql:
                 return None, None, None
 
-            meta, err = grammar.parse(sql, self._category)
+            meta, err = None, None
+            try:
+                parser = grammar.Parser()
+                tree, errors = parser.parse_tree(sql, self._category)
+                if not errors: meta = parser.build(tree)
+            except Exception as e:
+                err = e
+            else:
+                if errors: err = errors[0]
+
             if not err and "table" in meta:
                 if "INSTEAD OF" == meta.get("upon") \
                 and not any(util.lceq(meta["table"], x) for x in self._views):
@@ -6162,7 +6171,7 @@ class SchemaObjectPage(wx.Panel):
             if sql is None or not err: return True
 
             if isinstance(err, grammar.ParseError):
-                lines = sql_raw.split("\n")
+                lines = mydata.get("sql").split("\n")
                 start = sum(len(l) + 1 for l in lines[:err.line]) + err.column
                 end   = start + len(lines[err.line]) - err.column
                 ctrl  = dlg._comps[("sql", )][0]
