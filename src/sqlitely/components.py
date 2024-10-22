@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.10.2024
+@modified    22.10.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -4821,7 +4821,7 @@ class SchemaObjectPage(wx.Panel):
         def set_alter_sql():
             self._alter_sqler = None
             try: sql, _, _ = self._GetAlterSQL()
-            except Exception: sql = "-- Incomplete configuration"
+            except Exception as e: sql = "-- Incomplete or invalid options\n--\n-- %s" % e
             set_sql(sql)
 
         was_timered = bool(self._sql_generator)
@@ -4967,7 +4967,8 @@ class SchemaObjectPage(wx.Panel):
 
             for category, itemmap in self._db.get_related("table", old["name"]).items():
                 for item in itemmap.values():
-                    sql, _ = grammar.transform(item["sql"], renames=renames)
+                    sql, err = grammar.transform(item["sql"], renames=renames)
+                    if err: raise Exception(err)
                     args.setdefault(category, []).append(dict(item, sql=sql, sql0=sql))
 
         else:
@@ -5034,7 +5035,8 @@ class SchemaObjectPage(wx.Panel):
         for category, itemmap in self._db.get_related("view", old["name"]).items():
             for item in itemmap.values():
                 is_view_trigger = "trigger" == category and util.lceq(item["meta"]["table"], old["name"])
-                sql, _ = grammar.transform(item["sql"], renames=renames)
+                sql, err = grammar.transform(item["sql"], renames=renames)
+                if err: raise Exception(err)
                 if sql == item["sql"] and not is_view_trigger: continue # for item
 
                 args.setdefault(category, []).append(dict(item, sql=sql))
@@ -5044,7 +5046,8 @@ class SchemaObjectPage(wx.Panel):
                 # Re-create view triggers
                 for subitem in self._db.get_related("view", item["name"], own=True).get("trigger", {}).values():
                     if subitem["name"] in used: continue # for subitem
-                    sql, _ = grammar.transform(subitem["sql"], renames=renames)
+                    sql, err = grammar.transform(subitem["sql"], renames=renames)
+                    if err: raise Exception(err)
                     args.setdefault(subitem["type"], []).append(dict(subitem, sql=sql))
                     used[subitem["name"]] = True
 
