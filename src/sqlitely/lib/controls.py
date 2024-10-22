@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    20.10.2024
+@modified    22.10.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -2062,7 +2062,7 @@ class FormDialog(wx.Dialog):
        ?link:         "name" of linked field, cleared and repopulated on change,
                       or callable(dialog) doing required change and returning field name;
                       name may be a sequence of names as subpath
-       ?tb:           [{type, ?help, ?toggle, ?on}] for SQLiteTextCtrl component,
+       ?tb:           [{type, ?help, ?toggle, ?on, ?bmp}] for SQLiteTextCtrl component,
                       adds toolbar, supported toolbar buttons "numbers", "wrap",
                       "copy", "paste", "open" and "save", plus "sep" for separator
        ?format:       function(value) for formatting ComboBox/ListBox items
@@ -2549,7 +2549,7 @@ class FormDialog(wx.Dialog):
                 if "numbers" == prop["type"] and prop.get("on"):
                     ctrl.SetMarginWidth(0, 25)
                 if "wrap" == prop["type"] and not prop.get("on"):
-                    ctrl.SetWrapMode(wx.stc.STC_WRAP_NONE)
+                    ctrl.SetWordWrap(False)
 
                 tb.Bind(wx.EVT_TOOL, functools.partial(opts["handler"], field, path), id=opts["id"])
             tb.Realize()
@@ -2784,8 +2784,7 @@ class FormDialog(wx.Dialog):
         """Handler for toggling STC word-wrap."""
         fpath = path + (field["name"], )
         ctrl = self._comps[fpath][0]
-        mode = wx.stc.STC_WRAP_WORD if event.IsChecked() else wx.stc.STC_WRAP_NONE
-        ctrl.SetWrapMode(mode)
+        ctrl.SetWordWrap(event.IsChecked())
 
 
     def _OnOpenFile(self, field, path, event=None):
