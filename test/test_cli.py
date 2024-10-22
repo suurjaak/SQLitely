@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     24.06.2024
-@modified    12.10.2024
+@modified    22.10.2024
 ------------------------------------------------------------------------------
 """
 import glob
@@ -867,6 +867,7 @@ class TestCLI(FileTest):
             pragmas = set(re.sub(r"PRAGMA (\w+)\s=.+$", r"\1", x) for x in out.splitlines()
                           if x.startswith("PRAGMA"))
             pragmas.discard("compile_options") # Unreliable over different python/sqlite versions
+            pragmas.discard("trusted_schema") # Unreliable over different python/sqlite versions
             pragmas.discard("pragma_list") # Became always available from SQLite v3.30.0
             self.assertEqual(pragmas, set(expecteds),
                              "Unexpected output in pragma for %r." % filterset)
