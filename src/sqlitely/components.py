@@ -6180,6 +6180,7 @@ class SchemaObjectPage(wx.Panel):
                 ctrl  = dlg._comps[("sql", )][0]
                 ctrl.SetSelection(start, end)
                 ctrl.SetFocus()
+                err = util.ellipsize(err, limit=150)
             wx.MessageBox("Cannot apply SQL.\n\n%s" % err,
                           conf.Title, wx.OK | wx.ICON_ERROR)
             return False
@@ -6189,7 +6190,7 @@ class SchemaObjectPage(wx.Panel):
                   "tb": [{"type": "numbers", "help": "Show line numbers",
                           "toggle": True, "bmp": images.ToolbarNumbered.Bitmap,
                           "on": self._tb_sql.GetToolState(wx.ID_INDENT)},
-                         {"type": "wrap",    "help": "Word-wrap",
+                         {"type": "wrap", "help": "Word-wrap",
                           "toggle": True, "bmp": images.ToolbarWordWrap.Bitmap,
                           "on": self._tb_sql.GetToolState(wx.ID_STATIC)},
                          {"type": "sep"},

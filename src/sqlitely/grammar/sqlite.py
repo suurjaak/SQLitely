@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    19.10.2024
+@modified    22.10.2024
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -468,7 +468,8 @@ class Parser(object):
         result, err = None, None
         ctx, errors = self.parse_tree(sql, category)
         if not errors: result = self.build(ctx, renames)
-        else: err = "\n\n".join(e.message if isinstance(e, ParseError) else e for e in errors)
+        else: err = "\n\n".join(util.ellipsize(e.message, limit=150) if isinstance(e, ParseError)
+                                else e for e in errors)
         return result, err
 
 
