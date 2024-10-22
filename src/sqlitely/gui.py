@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.10.2024
+@modified    22.10.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -7312,10 +7312,12 @@ class DatabasePage(wx.Panel):
         """Handler for clicking to edit tree item, allows if schema item node."""
         tree = event.EventObject
         data = tree.GetItemPyData(event.GetItem())
-        if not data or data.get("type") not in self.db.CATEGORIES + ["column"] \
-        or tree.GetEditControl() \
-        or tree is self.tree_schema \
-        and data.get("parent", {}).get("level") not in ("category", "table"):
+        is_already_editing = tree.GetEditControl()
+        item_type, item_parent = (data.get("type"), data.get("parent")) if data else (None, {})
+        is_renameable_item = item_type in self.db.CATEGORIES + ["column"]
+        if "column" == item_type and tree is self.tree_schema:
+            is_renameable_item = item_parent.get("level") == "table" # No rename on view/index cols
+        if is_already_editing or not is_renameable_item:
             event.Veto()
 
 
