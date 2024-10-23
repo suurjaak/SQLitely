@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.10.2024
+@modified    23.10.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3874,7 +3874,8 @@ class DatabasePage(wx.Panel):
 
             self.toggle_cursors(category, name, close=True)
             self.db.rename_item(category, name, name2)
-            self.reload_schema()
+            self.db.populate_schema(parse=True)
+            wx.CallAfter(self.reload_schema) # Avoid issues with rebuilding tree being edited
 
             # Update name of the item's data/schema pages
             for page, pagemap, nb in zip(pages, [self.data_pages, self.schema_pages],
@@ -3948,7 +3949,8 @@ class DatabasePage(wx.Panel):
 
             self.toggle_cursors("table", name, close=True)
             self.db.rename_column(table, name, name2)
-            self.reload_schema()
+            self.db.populate_schema(parse=True)
+            wx.CallAfter(self.reload_schema) # Avoid issues with rebuilding tree being edited
             self.toggle_cursors("table", table)
             return True
 
