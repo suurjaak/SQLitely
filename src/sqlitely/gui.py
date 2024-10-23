@@ -4720,7 +4720,7 @@ class DatabasePage(wx.Panel):
         namelabel = util.plural("name", self.diagram.Selection or self.diagram.Items, numbers=False)
 
         copy_hotkey = "\t(%s-C)" % controls.KEYS.NAME_CTRL
-        item_names = wx.MenuItem(menu, -1, "Copy %s &%s" % (label, namelabel))
+        item_names = wx.MenuItem(menu, -1, "Copy %s&%s" % (label, namelabel))
         item_sql   = wx.MenuItem(menu, -1, "Copy %sCREATE S&QL%s" % (label, copy_hotkey))
         item_all   = wx.MenuItem(menu, -1, "Copy all &related SQL")
         item_bmp   = wx.MenuItem(menu, -1, "Copy %sas &bitmap%s" % (label, copy_hotkey))
