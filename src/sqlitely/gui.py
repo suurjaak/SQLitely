@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.10.2024
+@modified    24.10.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -7324,11 +7324,11 @@ class DatabasePage(wx.Panel):
 
 
     def on_editend_tree(self, event):
-        """Handler for clicking to edit tree item, allows if schema item node."""
-        if event.IsEditCancelled(): return
-
-        do_veto = True
+        """Handler for ending tree item edit, carries out rename."""
+        do_veto = False
         try:
+            if event.IsEditCancelled(): return
+            do_veto = True
             data = event.EventObject.GetItemPyData(event.GetItem())
             name2 = event.GetLabel().strip()
             if name2:
@@ -7336,11 +7336,13 @@ class DatabasePage(wx.Panel):
                 if "column" == data["type"]:
                     cmd = "rename column"
                     args = data["parent"]["name"], data["name"], name2
-                do_veto = not self.handle_command(cmd, *args)
+                do_veto = False if self.handle_command(cmd, *args) else True
         finally:
             if do_veto:
-                event.Veto()
-                event.EventObject.SetFocus()
+                event.Veto() # Cancel label change
+            # TreeListCtrl tends to lose focus after edit, some internal shenanigans
+            tree = event.EventObject
+            wx.CallLater(100, lambda: tree and tree.GetMainWindow().SetFocusIgnoringChildren())
 
 
     def on_tree_menu(self, event):
