@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    22.10.2024
+@modified    24.10.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -8196,6 +8196,18 @@ class TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
             for f in self._handlers.get(wx.EVT_TREE_ITEM_ACTIVATED): f(evt)
 
 
+    def _OnEditChar(self, event):
+        """Handler for keypress in label edit control, stops editing on Enter or Escape."""
+        keycode = event.GetKeyCode()
+        if keycode in KEYS.ENTER and not event.ShiftDown():
+            event.EventObject.AcceptChanges()
+            wx.CallAfter(event.EventObject.Finish)
+        elif keycode in KEYS.ESCAPE:
+            wx.CallAfter(event.EventObject.StopEditing)
+        else:
+            event.Skip()
+
+
     def CreateEditCtrl(self, item, column):
         """
         Creates an edit control for editing a label of an item.
@@ -8208,6 +8220,10 @@ class TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
             event.Skip()
             if ctrl: wx.CallAfter(ctrl.StopEditing)
         ctrl.Bind(wx.EVT_KILL_FOCUS, on_kill_focus)
+        if wx.VERSION >= (4, 1) and "linux" in sys.platform:
+            # Workaround for wxPython issue #1938 on crashing in Linux
+            ctrl.Unbind(wx.EVT_CHAR, source=ctrl, handler=ctrl.OnChar)
+            ctrl.Bind(wx.EVT_CHAR, self._OnEditChar)
         return ctrl
 
 
