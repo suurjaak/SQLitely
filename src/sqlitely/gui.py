@@ -3874,8 +3874,7 @@ class DatabasePage(wx.Panel):
 
             self.toggle_cursors(category, name, close=True)
             self.db.rename_item(category, name, name2)
-            self.db.populate_schema(parse=True)
-            wx.CallAfter(self.reload_schema) # Avoid issues with rebuilding tree being edited
+            self.reload_schema()
 
             # Update name of the item's data/schema pages
             for page, pagemap, nb in zip(pages, [self.data_pages, self.schema_pages],
@@ -3949,8 +3948,7 @@ class DatabasePage(wx.Panel):
 
             self.toggle_cursors("table", name, close=True)
             self.db.rename_column(table, name, name2)
-            self.db.populate_schema(parse=True)
-            wx.CallAfter(self.reload_schema) # Avoid issues with rebuilding tree being edited
+            self.reload_schema()
             self.toggle_cursors("table", table)
             return True
 
@@ -7325,24 +7323,25 @@ class DatabasePage(wx.Panel):
 
     def on_editend_tree(self, event):
         """Handler for ending tree item edit, carries out rename."""
-        do_veto = False
-        try:
-            if event.IsEditCancelled(): return
-            do_veto = True
+        def do_rename(tree, cmd, args):
+            if not self: return
+            self.handle_command(cmd, *args)
+            wx.CallLater(1, lambda: tree and tree.GetMainWindow().SetFocusIgnoringChildren())
+
+        tree, cmd, args = event.EventObject, None, None
+        if not event.IsEditCancelled():
+            event.Veto() # Cancel change on existing tree, as rename rebuilds it all
             data = event.EventObject.GetItemPyData(event.GetItem())
             name2 = event.GetLabel().strip()
-            if name2:
+            if name2 and name2 != data["name"]:
                 cmd, args = "rename", (data["type"], data["name"], name2)
                 if "column" == data["type"]:
                     cmd = "rename column"
                     args = data["parent"]["name"], data["name"], name2
-                do_veto = False if self.handle_command(cmd, *args) else True
-        finally:
-            if do_veto:
-                event.Veto() # Cancel label change
-            # TreeListCtrl tends to lose focus after edit, some internal shenanigans
-            tree = event.EventObject
-            wx.CallLater(100, lambda: tree and tree.GetMainWindow().SetFocusIgnoringChildren())
+        if cmd: # Async to avoid crashes in Linux: popup or tree change during handler can segfault
+            wx.CallAfter(do_rename, event.EventObject, cmd, args)
+        else: # TreeListCtrl tends to lose active focus after edit from some internal shenanigans
+            wx.CallLater(1, lambda: tree and tree.GetMainWindow().SetFocusIgnoringChildren())
 
 
     def on_tree_menu(self, event):
