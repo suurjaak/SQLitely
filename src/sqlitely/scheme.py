@@ -976,7 +976,7 @@ class SchemaDiagram(object):
         if LayoutStyle.GRID == self._layout.Style:
             order, reverse = self._layout.Options["order"], bool(self._layout.Options["reverse"])
             optorder = lambda c, n: 0
-            typeorder = lambda c: (c == "view") ^ (not reverse)  # Sort views always to the end
+            typeorder = lambda c: (c == "view") != reverse  # Sort views always to the end
             if "columns" == order:
                 optorder = lambda c, n: len(self._db.schema[c].get(n, {}).get("columns", []))
             elif "rows" == order:
