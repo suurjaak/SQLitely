@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    08.10.2024
+@modified    25.10.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -1421,7 +1421,10 @@ class SchemaDiagram(object):
         fdc = wx.MemoryDC(bmpsel)
         fdc.Background = controls.BRUSH(self.SelectionColour)
         fdc.Clear()
-        fdc.DrawBitmap(bmp, self.FMARGIN, self.FMARGIN, useMask=True)
+        shift = 0
+        if self._zoom % 0.5 in (self.ZOOM_STEP, self.ZOOM_STEP * 2):
+            shift = -1 # Heuristic: needs adjustment if zoom 1-2 steps above half or whole
+        fdc.DrawBitmap(bmp, self.FMARGIN + shift, self.FMARGIN + shift, useMask=True)
         fdc.SelectObject(wx.NullBitmap)
         del fdc
         if CRADIUS: bmpsel.SetMask(wx.Mask(sbmp, wx.TRANSPARENT_BRUSH.Colour))
