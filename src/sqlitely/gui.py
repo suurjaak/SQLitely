@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.10.2024
+@modified    25.10.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -6949,11 +6949,12 @@ class DatabasePage(wx.Panel):
         combo.Enable(self.diagram.Enabled)
 
 
-    def get_tree_state(self, tree, root):
+    def get_tree_state(self, tree, root=None):
         """
         Returns ({data, children: [{data, children}]} for expanded nodes,
                  {selected item data}).
         """
+        if root is None: root = tree.RootItem
         if not root or not root.IsOk(): return None, None
 
         item = tree.GetNext(root) if tree.IsExpanded(root) else None
@@ -6969,36 +6970,60 @@ class DatabasePage(wx.Panel):
         return state, sel
 
 
-    def set_tree_state(self, tree, root, state, have_selected=False):
+    def set_tree_state(self, tree, state, root=None, _select_item=None, _level=0):
         """Sets tree expanded state."""
-        state, sel = state
-        if not state and not sel: return have_selected
+        rootdata, selecteddata = state
+        if not rootdata and not selecteddata: return _select_item
 
-        key_match = lambda x, y, k, n=False: (n or x.get(k)) and x.get(k) == y.get(k)
-        parent_match = lambda x, y: x.get("parent") and y.get("parent") \
-                                    and key_match(x["parent"], y["parent"], "type") \
-                                    and key_match(x["parent"], y["parent"], "category", True) \
-                                    and (key_match(x["parent"], y["parent"], "name") or 
-                                         key_match(x["parent"], y["parent"], "__id__"))
-        has_match = lambda x, y: x == y or (
-            key_match(y, x, "category") if "category" == y.get("type")
-            else key_match(y, x, "type") and (
-                key_match(y, x, "name") or key_match(y, x, "__id__") or parent_match(y, x)
-            )
-        )
+        def key_match(item1, item2, key, optional=False): # Returns whether items have same value
+            if not optional and key not in item1: return False
+            return item1.get(key) == item2.get(key)
 
-        if state: tree.Expand(root)
+        def parent_match(item1, item2): # Returns whether item parents match
+            parent1, parent2 = item1.get("parent"), item2.get("parent")
+            if not key_match(item1, item2, "type") or not parent1 or not parent2:
+                return False
+            if not key_match(parent1, parent2, "type"):
+                return False
+            if not key_match(parent1, parent2, "category", optional=True):
+                return False
+            return key_match(parent1, parent2, "name", optional=True) or \
+                   key_match(parent1, parent2, "__id__", optional=True)
+
+        def has_match(item1, item2): # Returns whether items match by type, category and name/id
+            if item1 == item2: return True
+            if "category" == item1.get("type"):
+                return key_match(item1, item2, "category")
+            if not key_match(item1, item2, "type"):
+                return False
+            if "columns" == item1["type"]:
+                return parent_match(item1, item2)
+            return key_match(item1, item2, "name") or key_match(item1, item2, "__id__")
+
+        if root is None: root = tree.RootItem
+        if rootdata: tree.Expand(root)
         item = tree.GetNext(root)
         while item and item.IsOk():
-            mydata = tree.GetItemPyData(item)
-            if not have_selected and sel and has_match(sel, mydata):
-                tree.SelectItem(item)
-                have_selected = True
-            mystate = next((x for x in state["children"] if has_match(x["data"], mydata)), None) \
-                      if state and "children" in state else None
-            if mystate: have_selected = self.set_tree_state(tree, item, (mystate, sel), have_selected)
+            itemdata1, itemdata2 = None, tree.GetItemPyData(item)
+            if selecteddata:
+                item_matches = has_match(selecteddata, itemdata2)
+                parent_matches = parent_match(selecteddata, itemdata2)
+                if item_matches and parent_matches and _select_item is not True:
+                    tree.SelectItem(item)
+                    _select_item = True
+                elif not _select_item and parent_matches:
+                    _select_item = item # Mark candidate for later selecting if no exact match found
+            if rootdata and "children" in rootdata:
+                itemdata1 = next((x for x in rootdata["children"]
+                                  if has_match(x["data"], itemdata2)), None)
+            if itemdata1:
+                itemstate = (itemdata1, selecteddata)
+                _select_item = self.set_tree_state(tree, itemstate, item, _select_item, _level + 1)
             item = tree.GetNextSibling(item)
-        return have_selected
+        if _level == 0 and _select_item and _select_item is not True: # Fallback to closest
+            tree.SelectItem(_select_item)
+            _select_item = True
+        return _select_item
 
 
     def load_tree_data(self, refresh=False):
@@ -7010,7 +7035,7 @@ class DatabasePage(wx.Panel):
         gauge.Value, gauge.ToolTip = 0, "Populating.. 0%"
         gauge.Show()
         gauge.ContainingSizer.Layout()
-        expandeds = self.get_tree_state(tree, tree.RootItem)
+        expandeds = self.get_tree_state(tree)
         tree.DeleteAllItems()
         if (wx.YieldIfNeeded() or True) and not self: return
 
@@ -7071,7 +7096,7 @@ class DatabasePage(wx.Panel):
             for top in tops if not any(expandeds) else (): tree.Expand(top)
             tree.SetColumnWidth(1, 100)
             tree.SetColumnWidth(0, tree.Size[0] - 130)
-            self.set_tree_state(tree, tree.RootItem, expandeds)
+            self.set_tree_state(tree, expandeds)
         finally:
             if self:
                 self.button_refresh_data.Enable()
@@ -7090,7 +7115,7 @@ class DatabasePage(wx.Panel):
         gauge.Value, gauge.ToolTip = 0, "Populating.. 0%"
         gauge.Show()
         gauge.ContainingSizer.Layout()
-        expandeds = self.get_tree_state(tree, tree.RootItem)
+        expandeds = self.get_tree_state(tree)
         tree.DeleteAllItems()
         if (wx.YieldIfNeeded() or True) and not self: return
 
@@ -7241,7 +7266,7 @@ class DatabasePage(wx.Panel):
             tree.SetColumnWidth(1, 150)
             tree.Expand(root)
             for top in tops if not any(expandeds) else (): tree.Expand(top)
-            self.set_tree_state(tree, tree.RootItem, expandeds)
+            self.set_tree_state(tree, expandeds)
         finally:
             if self:
                 self.button_refresh_schema.Enable()
