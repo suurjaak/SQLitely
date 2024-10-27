@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.10.2024
+@modified    27.10.2024
 """
 import calendar
 import collections
@@ -395,7 +395,7 @@ def match_keywords(texts, keywords, name, case=False, neg="-", when=any):
     """
     provals, convals = keywords.get(name), keywords.get(neg + name)
     pros, cons = [], []
-    for text in ([texts] if isinstance(texts, six.text_type) else texts):
+    for text in ([texts] if isinstance(texts, six.string_types) else texts):
         pros.append(match_words(text, provals, case, when) if provals else None)
         cons.append(match_words(text, convals, case, when) if convals else None)
     if set(pros + cons) == set([None]): return None 
