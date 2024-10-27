@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.10.2024
+@modified    27.10.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -7350,7 +7350,11 @@ class DatabasePage(wx.Panel):
         """Handler for ending tree item edit, carries out rename."""
         def do_rename(tree, cmd, args):
             if not self: return
+            tree_state, selected = self.get_tree_state(tree)
             self.handle_command(cmd, *args)
+            if "rename column" == cmd:
+                selected["name"] = args[-1]
+                self.set_tree_state(tree, (tree_state, selected))
             wx.CallLater(1, lambda: tree and tree.GetMainWindow().SetFocusIgnoringChildren())
 
         tree, cmd, args = event.EventObject, None, None
