@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    20.10.2024
+@modified    28.10.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -73,7 +73,8 @@ ARGUMENTS = {
         {"args": ["--verbose"], "action": "store_true",
          "help": "print detailed logging messages to stderr"},
         {"args": ["--config-file"], "dest": "config_file", "metavar": "FILE",
-         "help": "path of program configuration file to use"}
+         "help": "path of program configuration file to use"},
+        {"args": ["--binary-wait"], "type": int, "help": argparse.SUPPRESS},
     ],
 
     "commands": [
@@ -132,6 +133,7 @@ ARGUMENTS = {
               "help": "print detailed logging messages to stderr"},
              {"args": ["--config-file"], "dest": "config_file", "metavar": "FILE",
               "help": "path of program configuration file to use"},
+             {"args": ["--binary-wait"], "type": int, "help": argparse.SUPPRESS},
         ]},
         {"name": "export",
          "help": "export SQLite database in various output formats",
@@ -190,6 +192,7 @@ ARGUMENTS = {
               "help": "print detailed logging messages to stderr"},
              {"args": ["--config-file"], "dest": "config_file", "metavar": "FILE",
               "help": "path of program configuration file to use"},
+             {"args": ["--binary-wait"], "type": int, "help": argparse.SUPPRESS},
         ]},
         {"name": "import",
          "help": "import data from file to database ",
@@ -241,6 +244,7 @@ ARGUMENTS = {
               "help": "print detailed logging messages to stderr"},
              {"args": ["--config-file"], "dest": "config_file", "metavar": "FILE",
               "help": "path of program configuration file to use"},
+             {"args": ["--binary-wait"], "type": int, "help": argparse.SUPPRESS},
         ]},
         {"name": "parse",
          "help": "search in SQLite database schema",
@@ -272,6 +276,7 @@ ARGUMENTS = {
               "help": "print detailed logging messages to stderr"},
              {"args": ["--config-file"], "dest": "config_file", "metavar": "FILE",
               "help": "path of program configuration file to use"},
+             {"args": ["--binary-wait"], "type": int, "help": argparse.SUPPRESS},
         ]},
         {"name": "pragma",
          "help": "output SQLite database PRAGMAs",
@@ -292,6 +297,7 @@ ARGUMENTS = {
              {"args": ["--verbose"], "action": "store_true", "help": argparse.SUPPRESS},
              {"args": ["--config-file"], "dest": "config_file", "metavar": "FILE",
               "help": "path of program configuration file to use"},
+             {"args": ["--binary-wait"], "type": int, "help": argparse.SUPPRESS},
         ]},
         {"name": "search",
          "help": "search in SQLite database data",
@@ -350,6 +356,7 @@ ARGUMENTS = {
               "help": "print detailed logging messages to stderr"},
              {"args": ["--config-file"], "dest": "config_file", "metavar": "FILE",
               "help": "path of program configuration file to use"},
+             {"args": ["--binary-wait"], "type": int, "help": argparse.SUPPRESS},
         ]},
         {"name": "stats",
          "help": "print or save database statistics",
@@ -384,9 +391,13 @@ ARGUMENTS = {
               "help": "print detailed logging messages to stderr"},
              {"args": ["--config-file"], "dest": "config_file", "metavar": "FILE",
               "help": "path of program configuration file to use"},
+             {"args": ["--binary-wait"], "type": int, "help": argparse.SUPPRESS},
         ]},
     ],
 }
+
+## Seconds to wait before exiting binary executable command-line use
+BINARY_WAIT = 60
 
 
 logger = logging.getLogger(__package__)
@@ -496,7 +507,7 @@ class ConsoleWriter(object):
             q.put(None)
 
         def ticker():
-            countdown = 60
+            countdown = BINARY_WAIT
             txt = "\rClosing window in %s.. Press ENTER to exit."
             while countdown > 0 and q.empty():
                 output(txt, countdown, end=" ")
@@ -1842,7 +1853,7 @@ def run_gui(filenames):
 
 def run(nogui=False):
     """Parses command-line arguments, and runs GUI or a CLI action."""
-    global cli_args, is_gui_possible, logger
+    global cli_args, is_gui_possible, logger, BINARY_WAIT
 
     warnings.simplefilter("ignore", UnicodeWarning)
 
@@ -1879,8 +1890,9 @@ def run(nogui=False):
         argv[:2] = argv[:2][::-1] # Swap "-h option" to "option -h"
 
     arguments = argparser.parse_args(argv)
-    infile0 = getattr(arguments, "INFILE", None)
+    if getattr(arguments, "binary_wait", None) is not None: BINARY_WAIT = arguments.binary_wait
 
+    infile0 = getattr(arguments, "INFILE", None)
     for argname in ("INFILE", "OUTFILE"): # Expand wildcards, convert Windows shortpaths to long
         filearg = filearg0 = getattr(arguments, argname, [])
         if filearg:
