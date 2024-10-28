@@ -473,8 +473,7 @@ class ConsoleWriter(object):
         except Exception:
             pass # Okay if fails: can be python.exe from console
         try:
-            handle = win32console.GetStdHandle(
-                                  win32console.STD_OUTPUT_HANDLE)
+            handle = win32console.GetStdHandle(win32console.STD_OUTPUT_HANDLE)
             handle.WriteConsole("\n")
             ConsoleWriter.handle = handle
             ConsoleWriter.realwrite = handle.WriteConsole
@@ -892,13 +891,14 @@ def do_output(action, args, func, entities, files):
         infoput("%s %s: %s (%s)", past.capitalize(), adverb, os.path.abspath(args.INFILE),
                                   fmt_bytes(args.INFILE, database.get_size))
         punct = ":" if count_total["count"] or not getattr(args, "no_empty", False) else "."
-        if args.OUTFILE and (getattr(args, "combine", False) or len(files) == 1):
-            infoput("Wrote %s to '%s' (%s)%s", util.count(count_total, "row"),
-                                              args.OUTFILE, fmt_bytes(args.OUTFILE), punct)
-        elif args.OUTFILE:
-            infoput("Wrote %s to %s (%s)%s",
-                    util.count(count_total, "row"), util.plural("file", files),
-                    util.format_bytes(sum(os.path.getsize(f) for f in files.values())), punct)
+        if args.OUTFILE:
+            if len(files) == 1 and args.OUTFILE in files:
+                infoput("Wrote %s to '%s' (%s)%s", util.count(count_total, "row"),
+                                                  args.OUTFILE, fmt_bytes(args.OUTFILE), punct)
+            else:
+                infoput("Wrote %s to %s (%s)%s",
+                        util.count(count_total, "row"), util.plural("file", files),
+                        util.format_bytes(sum(os.path.getsize(f) for f in files.values())), punct)
         else:
             infoput("Printed %s to console%s" % (util.count(count_total, "row"), punct))
         orderer = reversed if getattr(args, "reverse", False) else list
