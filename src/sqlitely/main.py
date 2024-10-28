@@ -521,6 +521,7 @@ class ConsoleWriter(object):
             t.daemon = True
             t.start()
         q.get()
+        os._exit(0)
 
 
 

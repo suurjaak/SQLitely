@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.4, 2024-10-25
+2.4, 2024-10-28
 ---------------
 - add support for generated columns
 - add find/replace dialog to data grids and column editors and database schema text
@@ -38,6 +38,7 @@ CHANGELOG
 - fix not having counts/bytes on schema diagram in statistics export
 - fix renaming item in data/schema tree crashing in Linux
 - fix diagram items shifting on select at certain zoom levels
+- fix compiled binary crashing on waiting until timeout
 - shorten SQL parsing error texts in schema editor popups
 - refactor import-export functionality to classes
 - update SQL grammar up to SQLite version 3.46
