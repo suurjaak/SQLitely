@@ -3,13 +3,15 @@
 """
 Tests command-line interface.
 
+Supports testing compiled binary via environment variable SQLITELY_BINARY as path to exe.
+
 ------------------------------------------------------------------------------
 This file is part of SQLitely - SQLite database tool.
 Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     24.06.2024
-@modified    22.10.2024
+@modified    28.10.2024
 ------------------------------------------------------------------------------
 """
 import glob
@@ -42,6 +44,9 @@ logger = logging.getLogger()
 class TestCLI(FileTest):
     """Tests the command-line interface."""
 
+    ## Path to compiled binary to use instead of executing Python source
+    BINARY = None
+
 
     def __init__(self, *args, **kwargs):
         super(TestCLI, self).__init__(*args, **kwargs)
@@ -53,6 +58,7 @@ class TestCLI(FileTest):
         """Populates temporary file paths."""
         super(TestCLI, self).setUp()
         self._dbname = self.mktemp(".db")
+        self.BINARY = os.getenv("SQLITELY_BINARY")
 
 
     def tearDown(self):
@@ -68,10 +74,26 @@ class TestCLI(FileTest):
         workdir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
         args = [str(x) for x in args]
         cmd = ["python", "-m", "sqlitely", command] + list(args)
+
+        binary_outfile = None
+        if self.BINARY: # Testing the command-line interface of a compiled binary
+            cmd = [self.BINARY, command] + list(args) + ["--binary-wait", "1"]
+            if "--path" not in args: # Patch in flags to ensure output into single file
+                if command in ("export", "search") and "--combine" not in args:
+                    cmd += ["--combine"]
+                if "import" != command and "-o" not in args:
+                    binary_outfile = self.mktemp()
+                    cmd += ["-o", binary_outfile]
+                    if "execute" == command and "--allow-empty" not in args:
+                        cmd += ["--allow-empty"]
+
         logger.debug("Executing command %r.", " ".join(repr(x) if " " in x else x for x in cmd))
         self._proc = subprocess.Popen(cmd, universal_newlines=True, cwd=workdir,
                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out, err = (x.strip() for x in self._proc.communicate(**TIMEOUT))
+        if binary_outfile and os.path.isfile(binary_outfile):
+            with open(binary_outfile) as f: out = f.read()
+
         logger.debug("Command result: %r.", self._proc.poll())
         if out: logger.debug("Command stdout:\n%s", out)
         if err: logger.debug("Command stderr:\n%s", err)
@@ -156,7 +178,8 @@ class TestCLI(FileTest):
         """Tests 'execute': queries on missing or blank database."""
         logger.info("Testing failure of query on nonexistent file.")
         res, out, err = self.run_cmd("execute", self._dbname, "SELECT 1")
-        self.assertTrue(res, "Unexpected success from query on nonexistent file.")
+        self.assertTrue(res, "Unexpected success from query on nonexistent file.") \
+            if not self.BINARY else None # Result from binary always success, uses its own console
 
         logger.info("Testing success of query on nonexistent file.")
         res, out, err = self.run_cmd("execute", self._dbname, "SELECT 1", "--create", "-f", "json")
