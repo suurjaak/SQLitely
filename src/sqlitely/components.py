@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.10.2024
+@modified    31.10.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -4613,7 +4613,7 @@ class SchemaObjectPage(wx.Panel):
             style=wx.CB_DROPDOWN | wx.CB_READONLY)
         for j, x in enumerate(choicecols): list_column.SetClientData(j, x)
         list_column.MinSize = (200, -1)
-        list_column.Value = util.unprint(col["name"])
+        if col["name"] is not None: list_column.Value = util.unprint(col["name"])
 
         if insert:
             start = panel.Sizer.Cols * i
