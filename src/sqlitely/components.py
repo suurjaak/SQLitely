@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    31.10.2024
+@modified    01.11.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -6558,7 +6558,8 @@ class SchemaObjectPage(wx.Panel):
                     data["table"][alterargs["name2"]] = self._item["sql0" if self._sql0_applies else "sql"]
                     for category in ("index", "view", "trigger"):
                         for subitem in alterargs.get(category) or ():
-                            data[category][subitem["name"]] = subitem["sql"]
+                            if subitem.get("sql"): # Not dropped
+                                data[category][subitem["name"]] = subitem["sql"]
                 for reltable in alterargs.get("table") or ():
                     if reltable["name"] == grammar.quote(reltable["name"]):
                         data["table"][reltable["name"]] = reltable["sql0"]
