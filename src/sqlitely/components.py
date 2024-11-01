@@ -6552,7 +6552,7 @@ class SchemaObjectPage(wx.Panel):
             # sets a quoted name "y" to CREATE statements, including related objects,
             # regardless of whether the name required quoting.
             data = defaultdict(dict) # {category: {name: SQL}}
-            if not self._newmode and "table" == self._category and alterargs \
+            if is_simple_alter and "table" == self._category and alterargs \
             and ("tempname" in alterargs or alterargs["name"] != alterargs["name2"]):
                 if alterargs["name2"] == grammar.quote(alterargs["name2"]):
                     data["table"][alterargs["name2"]] = self._item["sql0" if self._sql0_applies else "sql"]

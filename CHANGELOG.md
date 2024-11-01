@@ -41,6 +41,7 @@ CHANGELOG
 - fix compiled binary crashing on waiting until timeout
 - fix error on adding column to trigger in schema editor
 - fix error on dropping table column used in related indexes or triggers
+- fix not retaining complex ALTER TABLE results in related tables
 - shorten SQL parsing error texts in schema editor popups
 - refactor import-export functionality to classes
 - update SQL grammar up to SQLite version 3.46
