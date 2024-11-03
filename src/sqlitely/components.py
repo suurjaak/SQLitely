@@ -1907,7 +1907,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
     def __init__(self, parent, db, id=wx.ID_ANY, pos=wx.DefaultPosition,
                  size=wx.DefaultSize):
         """
-        @param   page  target to send EVT_SCHEMA_PAGE events to
+        @param   parent  target to send EVT_SCHEMA_PAGE events to
         """
         wx.Panel.__init__(self, parent, pos=pos, size=size)
         ColourManager.Manage(self, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
