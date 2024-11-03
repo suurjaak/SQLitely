@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.10.2024
+@modified    03.11.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4504,7 +4504,7 @@ class DatabasePage(wx.Panel):
             util.run_once(conf.save)
 
 
-    def on_diagram_toggle(self, event=None):
+    def on_diagram_toggle(self, event):
         """Handler for toggling diagram on/off."""
         self.diagram.Enable(event.IsChecked())
         if event.IsChecked(): self.diagram.Populate()
@@ -6186,6 +6186,8 @@ class DatabasePage(wx.Panel):
             self.load_tree_schema()
             self.diagram.Populate()
             self.populate_diagram_finder()
+            self.update_info_panel()
+            self.on_update_statistics()
             self.on_update_stc_schema()
 
             relnames = {n: n for c, xx in self.db.get_related(category, name).items() for n in xx} \
