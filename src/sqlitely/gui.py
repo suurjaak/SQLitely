@@ -2343,12 +2343,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             logger.info("Closed database %s.", page.db)
         # Remove any dangling references
         self.pages_visited = [x for x in self.pages_visited if x != page]
-        if self.page_db_latest == page:
+        if page is self.page_db_latest: # Swap out page variable in console
             self.page_db_latest = next((i for i in self.pages_visited[::-1]
                                         if isinstance(i, DatabasePage)), None)
-            CMDS = ["page = self.page_db_latest # Database tab",
-                    "db = page.db if page else None # SQLite database wrapper"]
-            for cmd in CMDS: self.TopLevelParent.run_console(cmd)
+            self.run_console("page = self.page_db_latest # Database tab")
+            self.run_console("db = page.db if page else None # SQLite database wrapper")
         wx.CallAfter(ColourManager.UpdateControls)
         self.SendSizeEvent() # Multiline wx.Notebooks need redrawing
 
@@ -2451,6 +2450,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 self.db_pages[page] = db
                 util.run_once(conf.save)
                 if not page: return # User closed page before loading was complete
+
+                self.page_db_latest = page
+                self.run_console("page = self.page_db_latest # Database tab")
+                self.run_console("db = page.db # SQLite database wrapper")
                 self.Bind(wx.EVT_LIST_DELETE_ALL_ITEMS,
                           self.on_clear_searchall, page.edit_searchall)
         else:
@@ -2596,11 +2599,6 @@ class DatabasePage(wx.Panel):
             bookstyle |= wx.lib.agw.fmresources.INB_BOLD_TAB_SELECTION
         notebook = self.notebook = wx.lib.agw.labelbook.FlatImageBook(
             self, agwStyle=bookstyle, style=wx.BORDER_STATIC)
-
-        self.TopLevelParent.page_db_latest = self
-        self.TopLevelParent.run_console(
-            "page = self.page_db_latest # Database tab")
-        self.TopLevelParent.run_console("db = page.db # SQLite database wrapper")
 
         self.create_page_search(notebook)
         self.create_page_data(notebook)
@@ -6033,17 +6031,18 @@ class DatabasePage(wx.Panel):
         title = make_unique_page_title(title, self.notebook_data)
         self.notebook_data.Freeze()
         try:
-            p = components.DataObjectPage(self.notebook_data, self.db, data)
-            self.data_pages[data["type"]][data["name"]] = p
-            self.notebook_data.InsertPage(0, page=p, text=title, select=True)
+            page = components.DataObjectPage(self.notebook_data, self.db, data)
+            self.data_pages[data["type"]][data["name"]] = page
+            self.notebook_data.InsertPage(0, page=page, text=title, select=True)
             for i, item in enumerate(self.pages_closed.get(self.notebook_data, [])):
                 if item["type"] == data["type"] and item["name"] == data["name"]:
                     del self.pages_closed[self.notebook_data][i]
                     break # for i, item
         finally: self.notebook_data.Thaw()
         self.TopLevelParent.run_console(
-            "datapage = page.notebook_data.GetPage(0) # Data object subtab")
-        return p
+            "datapage = wx.FindWindowById(%s).notebook_data.GetPage(0) # Data object subtab" %
+            self.Id)
+        return page
 
 
     def add_sql_page(self, name="", text="", console=True):
@@ -6068,7 +6067,7 @@ class DatabasePage(wx.Panel):
         self.sql_pages[name] = p
         self.notebook_sql.InsertPage(0, page=p, text=name, select=True)
         if console: self.TopLevelParent.run_console(
-            "sqlpage = page.notebook_sql.GetPage(0) # SQL window subtab")
+            "sqlpage = wx.FindWindowById(%s).notebook_sql.GetPage(0) # SQL window subtab" % self.Id)
         return p
 
 
@@ -6131,7 +6130,8 @@ class DatabasePage(wx.Panel):
             self.notebook_schema.Thaw()
             if busy: busy.Close()
         self.TopLevelParent.run_console(
-            "schemapage = page.notebook_schema.GetPage(0) # Schema object subtab")
+            "schemapage = wx.FindWindowById(%s).notebook_schema.GetPage(0) # Schema object subtab" %
+            self.Id)
         return p
 
 
@@ -6147,7 +6147,8 @@ class DatabasePage(wx.Panel):
                 self.schema_pages[c].pop(k)
                 break # for c, k, p
         self.TopLevelParent.run_console(
-            "schemapage = page.notebook_schema.GetPage(0) # Schema object subtab")
+            "schemapage = wx.FindWindowById(%s).notebook_schema.GetPage(0) # Schema object subtab" %
+            self.Id)
         self.update_page_header()
 
 
@@ -6282,7 +6283,7 @@ class DatabasePage(wx.Panel):
                     break # for k, p
         finally: wx.CallAfter(lambda: self and self.notebook_sql.Thaw())
         self.TopLevelParent.run_console(
-            "sqlpage = page.notebook_sql.GetPage(0) # SQL window subtab")
+            "sqlpage = wx.FindWindowById(%s).notebook_sql.GetPage(0) # SQL window subtab" % self.Id)
 
 
     def on_close_data_page(self, event):
@@ -6297,7 +6298,8 @@ class DatabasePage(wx.Panel):
                 break # for c, k, p
         self.update_page_header()
         self.TopLevelParent.run_console(
-            "datapage = page.notebook_data.GetPage(0) # Data object subtab")
+            "datapage = wx.FindWindowById(%s).notebook_data.GetPage(0) # Data object subtab" %
+            self.Id)
 
 
     def on_data_page_event(self, event):
