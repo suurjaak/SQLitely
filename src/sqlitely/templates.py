@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.09.2024
+@modified    03.11.2024
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1950,11 +1950,13 @@ fgcolour = conf.PlotTableColour if "table" == category else conf.PlotIndexColour
     <font color="#FFFFFF" size="2"><b>{{! text_cell1 }}</b></font>
 %endif
   </td>
+%if ratio < 1 or text_cell2:
   <td bgcolor="{{ conf.PlotBgColour }}" width="{{ int(round((1 - ratio) * conf.StatisticsPlotWidth)) }}">
-%if text_cell2:
+    %if text_cell2:
     <font color="{{ fgcolour }}" size="2"><b>{{! text_cell2 }}</b></font>
-%endif
+    %endif
   </td>
+%endif
 </tr></table>
 """
 
@@ -2073,6 +2075,7 @@ def wrapclass(v):
     }
     table.plot td {
       color: #FFFFFF;
+      padding: 1px 0;
       text-align: center;
     }
     table.plot.table td:first-child {
@@ -2298,7 +2301,7 @@ def wrapclass(v):
 <%
 index_total = sum(x["size"] for x in stats.get("index", []))
 table_total = sum(x["size"] for x in stats.get("table", []))
-total = index_total + sum(x["size"] for x in stats.get("table", []))
+total = index_total + table_total
 has_rows = any(x.get("count") or 0 for x in db.schema.get("table", {}).values())
 dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
                            for dt in (db.date_created, db.last_modified))
