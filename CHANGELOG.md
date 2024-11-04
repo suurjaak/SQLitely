@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.4, 2024-11-03
+2.4, 2024-11-04
 ---------------
 - add support for generated columns
 - add find/replace dialog to data grids and column editors and database schema text
@@ -19,6 +19,7 @@ CHANGELOG
 - re-hide hidden columns on refreshing data grid
 - use double precision for floating-point values in column editor
 - do not highlight changes in hex view in value editor tool
+- do not reverse entities themselves in command-line interface on --reverse, only their rows
 - mark changed pragma values with asterisks
 - use hourglass cursor while showing busy message
 - allow saving SVG image as SVG in column editor

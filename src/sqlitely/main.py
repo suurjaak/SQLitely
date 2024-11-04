@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.10.2024
+@modified    04.11.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -901,8 +901,7 @@ def do_output(action, args, func, entities, files):
                         util.format_bytes(sum(os.path.getsize(f) for f in files.values())), punct)
         else:
             infoput("Printed %s to console%s" % (util.count(count_total, "row"), punct))
-        orderer = reversed if getattr(args, "reverse", False) else list
-        for item in (x for x in orderer(entities.values())
+        for item in (x for x in entities.values()
                      if x["type"] in database.Database.DATA_CATEGORIES
                      or x["type"] not in database.Database.CATEGORIES):
             if getattr(args, "no_empty", False) and not item.get("count"): continue # for item
@@ -1178,7 +1177,7 @@ def run_export(dbname, args):
     def make_iterables():
         """Yields pairs of ({item}, callable returning iterable cursor)."""
         items = [x for c in db.DATA_CATEGORIES for x in entities.values() if c == x["type"]]
-        for item in (reversed if args.reverse else list)(items):
+        for item in items:
             order_sql = db.get_order_sql(item["name"], reverse=True) if args.reverse else ""
             limit_sql = db.get_limit_sql(*limit, maxcount=args.maxcount, totals=entities.values())
             sql = "SELECT * FROM %s%s%s" % (grammar.quote(item["name"]), order_sql, limit_sql)
@@ -1637,7 +1636,7 @@ def run_search(dbname, args):
 
     def make_iterables():
         """Yields pairs of ({item}, callable returning iterable cursor)."""
-        for item in (reversed if args.reverse else list)(entities.values()):
+        for item in entities.values():
             sql, params, _, _ = queryparser.Parse(args.FILTER, args.case, item)
             if not sql: continue  # for item
 
