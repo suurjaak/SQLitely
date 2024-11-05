@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.11.2024
+@modified    05.11.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -2356,7 +2356,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             args = {"make_iterable": make_iterable, "columns": columns,
                     "query": self._grid.Table.sql, "name": name, "title": title,
                     "info": {"Export options": info} if info else None}
-            sink = importexport.FileDataSink(self._db, filename, extname)
+            sink = importexport.FileDataSink(self._db, extname, filename)
             self.Freeze()
             try:
                 self._dialog_find_grid.Hide()
@@ -3048,7 +3048,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
             args = {"make_iterable": grid.GetRowIterator, "title": util.unprint(title),
                     "columns": columns, "category": self._category, "name": self._item["name"],
                     "info": {"Export options": info} if info else None}
-            sink = importexport.FileDataSink(self._db, filename, extname, self.OnProgress)
+            sink = importexport.FileDataSink(self._db, extname, filename, self.OnProgress)
             opts = {"filename": filename,
                     "callable": functools.partial(sink.export_entity, **args)}
             if grid.IsComplete() and not grid.IsChanged():

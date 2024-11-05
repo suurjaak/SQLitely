@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.11.2024
+@modified    05.11.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -5812,7 +5812,7 @@ class DatabasePage(wx.Panel):
         conf.LastExportType = extname
 
         filename = controls.get_dialog_path(dialog)
-        sink = importexport.FileDataSink(self.db, filename, extname,
+        sink = importexport.FileDataSink(self.db, extname, filename,
                                          self.panel_data_export.OnProgress)
         opts = {"filename": filename, "multi": True,
                 "name": "%s%s to single file" % ("" if names else "all ", categorylabel),
@@ -6404,7 +6404,7 @@ class DatabasePage(wx.Panel):
             existing = next((x for x in filenames if os.path.exists(x)), None)
             if existing and wx.YES != wx.MessageBox(
                 "Some files already exist, like %s.\n"
-                "Do you want to replace them?" % os.path.basename(existing),
+                "Do you want to overwrite them?" % os.path.basename(existing),
                 conf.Title, wx.YES | wx.NO | wx.ICON_WARNING
             ): return
 
@@ -6425,7 +6425,7 @@ class DatabasePage(wx.Panel):
                                         grammar.quote(name, force=True)),
                     "columns": data["columns"], "category": mycategory, "name": name}
             progress = page.OnProgress if page else self.panel_data_export.OnProgress
-            sink = importexport.FileDataSink(self.db, filename, extname, progress)
+            sink = importexport.FileDataSink(self.db, extname, filename, progress)
             exports.append({
                 "filename": filename, "category": mycategory,
                 "name": "all %s to file" % util.plural(mycategory),

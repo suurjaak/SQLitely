@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.11.2024
+@modified    28.10.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1064,7 +1064,7 @@ def run_execute(dbname, args):
     elif args.OUTFILE:
         def do_export():
             title = "SQL query"
-            sink = importexport.FileDataSink(db, args.OUTFILE, args.format, progress)
+            sink = importexport.FileDataSink(db, args.format, args.OUTFILE, progress)
             result = sink.export_query(args.SQL, make_iterable, title, title, item["columns"],
                                        info={"Command": " ".join(cli_args)} if cli_args else None)
             files["query"] = args.OUTFILE
@@ -1165,26 +1165,14 @@ def run_export(dbname, args):
         if args.progress and "table" == item["type"]:
             item.update(db.get_count(item["name"], key="total"))
 
-    schema = collections.OrderedDict() # {category: [name, ]}
-    schema.update((c, [n for n, x in entities.items() if c == x["type"]]) for c in db.CATEGORIES
+    schema = collections.OrderedDict() # {category: {name: {..}}
+    schema.update((c, {n: x for n, x in entities.items() if c == x["type"]}) for c in db.CATEGORIES
                   if any(c == x["type"] for x in entities.values()))
     files = collections.OrderedDict()  # {entity name: output filename}
     maxrow, fromrow, schema_only = args.limit, args.offset, 0 in (args.limit, args.maxcount)
     limit = (maxrow, fromrow) if (fromrow > 0) else (maxrow, ) if (maxrow >= 0) else ()
     progress = make_progress("export", entities, args)
     func, posargs, kwargs = None, [], {}
-
-    def make_iterables():
-        """Yields pairs of ({item}, callable returning iterable cursor)."""
-        items = [x for c in db.DATA_CATEGORIES for x in entities.values() if c == x["type"]]
-        for item in items:
-            order_sql = db.get_order_sql(item["name"], reverse=True) if args.reverse else ""
-            limit_sql = db.get_limit_sql(*limit, maxcount=args.maxcount, totals=entities.values())
-            sql = "SELECT * FROM %s%s%s" % (grammar.quote(item["name"]), order_sql, limit_sql)
-
-            make_iterable = functools.partial(db.select, sql,
-                                              error="Error querying %s." % item["title"])
-            yield item, make_iterable
 
     if "db" == args.format:
         sink = importexport.DatabaseSink(db, args.OUTFILE, progress)
@@ -1201,33 +1189,37 @@ def run_export(dbname, args):
 
     elif args.OUTFILE and args.combine:
         title = "Export from %s" % os.path.basename(dbname)
-        sink = importexport.FileDataSink(db, args.OUTFILE, args.format, progress)
-        sink.configure(maxcount=args.maxcount, allow_empty=not args.no_empty)
+        sink = importexport.FileDataSink(db, args.format, args.OUTFILE, progress)
+        sink.configure(limit=limit, maxcount=args.maxcount, allow_empty=not args.no_empty,
+                       reverse=args.reverse)
         func, posargs = sink.export_combined, [title]
-        kwargs.update(make_iterables=make_iterables,
+        kwargs.update(names=list(entities),
                       info={"Command": " ".join(cli_args)} if cli_args else None)
 
     elif args.OUTFILE:
+        sink = importexport.FileDataSink(db, args.format, progress=progress)
+        sink.configure(limit=limit, maxcount=args.maxcount, allow_empty=not args.no_empty,
+                       reverse=args.reverse)
+
         def do_export():
-            result, basenames = True, []
+            basenames = []
             path, prefix = os.path.split(os.path.splitext(args.OUTFILE)[0])
-            for item, make_iterable in make_iterables():
-                title = util.cap(item["title"], reverse=True)
-                basename = util.make_unique(util.safe_filename(title), basenames, suffix=" (%s)")
+            for category in set(db.CATEGORIES) - set(db.DATA_CATEGORIES):
+                schema.pop(category, None)
+            for item in [x for c in schema for x in schema[c].values()]:
+                basename = util.cap(item["title"], reverse=True)
+                basename = util.make_unique(util.safe_filename(basename), basenames, suffix=" (%s)")
                 basenames.append(basename)
                 filename = "%s.%s" % (" ".join(filter(bool, (prefix, basename))), args.format)
                 filename = os.path.join(path, filename)
                 if not args.overwrite: filename = util.unique_path(filename)
 
-                title = util.cap(item["title"])
-                sink = importexport.FileDataSink(db, filename, args.format, progress)
-                result = sink.export_entity(item["type"], item["name"], make_iterable, title,
-                    item["columns"], info={"Command": " ".join(cli_args)} if cli_args else None
-                )
-                if not result or args.no_empty and not item["count"]:
-                    util.try_ignore(os.unlink, filename)
-                else: files[item["name"]] = filename
-                if not result: break # for item
+                item["filename"] = filename
+                item["title"] = util.cap(item["title"])
+                if cli_args: item["info"] = {"Command": " ".join(cli_args)}
+
+            result = sink.export_separated(schema)
+            files.update(result or {})
             return result
 
         func = do_export
@@ -1235,6 +1227,20 @@ def run_export(dbname, args):
     else: # Print to console
         sink = importexport.ConsoleSink(args.format, output, progress)
         sink.configure(allow_empty=not args.no_empty, combined=True)
+
+        def make_iterables():
+            """Yields pairs of ({item}, callable returning iterable cursor)."""
+            items = [x for c in db.DATA_CATEGORIES for x in entities.values() if c == x["type"]]
+            for item in items:
+                order_sql = db.get_order_sql(item["name"], reverse=True) if args.reverse else ""
+                limit_sql = db.get_limit_sql(*limit, maxcount=args.maxcount,
+                                             totals=entities.values())
+                sql = "SELECT * FROM %s%s%s" % (grammar.quote(item["name"]), order_sql, limit_sql)
+
+                make_iterable = functools.partial(db.select, sql,
+                                                  error="Error querying %s." % item["title"])
+                yield item, make_iterable
+
         func, posargs = sink.write, [make_iterables]
 
     try: do_output("export", args, functools.partial(func, *posargs, **kwargs), entities, files)
@@ -1675,7 +1681,7 @@ def run_search(dbname, args):
         func = output_to_db
 
     elif args.OUTFILE and args.combine:
-        sink = importexport.FileDataSink(db, args.OUTFILE, args.format, progress)
+        sink = importexport.FileDataSink(db, args.format, args.OUTFILE, progress)
         sink.configure(allow_empty=not args.no_empty)
         func = sink.export_combined
         posargs = [make_search_title(args)]
@@ -1683,6 +1689,7 @@ def run_search(dbname, args):
                       info={"Command": " ".join(cli_args)} if cli_args else None)
 
     elif args.OUTFILE:
+
         def do_export():
             result, basenames = True, []
             path, prefix = os.path.split(os.path.splitext(args.OUTFILE)[0])
@@ -1696,7 +1703,7 @@ def run_search(dbname, args):
                 if not args.overwrite: filename = util.unique_path(filename)
 
                 title = [util.cap(item["title"])] + make_search_title(args)
-                sink = importexport.FileDataSink(db, filename, args.format, progress)
+                sink = importexport.FileDataSink(db, args.format, filename, progress)
                 result = sink.export_entity(category, name, make_iterable, title,
                     item["columns"], info={"Command": " ".join(cli_args)} if cli_args else None
                 )

@@ -1024,11 +1024,11 @@ class FileDataSink(Sink):
                      "txt":  templates.DATA_ROWS_TXT,
                      "yaml": templates.DATA_ROWS_YAML}
 
-    def __init__(self, db, filename, format, progress=None):
+    def __init__(self, db, format, filename=None, progress=None):
         """
         @param   db        Database instance
-        @param   filename  full path and filename of resulting file
         @param   format    file format like "csv"
+        @param   filename  full path and filename of resulting file, if single
         @param   progress  callback(name, count) to report progress,
                            returning false if export should cancel
         """
@@ -1075,6 +1075,8 @@ class FileDataSink(Sink):
 
     def export_entity(self, category, name, make_iterable, title, columns, info=None):
         """
+        Exports table or view data to output file.
+
         @param   category        category producing the data, "table" or "view"
         @param   name            name of the table or view producing the data
         @param   make_iterable   function returning iterable sequence yielding rows
@@ -1088,6 +1090,8 @@ class FileDataSink(Sink):
 
     def export_query(self, query, make_iterable, title, name, columns, info=None):
         """
+        Exports query data to output file.
+
         @param   query           the SQL query producing the data
         @param   make_iterable   function returning iterable sequence yielding rows
         @param   title           export title, as string or a sequence of strings
@@ -1099,14 +1103,46 @@ class FileDataSink(Sink):
         return self._export_single(make_iterable, title, columns, name=name, query=query, info=info)
 
 
+    def export_separated(self, schema, make_iterables=None):
+        """
+        Exports data from multiple tables or views to multiple output files.
+
+        @param   schema          {category: {name: {name, type, title, columns, filename, ?info}}}
+        @param   make_iterables  alternative to schema, function yielding pairs of
+                                 ({name, type, title, columns, filename, ?info}, function yielding rows)
+        @return                  {name: filename} on success, False on failure, None on cancel
+        """
+        result, written = False, {}
+        try:
+            for item, make_iterable in self._make_iterables(schema, make_iterables):
+                self._filename = item["filename"]
+                item_args = item["title"], item["columns"], item["type"], item["name"]
+                result = self._export_single(make_iterable, *item_args, info=item.get("info"),
+                                             constrain=False)
+                self._state["writer"] = None
+                if not result:
+                    return result
+                written[item["name"]] = item["filename"]
+            if written:
+                result = written
+        except Exception as e:
+            logger.exception("Error exporting from %s to %s.", self._db, self._filename)
+            util.try_ignore(lambda: self._progress(error=util.format_exc(e), done=True))
+        finally:
+            self._cleanup(result)
+        return result
+
+
     def export_combined(self, title, category=None, names=None, make_iterables=None, info=None):
         """
+        Exports data from multiple tables or views to a single combined output file.
+
         @param   title           export title, as string or a sequence of strings
         @param   category        category to produce the data from, "table" / "view" / None for both
         @param   names           specific entities to export if not all
         @param   make_iterables  function yielding pairs of
                                  ({name, type, title, columns}, function yielding rows)
-                                 if not using category
+                                 if not using category or names
         @param   info            additional metadata for export, as {title: text or {label: text}}
         """
         result = False
@@ -1139,7 +1175,10 @@ class FileDataSink(Sink):
             util.try_ignore(os.unlink, tmpname)
         for category, name in ((c, n) for c in (schema or {}) for n in schema[c]):
             self._db.unlock(category, name, self._filename)
-        if not result: util.try_ignore(os.unlink, self._filename)
+        if not result:
+            util.try_ignore(os.unlink, self._filename)
+            for filename in self._state["itemfiles"]:
+                util.try_ignore(os.unlink, filename)
 
 
     def _collect_schema(self, category, names, make_iterables):
@@ -1156,7 +1195,7 @@ class FileDataSink(Sink):
 
 
     def _export_single(self, make_iterable, title, columns,
-                       category=None, name=None, query=None, info=None):
+                       category=None, name=None, query=None, info=None, constrain=True):
         """Exports entity or query to file, returns True/False/None for success/failure/cancel."""
         result = False
         row_count = 0
@@ -1169,8 +1208,9 @@ class FileDataSink(Sink):
                 if self._check_cancel():
                     result = None
                     return result
-                iterable = self._constrain_iterable(make_iterable, limit=self._flags["limit"],
-                                                    maxcount=self._flags["maxcount"])
+                if not constrain: iterable = make_iterable()
+                else: iterable = self._constrain_iterable(make_iterable, limit=self._flags["limit"],
+                                                          maxcount=self._flags["maxcount"])
                 if self._format in ("csv", "xlsx"):
                     row_count = self._write_item_spreadsheet(iterable, name, query)
                 else:
@@ -1188,6 +1228,8 @@ class FileDataSink(Sink):
             if category and name is not None:
                 self._db.unlock(category, name, make_iterable)
             self._cleanup(result)
+        if result:
+            self._state["itemfiles"][self._filename] = dict(name=name, title=title, count=row_count)
         return result
 
 
