@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.11.2024
+@modified    06.11.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -2211,7 +2211,6 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
                 self._button_export.Enabled = bool(cursor.description)
                 self._button_close.Enabled  = True
             else: # Action query with no returning, or script
-                self._db.log_query("SQL", sql)
                 self._grid.Table = None
                 self._dialog_find_grid.Hide()
                 self._tbgrid.EnableTool(wx.ID_SETUP, False)
@@ -2229,6 +2228,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             self._label_rows.Show(bool(cursor and cursor.description))
             self._label_help.Parent.Layout()
             guibase.status('Executed SQL "%s" (%s).', sql, self._db, log=True)
+            self._db.log_query("SQL", sql)
 
             self._last_sql = sql
             self._last_is_script = script

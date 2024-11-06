@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.4, 2024-11-04
+2.4, 2024-11-06
 ---------------
 - add support for generated columns
 - add find/replace dialog to data grids and column editors and database schema text
@@ -44,6 +44,7 @@ CHANGELOG
 - fix error on dropping table column used in related indexes or triggers
 - fix not retaining complex ALTER TABLE results in related tables
 - fix not updating info page and statistics on adding new schema entity
+- add all user-executed SQL to action history not only action queries
 - shorten SQL parsing error texts in schema editor popups
 - refactor import-export functionality to classes
 - update SQL grammar up to SQLite version 3.46
