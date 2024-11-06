@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.11.2024
+@modified    06.11.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -892,7 +892,7 @@ def do_output(action, args, func, entities, files):
                                   fmt_bytes(args.INFILE, database.get_size))
         punct = ":" if count_total["count"] or not getattr(args, "no_empty", False) else "."
         if args.OUTFILE:
-            if len(files) == 1 and args.OUTFILE in files:
+            if not files or len(files) == 1 and args.OUTFILE in files:
                 infoput("Wrote %s to '%s' (%s)%s", util.count(count_total, "row"),
                                                   args.OUTFILE, fmt_bytes(args.OUTFILE), punct)
             else:
