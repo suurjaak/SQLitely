@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.11.2024
+@modified    07.11.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -1915,7 +1915,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
         self._db       = db
         self._page     = None # gui.DatabasePage instance
-        self._last_sql = "" # Last executed SQL
+        self._history  = []   # Executed SQL history
         self._last_is_script = False # Whether last execution was script
         self._hovered_cell = None # (row, col)
         self._worker = workers.WorkerThread(self._OnWorker)
@@ -1947,15 +1947,18 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         bmp4 = wx.ArtProvider.GetBitmap(wx.ART_COPY,      wx.ART_TOOLBAR, (16, 16))
         bmp5 = wx.ArtProvider.GetBitmap(wx.ART_FILE_OPEN, wx.ART_TOOLBAR, (16, 16))
         bmp6 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR, (16, 16))
+        bmp7 = images.ToolbarHistory.Bitmap
         tb.SetToolBitmapSize(bmp1.Size)
         tb.AddTool(wx.ID_INDENT,  "", bmp1, shortHelp="Show line numbers", kind=wx.ITEM_CHECK)
         tb.AddTool(wx.ID_STATIC,  "", bmp2, shortHelp="Word-wrap",         kind=wx.ITEM_CHECK)
         tb.AddSeparator()
-        tb.AddTool(wx.ID_REPLACE, "",   bmp3, shortHelp="Find in SQL  (%s-F)" % controls.KEYS.NAME_CTRL)
+        tb.AddTool(wx.ID_REPLACE, "", bmp3, shortHelp="Find in SQL  (%s-F)" % controls.KEYS.NAME_CTRL)
         tb.AddSeparator()
         tb.AddTool(wx.ID_COPY,    "", bmp4, shortHelp="Copy SQL to clipboard")
         tb.AddTool(wx.ID_OPEN,    "", bmp5, shortHelp="Load SQL from file")
         tb.AddTool(wx.ID_SAVE,    "", bmp6, shortHelp="Save SQL to file")
+        tb.AddSeparator()
+        tb.AddTool(wx.ID_UP,      "", bmp7, shortHelp="Show executed history")
         tb.Realize()
 
         stc = self._stc = controls.SQLiteTextCtrl(panel1, traversable=True,
@@ -2028,6 +2031,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         self.Bind(wx.EVT_TOOL,     self._OnCopySQL,            id=wx.ID_COPY)
         self.Bind(wx.EVT_TOOL,     self._OnLoadSQL,            id=wx.ID_OPEN)
         self.Bind(wx.EVT_TOOL,     self._OnSaveSQL,            id=wx.ID_SAVE)
+        self.Bind(wx.EVT_TOOL,     self._OnSQLHistory,         id=wx.ID_UP)
         self.Bind(wx.EVT_TOOL,     self._OnCopyGridSQL,        id=wx.ID_INFO)
         self.Bind(wx.EVT_TOOL,     self._OnRequery,            id=wx.ID_REFRESH)
         self.Bind(wx.EVT_TOOL,     self._OnColumnFilter,       id=wx.ID_SETUP)
@@ -2085,7 +2089,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
     def GetSQL(self):
         """Returns last run SQL query."""
-        return self._last_sql
+        return self._history[-1] if self._history else ""
     SQL = property(GetSQL)
 
 
@@ -2105,6 +2109,11 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
     def GetDatabasePage(self):       return self._page
     def SetDatabasePage(self, page): self._page = page
     DatabasePage = property(GetDatabasePage, SetDatabasePage)
+
+
+    def GetHistory(self):          return self._history[:]
+    def SetHistory(self, history): self._history[:] = history or []
+    History = property(GetHistory, SetHistory)
 
 
     def HasLineNumbers(self):
@@ -2230,7 +2239,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             guibase.status('Executed SQL "%s" (%s).', sql, self._db, log=True)
             self._db.log_query("SQL", sql)
 
-            self._last_sql = sql
+            if self._history[-1:] != [sql]: self._history.append(sql)
             self._last_is_script = script
             self._SizeColumns()
 
@@ -2454,7 +2463,58 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
     def _OnRequery(self, event=None):
         """Handler for re-running grid SQL statement."""
-        self.ExecuteSQL(self._last_sql, script=self._last_is_script, restore=True)
+        if not self._history: return
+        self.ExecuteSQL(self._history[-1], script=self._last_is_script, restore=True)
+
+
+    def _OnSQLHistory(self, event=None):
+        """Handler for showing executed SQL history."""
+
+        def on_select(tips, event): # Send SQL to clipboard, and select in STC if present
+            if tips and tips[-1]: tips[-1].Hide()
+            sql = event.EventObject.GetHelpString(event.Id)
+            if wx.TheClipboard.Open():
+                wx.TheClipboard.SetData(wx.TextDataObject(sql))
+                wx.TheClipboard.Close()
+                guibase.status("Copied SQL to clipboard.")
+            if self._stc.SelectedText == sql: # Ensure selection is visible
+                anchor, pos = self._stc.Anchor, self._stc.CurrentPos
+                firstline = max(0, self._stc.LineFromPosition(min(anchor, pos)) - 1)
+                self._stc.ShowPosition(self._stc.PositionFromLine(firstline))
+                self._stc.Anchor, self._stc.CurrentPos = anchor, pos
+                return
+
+            searchpos = self._stc.PositionFromLine(self._stc.FirstVisibleLine)
+            span = self._stc.FindText(searchpos, self._stc.Length, sql)
+            if any(x < 0 for x in span): span = self._stc.FindText(0, self._stc.Length, sql)
+            if any(x < 0 for x in span): return
+
+            firstline = max(0, self._stc.LineFromPosition(span[0]) - 1)
+            self._stc.ShowPosition(self._stc.PositionFromLine(firstline))
+            self._stc.SetSelection(*span)
+
+        def on_hover(tips, event): # Show SQL tooltip if ellipsized in menu; hide previous
+            if tips and tips[-1]: tips[-1].Hide()
+            if not event.EventObject.GetLabel(event.Id).endswith(".."): return
+            sql = event.EventObject.GetHelpString(event.Id)
+            tips.append(wx.TipWindow(self._tb, sql, maxLength=400))
+
+        def cleanup(tips): # Destroy TipWindow instances still active
+            for w in tips:
+                if w and not w.IsBeingDeleted(): w.Destroy()
+
+        MAX_ITEMS = 100
+        menu = wx.Menu()
+        tips = [] # wx.TipWindow behaves poorly with multiple instances: hide and destroy manually
+        for i, sql in enumerate(reversed(self._history[-MAX_ITEMS:])):
+            label = "&%s. %s" % (len(self._history) - i, util.ellipsize(sql))
+            item = wx.MenuItem(menu, -1, label, helpString=sql)
+            menu.Append(item)
+            menu.Bind(wx.EVT_MENU, functools.partial(on_select, tips), item)
+            menu.Bind(wx.EVT_MENU_HIGHLIGHT, functools.partial(on_hover, tips), item)
+        rect = controls.get_tool_rect(self._tb, event.Id)
+        self.PopupMenu(menu, rect.Left, rect.Height)
+        wx.CallLater(1000, cleanup, tips) # Delay, as to avoid race conditions with auto-destroy
 
 
     def _OnGridClose(self, event=None):
@@ -2478,7 +2538,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
     def _OnCopyGridSQL(self, event=None):
         """Handler for copying current grid SQL query to clipboard."""
         if wx.TheClipboard.Open():
-            d = wx.TextDataObject(self._last_sql)
+            d = wx.TextDataObject(self._history[-1])
             wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
             guibase.status("Copied SQL to clipboard.")
 

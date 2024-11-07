@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author    Erki Suurjaak
 @created   21.08.2019
-@modified  10.08.2024
+@modified  06.11.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -126,6 +126,8 @@ IMAGES = {
         "Toolbar icon for go-forward buttons.",
     "ToolbarGoto.png":
         "Toolbar icon for goto button in data grids.",
+    "ToolbarHistory.png":
+        "Toolbar icon for history buttons.",
     "ToolbarInsert.png":
         "Toolbar icon for insert button in database table grids.",
     "ToolbarLayoutGraph.png":

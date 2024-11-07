@@ -7,7 +7,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.08.2024
+@modified    06.11.2024
 ------------------------------------------------------------------------------
 """
 try:
@@ -2182,6 +2182,23 @@ ToolbarGoto = PyEmbeddedImage(
     "Bqrq/zSDisBqEiB3cxZ62JqOOgDzQIsxR1T1CKDY3DqgBijKXB9e8HRrZw+W9oBSIGOyDX85"
     "RLOacqDsw54zQBp4NhUsAi7ApaptP3mFrSKyKSJuI1WKSKJQThew8woA3IUErwEpYPRPf+kL"
     "pdlqmIpx05cAAAAASUVORK5CYII="
+)
+
+
+"""Toolbar icon for history buttons."""
+ToolbarHistory = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGXRFWHRTb2Z0d2FyZQBBZG9i"
+    "ZSBJbWFnZVJlYWR5ccllPAAAAhZJREFUeNqEUz1vE0EQnd3bi89HEjv2JUJgJHMIjHBwQWEJ"
+    "EBGNCyRSWAhKCgp+RaT8i0iBCtr8AuQGUZgiBYVFJIpYRIaAAiT2nuWPu70zM4eNz7bAIz3d"
+    "7Md7+2Z3jj3e3n4AAMsIifiK+DzMaS6LuDjMTYQOk/FN7B3ky86rh+UTKX9+PDo6rNZq7w4b"
+    "jYqdyZSK6+sbVzOZK8nFRcuMxZYNXV/QGAPBOdCXP9l7KWAQMNMwrDXOLTMev57LZje2dnaa"
+    "z8rlLSQsjQgMjwuCADjmg8EAAOeJK3CWj/zQAg6Wnm9u7uqaFo7f7++HJMuywPM8uFMojAtA"
+    "Ljrw+VRdoJT6m9u2HQpoKEiYCOQK8H3tfwL1eh3S6TRIKUMBx3FCJ3fzeSAulqBmHNCGaQdU"
+    "AgkIIcZOkIsCsw6iAlEHJEICtG6nUkBcLEHNCLiu+08Hl1dXw1cJA7lUwlwH0VcggfErqPkO"
+    "bheL4Yk6YfoVkMtBuTrDphgh6oBGnDoOySNE9xFXQEeee1OtAnYhJBIJiJlmKEA4xYtrtVrQ"
+    "7fXA7fdB+f6kA+QysB+9yBVu3VtLxY1L2qfz90ulhWbrjCcTK8HbSsVt+LnvJ6fd3o9f7b5s"
+    "d1UQUB8Pr8D58oFBLInHpq6BZqTh7OACzt9EPEW8RtRg5cYxqI4Ez+mA13ax//8IMObiJR4z"
+    "mI3k8NftIJowJ34LMADuM+bsEH74YAAAAABJRU5ErkJggg=="
 )
 
 

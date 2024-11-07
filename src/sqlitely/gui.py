@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.11.2024
+@modified    06.11.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -5622,14 +5622,15 @@ class DatabasePage(wx.Panel):
         if not pp: return
 
         if notebook is self.notebook_sql:
-            title, text = pp[index]["name"], pp[index]["text"]
+            title, text, history = pp[index]["name"], pp[index]["text"], pp[index]["history"]
             t, p = next(iter(self.sql_pages.items()), (None, None))
             if p and "SQL" == t and not p.Text and not p.CanUndoRedo():
                 # Reuse empty default tab
                 p.Text = text
+                p.History = hitory
                 self.sql_pages[title] = self.sql_pages.pop(t)
                 self.notebook_sql.SetPageText(0, title)
-            else: self.add_sql_page(title, text)
+            else: self.add_sql_page(title, text, history=history)
             del pp[index]
         elif notebook is self.notebook_search:
             text, source = pp[index]["name"], pp[index]["type"]
@@ -6045,7 +6046,7 @@ class DatabasePage(wx.Panel):
         return page
 
 
-    def add_sql_page(self, name="", text="", console=True):
+    def add_sql_page(self, name="", text="", history=(), console=True):
         """
         Opens and returns an SQL page with specified text.
 
@@ -6064,6 +6065,7 @@ class DatabasePage(wx.Panel):
         p.WordWrap    = next((x.WordWrap for x in self.sql_pages.values()),
                               conf.TextWordWraps.get("sql"))
         p.Text = text
+        p.History = history
         self.sql_pages[name] = p
         self.notebook_sql.InsertPage(0, page=p, text=name, select=True)
         if console: self.TopLevelParent.run_console(
@@ -6278,7 +6280,8 @@ class DatabasePage(wx.Panel):
             for k, p in self.sql_pages.items():
                 if p is page:
                     if p.Text.strip():
-                        self.pages_closed[self.notebook_sql].append({"name": k, "text": p.Text})
+                        pageinfo = {"name": k, "text": p.Text, "history": p.History}
+                        self.pages_closed[self.notebook_sql].append(pageinfo)
                     self.sql_pages.pop(k)
                     break # for k, p
         finally: wx.CallAfter(lambda: self and self.notebook_sql.Thaw())

@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.4, 2024-11-06
+2.4, 2024-11-07
 ---------------
 - add support for generated columns
 - add find/replace dialog to data grids and column editors and database schema text
@@ -13,6 +13,7 @@ CHANGELOG
 - add ANY as possible column type if SQLite version supports STRICT
 - add SQL functions to SQL editors auto-completes
 - add PRAGMA names as last column to PRAGMA window
+- add execution history to SQL page toolbar
 - improve converting changed values in table grids to original type for untyped columns
 - fix and improve editing and movement in hex editor
 - tweak initial size of resizable text controls in data grid row dialog
