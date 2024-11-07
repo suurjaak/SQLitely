@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    20.10.2024
+@modified    07.11.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -650,8 +650,9 @@ class DatabaseSink(Sink):
             for row in self._constrain_iterable(rows, limit=self._flags["limit"]):
                 params = [row[n] for i, n in enumerate(self._state["columnnames"]) if i < len(row)]
                 self._db.execute(sql, params)
-                self._state["sql_logs"].append((sql, params))
                 count += 1
+            if count:
+                self._state["sql_logs"].append((sql, ["( %s )" % util.plural("row", count)]))
             util.try_ignore(lambda: rows.close())
         self._db.connection.commit()
         if count in (None, -1): # If CREATE TABLE AS query
