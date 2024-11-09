@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.11.2024
+@modified    09.11.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4692,7 +4692,7 @@ class DatabasePage(wx.Panel):
         menu.Bind(wx.EVT_MENU, lambda e: set_option(reverse=e.IsChecked()), item_reverse)
 
         rect = controls.get_tool_rect(self.tb_diagram, wx.ID_STATIC)
-        self.diagram.PopupMenu(menu, rect.Left, 0)
+        self.tb_diagram.PopupMenu(menu, rect.Left, rect.Bottom)
 
 
     def on_diagram_graph(self, event):
@@ -4749,7 +4749,7 @@ class DatabasePage(wx.Panel):
         for item in menu.MenuItems: menu.Bind(wx.EVT_MENU, handler, item)
 
         rect = controls.get_tool_rect(self.tb_diagram, wx.ID_COPY)
-        self.diagram.PopupMenu(menu, rect.Left, 0)
+        self.tb_diagram.PopupMenu(menu, rect.Left, rect.Bottom)
 
 
     def on_pragma_change(self, event):

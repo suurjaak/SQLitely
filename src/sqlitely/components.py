@@ -2513,7 +2513,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             menu.Bind(wx.EVT_MENU, functools.partial(on_select, tips), item)
             menu.Bind(wx.EVT_MENU_HIGHLIGHT, functools.partial(on_hover, tips), item)
         rect = controls.get_tool_rect(self._tb, event.Id)
-        self.PopupMenu(menu, rect.Left, rect.Height)
+        self._tb.PopupMenu(menu, rect.Left, rect.Bottom)
         wx.CallLater(1000, cleanup, tips) # Delay, as to avoid race conditions with auto-destroy
 
 
@@ -3104,7 +3104,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
             grid = self._grid.Table
             columns = [x for i, x in enumerate(grid.columns) if grid.IsColumnShown(i)] \
                       or grid.columns
-            info = self._grid.Table.GetSettingsInfo(partial_hidden=True)
+            info = grid.GetSettingsInfo(partial_hidden=True)
             args = {"make_iterable": grid.GetRowIterator, "title": util.unprint(title),
                     "columns": columns, "category": self._category, "name": self._item["name"],
                     "info": {"Export options": info} if info else None}
