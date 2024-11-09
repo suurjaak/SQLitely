@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    24.10.2024
+@modified    09.11.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -8533,28 +8533,56 @@ def get_key_state(keycode):
 
 
 def get_tool_rect(toolbar, id_tool):
-    """Returns position and size of a horizontal toolbar tool by ID. Spacers will skew result."""
-    PAD_BMP, PAD_LBL, PAD_SEP, W_SEP = 1, 2, 3, 2
-    BORDER, PACKING = wx.SystemSettings.GetMetric(wx.SYS_BORDER_X), toolbar.ToolPacking
-    W_BMP, H_TOOL = toolbar.ToolBitmapSize.Width, toolbar.ToolSize.Height
-    HAS_LABELS, NO_ICONS = (toolbar.WindowStyleFlag & x for x in (wx.TB_HORZ_TEXT, wx.TB_NOICONS))
+    """
+    Returns position and size of a horizontal toolbar tool by ID. No support for stretchable space.
+    """
+    HAS_LABELS = toolbar.WindowStyleFlag & wx.TB_HORZ_TEXT
+    HAS_ICONS = not toolbar.WindowStyleFlag & wx.TB_NOICONS
+    BORDER       = wx.SystemSettings.GetMetric(wx.SYS_BORDER_X) if "nt" == os.name else 4
+    PAD_BMP      = 2 if "nt" == os.name else (2 if HAS_LABELS else 3)
+    PAD_BMP_JUST = 2 if "nt" == os.name else 7
+    PAD_CTRL     = 3 if "nt" == os.name else 0
+    PAD_EXTRA    = 1 if "nt" == os.name else 0
+    PAD_LABEL    = 5 if "nt" == os.name else 12
+    PAD_SEP      = 3 if "nt" == os.name else 7
+    W_GAP        = 0 if "nt" == os.name else 1
+    W_LEAD       = 0 if "nt" == os.name else 4
+    W_SEP        = 2 if "nt" == os.name else 1
+    W_LABEL_MIN  = (5 if HAS_LABELS else 1) if "nt" == os.name else 0
 
-    def getsize(tool):
-        if tool.IsSeparator(): return (W_SEP, H_TOOL)
-        if tool.IsControl():   return tool.Control.Size
-        w = 2 * BORDER + PACKING
+    def get_inter(tool, index): # Return horizontal padding in front of tool
+        width = PAD_SEP if tool.IsSeparator() else PAD_CTRL if tool.IsControl() else 0
+        if not index: width += W_LEAD
+        else:
+            if toolbar.GetToolByPos(index - 1).IsSeparator(): width += PAD_SEP
+            elif tool.IsButton(): width += W_GAP
+        if tool.IsSeparator() and "nt" != os.name:
+            if not index or toolbar.GetToolByPos(index - 1).IsSeparator(): width -= 1
+        return width
+
+    def get_width(tool): # Return pixel width of tool
+        if tool.IsSeparator(): return W_SEP
+        if tool.IsControl():   return tool.Control.Size.Width
+
+        pad_bmp = PAD_BMP_JUST if HAS_LABELS and not tool.Label else PAD_BMP
+        w = 2 * BORDER
+        if HAS_ICONS: w += pad_bmp + toolbar.ToolBitmapSize.Width
         if HAS_LABELS and tool.Label:
-            if NO_ICONS: w += 2 * PAD_LBL + toolbar.GetTextExtent(tool.Label)[0]
-            else:        w += 3 * PAD_LBL + toolbar.GetTextExtent(tool.Label)[0] + W_BMP
-        else:            w += 2 * PAD_BMP + W_BMP
-        return (w, H_TOOL)
-    def getinter(tool, index):
-        w = PAD_SEP if tool.IsSeparator() else 0
-        return w + (PAD_SEP if index and toolbar.GetToolByPos(index - 1).IsSeparator() else 0)
+            w += 2 * PAD_LABEL + toolbar.GetTextExtent(wx.StripMenuCodes(tool.Label))[0] + PAD_EXTRA
+            if not HAS_ICONS: w += 3
+        else:
+            w += W_LABEL_MIN + pad_bmp
+        return w
 
-    result = wx.Rect(0, 0, *getsize(toolbar.GetToolByPos(toolbar.GetToolPos(id_tool))))
-    for i in range(toolbar.GetToolPos(id_tool)):
-        result.x += getinter(toolbar.GetToolByPos(i), i) + getsize(toolbar.GetToolByPos(i))[0]
+    myindex = toolbar.GetToolPos(id_tool)
+    mytool  = toolbar.GetToolByPos(myindex)
+    result  = wx.Rect(0, 0, get_width(mytool), toolbar.Size.Height)
+    for index in range(myindex):
+        tool = toolbar.GetToolByPos(index)
+        result.X += get_inter(tool, index) + get_width(tool)
+    result.X += get_inter(mytool, myindex)
+    if result.X > toolbar.Size.Width:
+        result.X = toolbar.Size.Width - get_width(mytool)
     return result
 
 
