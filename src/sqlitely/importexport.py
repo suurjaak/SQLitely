@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.11.2024
+@modified    10.11.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -422,7 +422,7 @@ class DatabaseSink(Sink):
         }
         self._state = {
             "allnames2":    None,   # CaselessDict of entity names in target database
-            "columnnames":  None,   # list of columns of target table for query export
+            "columnnames":  None,   # list of columns of target table, for query or iterable
             "file_existed": None,   # whether target database file existed
             "fks_on":       None,   # whether foreign key constraint enforcement was enabled
             "fullname":     None,   # fully namespaced name of target table
@@ -450,15 +450,16 @@ class DatabaseSink(Sink):
         return self
 
 
-    def export_entities(self, schema, renames=None, selects=False):
+    def export_entities(self, schema, renames=None, selects=False, iterables=None):
         """
         Exports selected tables and views to another database, tables optionally with data,
         auto-creating table and view indexes and triggers. Soft-locks database instance.
 
-        @param   schema    {category: [name, ]} to export
-        @param   renames   {category: {name1: name2}}
-        @param   selects   {table name: SELECT SQL if not using default}
-        @return            True on success, False on failure, None on cancel
+        @param   schema     {category: [name, ]} to export
+        @param   renames    {category: {name1: name2}}
+        @param   selects    {table name: SELECT SQL if not using default}
+        @param   iterables  {table name: iterable yielding rows if not using select}
+        @return             True on success, False on failure, None on cancel
         """
         result = False
         self._reset()
@@ -466,8 +467,7 @@ class DatabaseSink(Sink):
         count_items = 0
         try:
             self._attach_target(toggle_fks=True)
-            count_items = self._export_entities(schema, renames, selects)
-            result = bool(count_items)
+            result, count_items = self._export_entities(schema, renames, selects, iterables)
             self._detach_target(toggle_fks=True)
         except Exception as e:
             self._detach_target(toggle_fks=True)
@@ -477,9 +477,10 @@ class DatabaseSink(Sink):
             self._db.unlock(None, None, self._filename)
             if not self._state["file_existed"] and (not result or not count_items):
                 util.try_ignore(os.unlink, self._filename)
-        if result:
-            sqls, _ = zip(*self._state["sql_logs"])
-            params = None if self._state["samefile"] else self._filename
+        if result or (result is None and count_items and self._state["file_existed"]):
+            sqls, params = zip(*self._state["sql_logs"])
+            params = list(filter(bool, params))
+            if not self._state["samefile"]: params = [self._filename] + params
             self._db.log_query("EXPORT TO DB", ["%s;" % x for x in sqls], params)
         util.try_ignore(lambda: self._progress(done=True))
         return result
@@ -502,12 +503,12 @@ class DatabaseSink(Sink):
         try:
             self._attach_target()
             row_count = self._export_query(table, query, params, cursor, create_sql)
-            result = True
-            if self._check_cancel(name=table, count=row_count):
+            result = None if row_count is None else True
+            if result and self._check_cancel(name=table, count=row_count):
                 result = None
-            if not row_count and not self._flags["allow_empty"]:
+            if not result or (not row_count and not self._flags["allow_empty"]):
                 self._drop_target_table(table)
-                result = False
+                if result: result = False
             self._detach_target()
         except Exception as e:
             util.try_ignore(lambda: cursor.close())
@@ -566,11 +567,13 @@ class DatabaseSink(Sink):
         except Exception: pass
 
 
-    def _export_entities(self, schema, renames=None, selects=None):
+    def _export_entities(self, schema, renames=None, selects=None, iterables=None):
         """
-        Exports given items to target database, returns number of items created, or None on cancel.
+        Exports given items to target database,
+        returns (None if cancel else True, number of items created).
         """
-        count_items, count_rows = 0, 0
+        result = False
+        counts = {}
         renames = dict(renames or {})
         for category, mapping in list(renames.items()):
             if isinstance(mapping, dict) and not isinstance(mapping, util.CaselessDict):
@@ -581,22 +584,26 @@ class DatabaseSink(Sink):
             category, name = item["type"], item["name"]
             name2 = renames.get(category, {}).get(name, name)
             try:
-                created, count = self._export_entity(item, name2, count_rows, renames, selects)
-                if created is None or self._check_cancel(name=name, count=count):
-                    return None
-                count_items, count_rows = count_items + created, count_rows + count
-                if self._state["samefile"]:
+                created, count = self._export_entity(item, name2, counts, renames,
+                                                     selects, iterables)
+                if created: counts[name] = count
+                if created and self._state["samefile"]:
                     self._db.populate_schema(category=category, name=name2, parse=True)
+                if created is None or self._check_cancel(name=name, count=count):
+                    result = None
+                    break # for item
+                if not result: result = created
             except Exception as e:
                 logger.exception("Error exporting %s %s from %s to %s.",
                                  category, grammar.quote(name, force=True),
                                  self._db, self._filename)
                 if self._check_cancel(name=name, error=util.format_exc(e)):
-                    return None
-        return count_items
+                    result = None
+                    break # for item
+        return result, len(counts)
 
 
-    def _export_entity(self, item, name2, totalcount, renames=None, selects=None):
+    def _export_entity(self, item, name2, counts, renames=None, selects=None, iterables=None):
         """
         Exports entity schema and optionally data to target database.
 
@@ -608,13 +615,28 @@ class DatabaseSink(Sink):
         if not created or not self._flags["data"] or category != "table":
             return created, count
 
-        insert_sql = self._make_data_insert(name, name2, totalcount, selects)
+        insert_sql = self._make_data_insert(item, name2, counts, selects, iterables)
         label = "%s %s" % (category, grammar.quote(name, force=True))
         if name != name2: label += " as %s" % grammar.quote(name2, force=True)
         logger.info("Copying data to %s in %s.", label, self._filename)
-        count = self._db.execute(insert_sql).rowcount
-        self._db.connection.commit()
-        self._state["sql_logs"].append((insert_sql, None))
+
+        if iterables and name in iterables:
+            cursor = iterables[name]
+            for row in self._constrain_iterable(cursor, name, counts, self._flags["limit"],
+                                                self._flags["maxcount"]):
+                params = [row[n] for i, n in enumerate(self._state["columnnames"]) if i < len(row)]
+                self._db.execute(insert_sql, params)
+                count += 1
+                if self._check_cancel(not count % self.PROGRESS_STEP):
+                    return None, coumt
+            if count:
+                self._state["sql_logs"].append((insert_sql, ["( %s )" % util.plural("row", count)]))
+            self._db.connection.commit()
+            util.try_ignore(lambda: cursor.close())
+        else:
+            count = self._db.execute(insert_sql).rowcount
+            self._db.connection.commit()
+            self._state["sql_logs"].append((insert_sql, None))
 
         if not count and not self._flags["allow_empty"]:
             self._drop_target_table(name2)
@@ -622,23 +644,29 @@ class DatabaseSink(Sink):
         return created, count
 
 
-    def _make_data_insert(self, name, name2, totalcount, selects=None):
+    def _make_data_insert(self, item, name2, counts, selects=None, iterables=None):
         """Returns INSERT statement for exporting table data to target database."""
+        name = item["name"]
         target_prefix = "%s." % self._state["schema2"] if self._state["schema2"] else ""
         source_prefix = "main." if target_prefix else ""
         sql = "INSERT INTO %s%s " % (target_prefix, grammar.quote(name2))
+        if iterables and name in iterables:
+            cols = self._state["columnnames"] = [c["name"] for c in item["columns"]]
+            sql += " VALUES (%s)" % ", ".join("?" * len(cols))
+            return sql
+
         if selects and name in selects: sql += selects[name]
         else: sql += "SELECT * FROM %s%s" % (source_prefix, grammar.quote(name))
         order_sql = self._db.get_order_sql(name, reverse=True) if self._flags["reverse"] else ""
         limit_sql = ""
         if self._flags["limit"] or self._flags["maxcount"]:
             limit_sql = self._db.get_limit_sql(*self._flags["limit"],
-                                               maxcount=self._flags["maxcount"], totals=totalcount)
+                                               maxcount=self._flags["maxcount"], totals=counts)
         return sql + order_sql + limit_sql
 
 
     def _export_query(self, table, query, params=(), cursor=None, create_sql=None):
-        """Creates and populates query results table, returns number of rows inserted."""
+        """Creates and populates query results table, returns count inserted, or None on cancel."""
         count = 0
         is_select = grammar.strip_and_collapse(query)[:6] in ("SELECT", "VALUES")
         sql, cursor = self._prepare_query_table(table, query, params, is_select, cursor, create_sql)
@@ -647,9 +675,12 @@ class DatabaseSink(Sink):
             self._state["sql_logs"].append((sql, None))
         else:
             rows = cursor if cursor.description else [{"rowcount": cursor.rowcount}]
-            for row in self._constrain_iterable(rows, limit=self._flags["limit"]):
+            for row in self._constrain_iterable(rows, limit=self._flags["limit"],
+                                                maxcount=self._flags["maxcount"]):
                 params = [row[n] for i, n in enumerate(self._state["columnnames"]) if i < len(row)]
                 self._db.execute(sql, params)
+                if self._check_cancel(not count % self.PROGRESS_STEP):
+                    return None
                 count += 1
             if count:
                 self._state["sql_logs"].append((sql, ["( %s )" % util.plural("row", count)]))
@@ -1076,6 +1107,8 @@ class FileDataSink(Sink):
 
     def export_entity(self, category, name, make_iterable, title, columns, info=None):
         """
+        Exports table or view data to output file.
+
         @param   category        category producing the data, "table" or "view"
         @param   name            name of the table or view producing the data
         @param   make_iterable   function returning iterable sequence yielding rows
@@ -1089,6 +1122,8 @@ class FileDataSink(Sink):
 
     def export_query(self, query, make_iterable, title, name, columns, info=None):
         """
+        Exports query data to output file.
+
         @param   query           the SQL query producing the data
         @param   make_iterable   function returning iterable sequence yielding rows
         @param   title           export title, as string or a sequence of strings
@@ -1102,6 +1137,8 @@ class FileDataSink(Sink):
 
     def export_combined(self, title, category=None, names=None, make_iterables=None, info=None):
         """
+        Exports data from multiple tables or views to a single combined output file.
+
         @param   title           export title, as string or a sequence of strings
         @param   category        category to produce the data from, "table" / "view" / None for both
         @param   names           specific entities to export if not all
@@ -1176,8 +1213,11 @@ class FileDataSink(Sink):
                     row_count = self._write_item_spreadsheet(iterable, name, query)
                 else:
                     row_count = self._write_item_template(iterable, name)
+                if row_count is None:
+                    result = None
+                    return result
                 self._finalize_item_single(f, row_count, title, category, name, query, info)
-                result = row_count is not None
+                result = True
             if self._check_cancel(name=name, count=row_count):
                 result = None
                 return result
