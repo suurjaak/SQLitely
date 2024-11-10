@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    09.11.2024
+@modified    10.11.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -1918,10 +1918,10 @@ class FindReplaceDialog(wx.Dialog):
             text = self._target.Value
             mystartspan = startspan or [self._target.InsertionPoint] * 2
             if (direction < 0 and not wrap) or (direction > 0 and wrap):
-                span = (0, mystartspan[0 if direction < 0 else 1])
+                span = (0, mystartspan[0] if direction < 0 else len(text))
             else: # Going backward and wrapping, or forward and not wrapping
                 advance = self._match and startspan and startspan[0] == startspan[1] # 0-length match
-                span = (mystartspan[1] + bool(advance), len(text))
+                span = ((0 if direction < 0 else mystartspan[1]) + bool(advance), len(text))
             if span != (0, len(text)):
                 text = text[span[0]:span[1]]
             pos = span
