@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    10.11.2024
+@modified    11.11.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -383,8 +383,7 @@ class ColourManager(object):
     def Adjust(cls, colour1, colour2, ratio=0.5):
         """
         Returns first colour adjusted towards second.
-        Arguments can be wx.Colour, RGB tuple, colour hex string,
-        or wx.SystemSettings colour index.
+        Arguments can be wx.Colour, RGB tuple, colour hex string, or wx.SystemSettings colour index.
 
         @param   ratio    RGB channel adjustment ratio towards second colour
         """
@@ -396,6 +395,23 @@ class ColourManager(object):
         delta  = tuple(a - b for a, b in zip(rgb1, rgb2))
         result = tuple(a - int(d * ratio) for a, d in zip(rgb1, delta))
         result = tuple(min(255, max(0, x)) for x in result)
+        return wx.Colour(result)
+
+
+    @classmethod
+    def Diff(cls, colour1, colour2):
+        """
+        Returns difference between two colours, as wx.Colour of absolute deltas over channels.
+
+        Returns absolute difference between two colours, as a single integer over all channels.
+        Arguments can be wx.Colour, RGB tuple, colour hex string, or wx.SystemSettings colour index.
+        """
+        colour1 = wx.SystemSettings.GetColour(colour1) \
+                  if isinstance(colour1, integer_types) else wx.Colour(colour1)
+        colour2 = wx.SystemSettings.GetColour(colour2) \
+                  if isinstance(colour2, integer_types) else wx.Colour(colour2)
+        rgb1, rgb2 = tuple(colour1)[:3], tuple(colour2)[:3]
+        result = tuple(abs(a - b) for a, b in zip(rgb1, rgb2))
         return wx.Colour(result)
 
 
@@ -3276,7 +3292,7 @@ class NoteButton(wx.Panel, wx.Button):
         elif self._hover and self.IsThisEnabled():
             # Button is being hovered with mouse: create raised effect
             colours  = [(255, 255, 255)] * 2
-            if wx.WHITE == self.BackgroundColour:
+            if sum(ColourManager.Diff(self.BackgroundColour, wx.WHITE)[:3]) < 15:
                 colours =  [(158, 158, 158)] * 2
             lines    = [(0, 0, 0, height - 1), (0, 0, width - 1, 0)]
             colours += [(128, 128, 128)] * 2
