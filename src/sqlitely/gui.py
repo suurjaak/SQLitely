@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.11.2024
+@modified    11.11.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -6675,7 +6675,7 @@ class DatabasePage(wx.Panel):
             if is_samefile:
                 self.reload_schema(count=True)
                 self.update_page_header(updated=True)
-            elif result["result"]:
+            elif result.get("result"):
                 wx.PostEvent(self, OpenDatabaseEvent(self.Id, file=filename2))
 
 
