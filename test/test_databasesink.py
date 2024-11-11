@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     09.09.2024
-@modified    17.09.2024
+@modified    11.11.2024
 ------------------------------------------------------------------------------
 """
 import copy
@@ -60,6 +60,7 @@ class TestDatabaseSink(FileTest):
         self.verify_export_entities()
         self.verify_export_entities_renames()
         self.verify_export_entities_selects()
+        self.verify_export_entities_iterables()
         self.verify_export_entities_existing()
         self.verify_export_entities_configure()
         self.verify_export_entities_fks()
@@ -239,6 +240,34 @@ class TestDatabaseSink(FileTest):
         result = sink.export_entities(SCHEMA, selects=selects)
         self.assertTrue(result, "Unexpected failure from export_entities().")
         self.validate_database(outfile, SCHEMA, {n: [] for n in selects})
+
+
+    def verify_export_entities_iterables(self):
+        """Verifies DatabaseSink.export_entities(iterables=..)."""
+        COL = lambda c: ("{0} * {0}" if c != "value" else "{0}").format(grammar.quote(c))
+
+        logger.info("Verifying export_entities() with iterables.")
+        outfile = self.mktemp(".db")
+        iterables = {"related": [{k: (v ** 2 if isinstance(v, int) else v) for k, v in x.items()}
+                                 for x in DATA["related"]]}
+        sink = importexport.DatabaseSink(self._db, outfile).configure(data=True)
+        result = sink.export_entities(SCHEMA, iterables=iterables)
+        self.assertTrue(result, "Unexpected failure from export_entities().")
+        data_expected = {k: (iterables[k] if "related" == k else v) for k, v in DATA.items()}
+        self.validate_database(outfile, SCHEMA, data_expected)
+
+        logger.info("Verifying export_entities() with iterables and selects.")
+        outfile = self.mktemp(".db")
+        selects = {n: "SELECT %s FROM %s" % (", ".join(COL(c) for c in COLUMNS[n]), grammar.quote(n))
+                   for n in DATA if n != "related"}
+        iterables = {"related": [{k: (v ** 2 if isinstance(v, int) else v) for k, v in x.items()}
+                                 for x in DATA["related"]]}
+        sink = importexport.DatabaseSink(self._db, outfile).configure(data=True)
+        result = sink.export_entities(SCHEMA, selects=selects, iterables=iterables)
+        self.assertTrue(result, "Unexpected failure from export_entities().")
+        data_expected = {n: [{k: (v ** 2 if isinstance(v, int) else v) for k, v in x.items()}
+                             for x in vv] for n, vv in DATA.items()}
+        self.validate_database(outfile, SCHEMA, data_expected)
 
 
     def verify_export_entities_existing(self):
