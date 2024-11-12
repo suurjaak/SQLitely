@@ -684,12 +684,12 @@ class CallableManagerDialog(wx.Dialog):
         self.button_down    = button_down
         self.button_test    = button_test
         self.button_compile = button_compile
-        self.button_edit    = button_edit   
-        self.button_save    = button_save   
-        self.button_delete  = button_delete 
-        self.button_cancel  = button_cancel 
-        self.button_new     = button_new    
-        self.button_close   = button_close  
+        self.button_edit    = button_edit
+        self.button_save    = button_save
+        self.button_delete  = button_delete
+        self.button_cancel  = button_cancel
+        self.button_new     = button_new
+        self.button_close   = button_close
 
         wrap = lambda f, *a: lambda e: wx.CallAfter(f, *a)
         splitter.Bind(wx.EVT_SPLITTER_SASH_POS_CHANGED, wrap(self._UpdateUI))
@@ -945,7 +945,7 @@ class FileBrowseButton(wx.lib.filebrowsebutton.FileBrowseButton):
 
     def OnBrowse (self, event=None):
         """Opens file dialog, forwards selection to callback, if any."""
-        self.dialog = self.dialog or wx.FileDialog(self, message=self.dialogTitle, 
+        self.dialog = self.dialog or wx.FileDialog(self, message=self.dialogTitle,
                                                    wildcard=self.fileMask, style=self.fileMode)
 
         dlg, current = self.dialog, self.GetValue()
@@ -999,7 +999,7 @@ class FilterEntryDialog(wx.Dialog):
 
     def __init__(self, parent=None, item=None, title="Filter", message="",
                  filter_menu=(), filter_hint=None,
-                 style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER | wx.FRAME_FLOAT_ON_PARENT | 
+                 style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER | wx.FRAME_FLOAT_ON_PARENT |
                        wx.APPLY):
         """
         @param   item         item to manage,
@@ -1498,9 +1498,9 @@ class FindReplaceDialog(wx.Dialog):
         sizer_padding.Add(sizer_grid, border=5, flag=wx.LEFT | wx.GROW)
         self.Sizer.Add(sizer_padding, border=5, flag=wx.ALL | wx.GROW)
 
-        repl_ctrls = dict(label_repl=label_repl,       label_replbig=label_replbig, 
-                          text_repl=text_repl,         hex_repl=hex_repl, 
-                          text_replbig=text_replbig,   hex_replbig=hex_replbig, 
+        repl_ctrls = dict(label_repl=label_repl,       label_replbig=label_replbig,
+                          text_repl=text_repl,         hex_repl=hex_repl,
+                          text_replbig=text_replbig,   hex_replbig=hex_replbig,
                           check_rev=check_rev,
                           button_repl=button_repl,     button_replall=button_replall)
         findonly_ctrls = dict(button_prev=button_prev)
@@ -1686,7 +1686,7 @@ class FindReplaceDialog(wx.Dialog):
         if not self._IsSearchable(): return
         self._RefreshStatus()
         try: pattern = self._MakeFindRegex()
-        except Exception as e: 
+        except Exception as e:
             wx.MessageBox("Invalid regular expression.\n\n%s" % e, self.Title, wx.ICON_ERROR)
         else:
             pattern and self._DoFind(pattern, reverse=True)
@@ -2014,7 +2014,7 @@ class FindReplaceDialog(wx.Dialog):
             if not texts and not ok: texts.append("Nothing found")
             elif self._status.get("searching"): texts.append("Searching..")
             status2 = ".\n".join(texts) + ("." if len(texts) > 1 else "")
-        self._status.clear() 
+        self._status.clear()
         if status1 != status2:
             self._ctrls["status"].ToolTip = self._ctrls["status"].Label = status2
             self._ctrls["status"].Wrap(self._ctrls["status"].MaxSize.Width)
@@ -2039,7 +2039,7 @@ class FindReplaceDialog(wx.Dialog):
             if self._flags["shared"]:
                 (self.FIND_TEXTS if "text_find" == name else self.REPLACE_TEXTS)[:] = choices
 
-                
+
     def _LoadSharedHistory(self):
         """Populates search and replace text control autocomplete from shared history if enabled."""
         if not self._flags["shared"]: return
@@ -3161,8 +3161,8 @@ class NoteButton(wx.Panel, wx.Button):
         self._extent_label = None
         self._extent_note = None
 
-        
-        self._cursor_hover = None if wx.BORDER_RAISED & self._style else wx.Cursor(wx.CURSOR_HAND) 
+
+        self._cursor_hover = None if wx.BORDER_RAISED & self._style else wx.Cursor(wx.CURSOR_HAND)
 
         self.Bind(wx.EVT_MOUSE_EVENTS,       self.OnMouseEvent)
         self.Bind(wx.EVT_MOUSE_CAPTURE_LOST, self.OnMouseCaptureLostEvent)
@@ -4395,7 +4395,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
     def SetItemStyleByText(self, text, style):
         """
         Sets style on item with given primary label, or clears current style if None.
-        
+
         Ignores current filter if any. Redraws item if style changed and item displayed.
         """
         if style is not None and style not in self.STYLES:
@@ -5657,7 +5657,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
             event.Skip()
         else:
             is_enter_or_space = event.KeyCode in KEYS.ENTER + KEYS.SPACE
-            is_hex = unichr(event.UnicodeKey) in self.MASK 
+            is_hex = unichr(event.UnicodeKey) in self.MASK
             is_numpad = event.KeyCode in self.NUMPAD_NUMS
             is_cmd_or_nav = event.KeyCode in KEYS.NAVIGATION + KEYS.COMMAND
             if not is_enter_or_space and (is_numpad or is_hex or is_cmd_or_nav):

@@ -521,8 +521,8 @@ class SchemaDiagram(object):
         layoutopts = {"style": self._layout.GetStyle(active=None), "active": self._layout.Active}
         layoutopts.update(self._layout.GetAllOptions())
         return {
-            "zoom":    self._zoom,        
-            "lines":   self._show_lines,  "labels":     self._show_labels, 
+            "zoom":    self._zoom,
+            "lines":   self._show_lines,  "labels":     self._show_labels,
             "columns": self._show_cols,   "keycolumns": self._show_keys,
             "nulls":   self._show_nulls,  "statistics": self._show_stats,
             "items":   pp,                "layout":     layoutopts,

@@ -992,7 +992,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 text = self.notebook.GetPageText(log_page_index)
                 self.notebook.RemovePage(log_page_index)
                 self.notebook.AddPage(page=self.page_log, text=text)
-            if self.notebook.GetCurrentPage() != current_page: 
+            if self.notebook.GetCurrentPage() != current_page:
                 self.notebook.SetSelection(self.notebook.GetPageIndex(current_page))
         finally:
             self.is_dragging_page = False
@@ -1553,7 +1553,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         for filename in self.dbs_selected:
             filesize = None
             if os.path.exists(filename):
-                filesize = database.get_size(filename) 
+                filesize = database.get_size(filename)
                 total_size = (total_size or 0) + filesize
             if len(self.dbs_selected) > 1: continue # for filename
 
@@ -1890,14 +1890,14 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             dummygridbase.KEY_NEW = components.SQLiteGridBase.KEY_NEW
             dummygridbase.GetRowData = lambda *a, **kw: dict(rowdata)
             dummygridbase.GetAffinity = lambda c, *_, **__: database.Database.get_affinity(cols[c])
- 
+
             def onclose(event):
                 event.Skip()
                 if not isinstance(event, wx.ShowEvent) or not event.Show:
                     self.menu_editor.Check(False)
 
-            kws = dict(title="Value editor", style=wx.CAPTION | wx.CLOSE_BOX | 
-                       wx.MINIMIZE_BOX | wx.MAXIMIZE_BOX | wx.RESIZE_BORDER | 
+            kws = dict(title="Value editor", style=wx.CAPTION | wx.CLOSE_BOX |
+                       wx.MINIMIZE_BOX | wx.MAXIMIZE_BOX | wx.RESIZE_BORDER |
                        wx.DIALOG_NO_PARENT, row=0, col=0, rowdata=rowdata,
                        columnlabel="type")
             dlg = components.ColumnDialog(None, dummygridbase, **kws)
@@ -1981,7 +1981,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         wildcard = controls.make_dialog_filter(conf.DBExtensions, noun="SQLite database",
                                                merge=True, blank=True)
         dialog = wx.FileDialog(self, message="Open", wildcard=wildcard,
-            style=wx.FD_FILE_MUST_EXIST | wx.FD_MULTIPLE | wx.FD_OPEN | 
+            style=wx.FD_FILE_MUST_EXIST | wx.FD_MULTIPLE | wx.FD_OPEN |
                   wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
         if wx.ID_OK == dialog.ShowModal():
@@ -2806,8 +2806,8 @@ class DatabasePage(wx.Panel):
         nb.SetCustomPage(startpanel)
         ColourManager.Manage(startpanel, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
 
-        BUTTONS = [("data",     "&Open data",          "Open table or view\ndata"),             
-                   ("export",   "Export to fi&le",     "Export table or view\ndata to file"),    
+        BUTTONS = [("data",     "&Open data",          "Open table or view\ndata"),
+                   ("export",   "Export to fi&le",     "Export table or view\ndata to file"),
                    ("exportdb", "Export to &database", "Export data\nto another database"),
                    ("import",   "Import f&rom file",   "Import data\nfrom file to table"), ]
         buttons, bsize, isize = [], (180, 180), (32, 32)
@@ -3567,7 +3567,7 @@ class DatabasePage(wx.Panel):
 
             if wx.YES != controls.YesNoMessageBox(
                 "Are you REALLY sure you want to drop everything in the database?\n\n"
-                "This will delete: %s." % util.join(", ", 
+                "This will delete: %s." % util.join(", ",
                     (util.plural(c, categories[c]) for c in self.db.CATEGORIES if c in categories)
                 ), conf.Title, wx.ICON_WARNING, default=wx.NO
             ): return
@@ -3705,7 +3705,7 @@ class DatabasePage(wx.Panel):
             category, (name, column) = "table", args[:2]
             qname, qcolumn = (fmt_entity(n, force=True) for n in (name, column))
             if wx.YES != controls.YesNoMessageBox(
-                "Are you sure you want to drop %s %s column %s?" % 
+                "Are you sure you want to drop %s %s column %s?" %
                 (category, qname, qcolumn), conf.Title, wx.ICON_WARNING, default=wx.NO
             ): return
 
@@ -3722,7 +3722,7 @@ class DatabasePage(wx.Panel):
             lock = self.db.get_lock(category, name, skip=list(filter(bool, [datapage])))
             if lock:
                 wx.MessageBox(
-                    "Cannot drop %s %s column %s.\n\n%s" % 
+                    "Cannot drop %s %s column %s.\n\n%s" %
                     (category, qname, qcolumn, lock), conf.Title, wx.ICON_WARNING
                 )
                 return
@@ -3763,7 +3763,7 @@ class DatabasePage(wx.Panel):
                 catnames = [", ".join(map(fmt_entity, nn)) for nn in extradrops.values()]
                 catitems = list(map(" ".join, zip(catwords, catnames))) # ['tables "a", "b"']
                 sqls = [x["sql"] for d in extradrops.values() for x in d.values()]
-                wx.MessageBox("Also dropped column %s dependents:\n\n- %s\n\n%s" % 
+                wx.MessageBox("Also dropped column %s dependents:\n\n- %s\n\n%s" %
                               (qname, "\n- ".join(catitems), "\n\n".join(sqls)), conf.Title)
 
         elif "truncate" == cmd:
@@ -3823,7 +3823,7 @@ class DatabasePage(wx.Panel):
             category, name, name2 = (list(args) + [None])[:3]
             if name not in self.db.schema.get(category) or {}: return
             if name2 is None:
-                dlg = wx.TextEntryDialog(self, 
+                dlg = wx.TextEntryDialog(self,
                     'Rename %s %s to:' % (category, fmt_entity(name)),
                     conf.Title, value=name, style=wx.OK | wx.CANCEL
                 )
@@ -3897,7 +3897,7 @@ class DatabasePage(wx.Panel):
             item = self.db.get_category("table", table)
             if not item: return
             if name2 is None:
-                dlg = wx.TextEntryDialog(self, 
+                dlg = wx.TextEntryDialog(self,
                     "Rename column %s.%s to:"
                     % (fmt_entity(table, force=False), fmt_entity(name, force=False)),
                     conf.Title, value=name, style=wx.OK | wx.CANCEL
@@ -6080,7 +6080,7 @@ class DatabasePage(wx.Panel):
 
     def toggle_cursors(self, category, name, close=False):
         """Closes or reopens grid cursors using specified table or view."""
-        if not name: return            
+        if not name: return
         relateds = {category: set([name])}
         for c, m in self.db.get_related(category, name, data=True).items():
             if c in ("table", "view") and not ("table" == category == c):
@@ -6648,7 +6648,7 @@ class DatabasePage(wx.Panel):
             successes, errors = {}, []
             for k, v in result["subtasks"].items():
                 category = next(c for c, v in self.db.schema.items() if k in v)
-                if v.get("error"): errors.append("%s %s: %s" % 
+                if v.get("error"): errors.append("%s %s: %s" %
                     (category, fmt_entity(k), v["error"]))
                 if v.get("result"): successes.setdefault(category, []).append(k)
 

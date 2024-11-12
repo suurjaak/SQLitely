@@ -1103,7 +1103,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                                         filter_menu=filter_menu, filter_hint=filter_hint)
         dlg.SetApplyCallback(apply_filter)
         dlg.CenterOnParent()
-        with dlg: 
+        with dlg:
             dlg_result, columns2 = dlg.ShowModal(), dlg.GetItems()
         if wx.ID_OK == dlg_result: apply_filter(columns2)
 
@@ -3774,7 +3774,7 @@ class SchemaObjectPage(wx.Panel):
         sizer.Add(sizer_flags, border=5, flag=wx.TOP | wx.BOTTOM | wx.GROW)
         sizer.Add(nb, proportion=1, border=5, flag=wx.TOP | wx.GROW)
 
-        self._BindDataHandler(self._OnToggleTableOption, check_rowid,  ["without"]) 
+        self._BindDataHandler(self._OnToggleTableOption, check_rowid,  ["without"])
         self._BindDataHandler(self._OnToggleTableOption, check_strict, ["strict"]) if check_strict else None
         self._BindDataHandler(self._OnChange, check_exists, ["exists"])
 
@@ -5667,8 +5667,8 @@ class SchemaObjectPage(wx.Panel):
         autocomp = self._db.get_sql_functions()
         if self._editmode:
             table_name = None
-            if   "table" == self._category: table_name = self._original.get("name")      
-            elif "index" == self._category: table_name = self._item["meta"].get("table") 
+            if   "table" == self._category: table_name = self._original.get("name")
+            elif "index" == self._category: table_name = self._item["meta"].get("table")
             for category in ("table", "view") if table_name else ():
                 for item in self._db.schema.get(category, {}).values():
                     if item.get("columns") and util.lceq(item["name"], table_name):
@@ -6262,8 +6262,8 @@ class SchemaObjectPage(wx.Panel):
         data = {"sql": self._item["sql0" if self._sql0_applies else "sql"]}
         autocomp = {n: [] for n in self._db.get_sql_functions()}
         table_name = None
-        if   "table" == self._category: table_name = self._original.get("name")      
-        elif "index" == self._category: table_name = self._item["meta"].get("table") 
+        if   "table" == self._category: table_name = self._original.get("name")
+        elif "index" == self._category: table_name = self._item["meta"].get("table")
         for category in ("table", "view"):
             for item in self._db.schema.get(category, {}).values():
                 if self._category in ("index", "trigger", "view"):

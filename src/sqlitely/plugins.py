@@ -102,7 +102,7 @@ def validate_plugin(plugin, arity=None, cls=None):
         err = "Callable '%s' does not support %s arguments." % (plugin["name"], arity)
     else:
         result.update(target=runnable)
-    return 
+    return
 
 
 def validate_callable(runnable, arity=None, cls=None):

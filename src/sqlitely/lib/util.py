@@ -455,7 +455,7 @@ def memoize(*args, **kwargs):
     Returns function result, cached if available, caches result otherwise.
     Returns deep copies if result is dict, list, set, or tuple.
 
-    Acts as decorator if invoked with a single function argument or with 
+    Acts as decorator if invoked with a single function argument or with
     recognized keyword arguments; returning an outer decorator for the latter:
 
     @memoize
@@ -549,7 +549,7 @@ def memoize(*args, **kwargs):
     if "__nohash__" in kwargs: nohash = kwargs.pop("__nohash__")
     if "__key__"    in kwargs: root   = kwargs.pop("__key__")
     if as_outer and kwargs:
-        raise TypeError("memoize() got an unexpected keyword argument '%s'" % 
+        raise TypeError("memoize() got an unexpected keyword argument '%s'" %
                         next(iter(kwargs)))
 
     if not as_outer:
@@ -867,7 +867,7 @@ def img_wx_to_raw(img, format="PNG"):
 def int_to_base(value, digits=string.ascii_uppercase):
     """
     Returns integer represented in custom base.
-    
+
     @param   value   integer to represent, like 702
     @param   digits  base digits, defaults to upper-case ASCII letters A..Z
     @return          integer string in given base, like "AAA" for 702
@@ -1186,7 +1186,7 @@ def shortpath(path):
 
     ctypes.windll.kernel32.GetShortPathNameW.argtypes = [
         # lpszLongPath, lpszShortPath, cchBuffer
-        wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD 
+        wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD
     ]
     ctypes.windll.kernel32.GetShortPathNameW.restype = wintypes.DWORD
     buf = ctypes.create_unicode_buffer(4 * len(path))
@@ -1230,7 +1230,7 @@ def timedelta_seconds(timedelta):
 
 def titlecase(text):
     """
-    Returns a titlecased version of text, leaving URLs as is 
+    Returns a titlecased version of text, leaving URLs as is
     and not considering apostrophe as word separator.
     """
     re_url = re.compile(r"((?:(?:(?:(?:[a-z]+)?://)|(?:www\.))" # protocol:// or www.
@@ -1369,7 +1369,7 @@ def unrepeat(s, front="", end="", case=False):
     """
     s = re.sub("^(%s){2,}" % re.escape(front), front, s, flags=0 if case else re.I) if front else s
     s = re.sub("(%s){2,}$" % re.escape(end),   end,   s, flags=0 if case else re.I) if end   else s
-    return s    
+    return s
 
 
 def url_to_path(url, double_decode=False):

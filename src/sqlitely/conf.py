@@ -440,7 +440,7 @@ def save(configfile=None):
             except Exception: continue # for path
             else: break # for path
 
-        f.write("# %s configuration written on %s.\n" % 
+        f.write("# %s configuration written on %s.\n" %
                 (Title, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         for name in FileDirectives:
             try: parser.set(section, name, json.dumps(getattr(module, name)))

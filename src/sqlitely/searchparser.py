@@ -398,7 +398,7 @@ def match_keywords(texts, keywords, name, case=False, neg="-", when=any):
     for text in ([texts] if isinstance(texts, six.string_types) else texts):
         pros.append(match_words(text, provals, case, when) if provals else None)
         cons.append(match_words(text, convals, case, when) if convals else None)
-    if set(pros + cons) == set([None]): return None 
+    if set(pros + cons) == set([None]): return None
     if not texts: return not provals
     return False if (any(cons) or pros and all(x is False for x in pros)) else True
 

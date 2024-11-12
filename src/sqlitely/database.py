@@ -496,8 +496,8 @@ Must be turned on before any tables are created, not possible to change afterwar
         "dump": True,
         "short": "Location of temporary tables and indexes",
         "description": """  DEFAULT: the compile-time C preprocessor macro SQLITE_TEMP_STORE is used to determine where temporary tables and indexes are stored.
-  FILE: temporary tables and indexes are stored in a file. The temp_store_directory pragma can be used to specify the directory containing temporary files when FILE is specified. 
-  MEMORY: temporary tables and indexes are kept in as if they were pure in-memory databases memory. 
+  FILE: temporary tables and indexes are stored in a file. The temp_store_directory pragma can be used to specify the directory containing temporary files when FILE is specified.
+  MEMORY: temporary tables and indexes are kept in as if they were pure in-memory databases memory.
 
   When the temp_store setting is changed, all existing temporary tables, indexes, triggers, and views are immediately deleted.""",
       },
@@ -546,7 +546,7 @@ Must be turned on before any tables are created, not possible to change afterwar
         "label": "Writable schema",
         "type": bool,
         "short": "Writable sqlite_master",
-        "description": """If enabled, the sqlite_master table can be changed using ordinary UPDATE, INSERT, and DELETE statements, for the duration of the current session. 
+        "description": """If enabled, the sqlite_master table can be changed using ordinary UPDATE, INSERT, and DELETE statements, for the duration of the current session.
 
 WARNING: misuse can easily result in a corrupt database file.""",
       },
@@ -789,14 +789,14 @@ WARNING: misuse can easily result in a corrupt database file.""",
     def lock(self, category, name, key, label=None):
         """
         Locks a schema object for altering or deleting.
-        
+
         For views, cascades lock to tables and views the view queries, recursively.
 
         @param   key       any hashable to identify lock by
         @param   label     an informational label for lock
         """
         category, name = (x.lower() if x is not None else x for x in (category, name))
-        if name is not None and name not in self.schema.get(category, {}): return            
+        if name is not None and name not in self.schema.get(category, {}): return
         self.locks[category][name].add(key)
         self.locklabels[key] = label
         if "view" == category and name is not None:
@@ -929,7 +929,6 @@ WARNING: misuse can easily result in a corrupt database file.""",
         @param   reverse   whether to reverse order
         @return            [(rowid, ?"DESC")] or [(pkcol1, ?"DESC"), ] if table,
                            ["row_number() OVER () DESC"] if view in reverse else []
-                           
         """
         category = "table" if name in self.schema["table"] else "view"
         if "view" == category:
@@ -1962,8 +1961,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
     def rename_item(self, category, name, name2):
         """
-        Carries out renaming schema item, using "ALTER TABLE" if table 
-        and name is not case change, else dropping and re-creating the item 
+        Carries out renaming schema item, using "ALTER TABLE" if table
+        and name is not case change, else dropping and re-creating the item
         under the new name. Retains item ID.
         """
         if name == name2: return
@@ -2063,7 +2062,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         """
         Carries out dropping table column.
 
-        @return  additionally deleted entities like indexes 
+        @return  additionally deleted entities like indexes
                  and UPDATE OF triggers firing on column,
                  as {category: {name: item}}
         """

@@ -1318,7 +1318,7 @@ def run_import(infile, args):
                 tname = util.make_unique(tname, items)
                 chosen_tables.append(tname)
                 item = {"name": tname, "type": "table",
-                        "columns": ([{"name": pk, "pk": {"autoincrement": True}}] if pk else []) + 
+                        "columns": ([{"name": pk, "pk": {"autoincrement": True}}] if pk else []) +
                                    [{"name": n} for n in colmapping.values()]}
 
             sheettotal = sheet["rows"]
@@ -1767,7 +1767,7 @@ def run_stats(dbname, args):
                              conf.FontDiagramFile, conf.FontDiagramBoldFile))
             layout.Populate({"statistics": True})
             layout.Redraw(scheme.Rect(0, 0, *conf.Defaults["WindowSize"]), scheme.LayoutStyle.GRID)
-            bmp = layout.MakeBitmap() 
+            bmp = layout.MakeBitmap()
             svg = layout.MakeTemplate("svg", embed=True)
             diagrams = {"bmp": bmp, "svg": svg}
         bar.update(afterword=" Writing output")

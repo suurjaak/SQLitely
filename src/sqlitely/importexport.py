@@ -186,7 +186,7 @@ class Sink(Base):
     def _measure_columns(self, columns, make_iterable):
         """
         Returns column widths and justification for txt output. Returns early if cancelled.
-        
+
         @param   columns        output columns as [{name}]
         @param   make_iterable  function returning iterable sequence yielding rows
         @return  {column name: character width}, {column name: whether left-justified}
@@ -253,7 +253,7 @@ class ConsoleSink(Sink):
         Configures output options, returns self.
 
         @param   allow_empty  do not skip items with no output rows
-        @param   combined     output as multi-item, e.g. JSON as 
+        @param   combined     output as multi-item, e.g. JSON as
                               {name1: [{..}, {..}], name2: [{..}]} instead of [{..}, {..}], [{..}]
         """
         self._flags.update(allow_empty=allow_empty, combined=combined)
@@ -316,7 +316,7 @@ class ConsoleSink(Sink):
         if not title: return
         for line in util.tuplefy(title): self._output(line, file=sys.stderr)
         self._output(file=sys.stderr)
- 
+
 
     def _write_header(self, item, has_rows=True):
         """Writes out item header."""
@@ -559,7 +559,7 @@ class DatabaseSink(Sink):
             self._db.execute(sql)
             self._state["sql_logs"].append((sql, None))
         if self._state["samefile"] or not self._state["schema2"]: return
-        try: 
+        try:
             sql = "DETACH DATABASE %s" % self._state["schema2"]
             self._db.execute(sql)
             self._state["logs"].append((sql, None))
@@ -754,7 +754,7 @@ class DatabaseSink(Sink):
     def _create_target_entity(self, category, name, name2, create_sql, renames=None):
         """
         Creates entity in target database, drops existing if any.
-        
+
         @return  success as True/False, or None on error and cancel
         """
         do_separate_connection = False
@@ -1548,7 +1548,7 @@ class FileDataSource(Base):
             "sections":      [
                 "name":    worksheet name if multiple sheet format else descriptive label,
                 "rows":    count or -1 if file too large,
-                "columns": [first row cell value, ] for spreadsheets, or 
+                "columns": [first row cell value, ] for spreadsheets, or
                            OrderedDict(first row column name: value) for JSON/YAML
         ]}, or None if cancelled.
         """
