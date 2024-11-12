@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.09.2024
-@modified    11.10.2024
+@modified    12.11.2024
 ------------------------------------------------------------------------------
 """
 import io
@@ -26,6 +26,8 @@ except ImportError: wx = None
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from sqlitely import conf, database, importexport, scheme, workers
+if wx:
+    from sqlitely.lib import controls
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from test.common import COLUMNS, SCHEMA, DATA, STATS_FORMATS
@@ -132,6 +134,7 @@ class TestInfoSink(FileTest):
         """Returns schema diagram structure for export, or None if not available."""
         if not wx: return None
         _ = wx.App()
+        controls.Patch.patch_wx()
         layout = scheme.SchemaDiagram(self._db)
         layout.SetFonts("Verdana",
                         ("Open Sans", conf.FontDiagramSize,
