@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.11.2024
+@modified    12.11.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1197,7 +1197,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         removes from list on Delete, refreshes columns on F5,
         focuses filter on Ctrl-F.
         """
-        event.Skip()
         if event.KeyCode in [wx.WXK_F5]:
             items, selected_files, selected_home = [], [], False
             selected = self.list_db.GetFirstSelected()
@@ -1236,6 +1235,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         elif event.KeyCode in controls.KEYS.DELETE:
             if self.dbs_selected:
                 self.on_remove_database(None)
+        else:
+            event.Skip()
 
 
     def on_sort_list_db(self, event):
