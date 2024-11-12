@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.10.2024
+@modified    12.11.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -329,7 +329,7 @@ class SingleInstanceChecker(object):
         return self._otherpid
 
 
-    def SendToOther(self, data, port, portrange=10000):
+    def SendToOther(self, data, port, portrange=1000):
         """
         Sends data to the other program instance via multiprocessing.
 
@@ -338,16 +338,29 @@ class SingleInstanceChecker(object):
         @param   portrange  maximum steps to try increasing port number if connection fails
         @return             True if operation successful, False otherwise
         """
+        MAX_PORT = 65535
         result = None
         authkey = self._name or "%s-%s" % (wx.GetApp().AppName, wx.GetUserId())
-        while result is None and portrange >= 0:
-            kwargs = {"address": ("localhost", port), "authkey": authkey}
-            try: client = multiprocessing.connection.Client(**kwargs)
-            except Exception: port, portrange = port + 1, portrange - 1
-            else:
-                try:              result, _ = True, client.send(data)
-                except Exception: result = False
-                finally:          try_ignore(client.close)
+
+        def launch_client(results, port, portrange):
+            client = None
+            while client is None and portrange >= 0 and port <= MAX_PORT:
+                kwargs = {"address": ("localhost", port), "authkey": authkey}
+                try: client = multiprocessing.connection.Client(**kwargs)
+                except Exception: port, portrange = port + 1, portrange - 1
+            if client is not None: results.append(client)
+
+        clients = []
+        t = threading.Thread(target=launch_client, args=(clients, port, portrange))
+        t.daemon = True
+        t.start() # Use thread because opening connection may stall if other side stalls
+        t.join(timeout=2)
+        if clients:
+            client = clients[0]
+            try: client.send(data)
+            except Exception: result = False
+            else: result = True
+            finally: try_ignore(client.close)
         return result or False
 
 
