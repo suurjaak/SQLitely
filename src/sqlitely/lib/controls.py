@@ -3626,9 +3626,11 @@ class Patch(object):
 
         def defloatify(func):
             """Returns function pass-through wrapper, converting any float arguments to int."""
+            cast = lambda v: int(v) if isinstance(v, float) else v
+            make = lambda v: type(v)(cast(x) for x in v) if isinstance(v, (list, tuple)) else cast(v)
             def inner(*args, **kwargs):
-                args = [int(v) if isinstance(v, float) else v for v in args]
-                kwargs = {k: int(v) if isinstance(v, float) else v for k, v in kwargs.items()}
+                args = [make(v) for v in args]
+                kwargs = {k: make(v) for k, v in kwargs.items()}
                 return func(*args, **kwargs)
             return functools.update_wrapper(inner, func)
 
@@ -3648,6 +3650,7 @@ class Patch(object):
         wx.PaintDC.DrawBitmap           = defloatify(wx.PaintDC.DrawBitmap)
         wx.Rect.Contains                = defloatify(wx.Rect.Contains)
         wx.Rect.Offset                  = defloatify(wx.Rect.Offset)
+        wx.Rect.Union                   = defloatify(wx.Rect.Union)
         wx.ScrolledWindow.Scroll        = defloatify(wx.ScrolledWindow.Scroll)
         wx.ScrolledWindow.SetScrollbars = defloatify(wx.ScrolledWindow.SetScrollbars)
 
