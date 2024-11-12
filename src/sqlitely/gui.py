@@ -2224,7 +2224,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         for page, db in self.db_pages.items():
             if not page: continue # for page, db
             active_idx = page.notebook.Selection
-            if active_idx and not db.temporary:
+            if active_idx >= 0 and not db.temporary:
                 conf.LastActivePages[db.filename] = active_idx
             elif page.db.filename in conf.LastActivePages:
                 del conf.LastActivePages[page.db.filename]
@@ -2320,7 +2320,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             ): return event.Veto()
 
         # Remove page from MainWindow data structures
-        if page.notebook.Selection and not page.db.temporary:
+        if page.notebook.Selection >= 0 and not page.db.temporary:
             conf.LastActivePages[page.db.filename] = page.notebook.Selection
         elif page.db.filename in conf.LastActivePages:
             del conf.LastActivePages[page.db.filename]
@@ -2654,7 +2654,7 @@ class DatabasePage(wx.Panel):
         notebook.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_change_page, notebook)
         # Restore last active page
         if db.filename in conf.LastActivePages \
-        and conf.LastActivePages[db.filename] != notebook.Selection:
+        and conf.LastActivePages[db.filename] not in (-1, notebook.Selection):
             notebook.SetSelection(conf.LastActivePages[db.filename])
 
         try: self.load_data()
