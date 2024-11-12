@@ -22,6 +22,7 @@ CHANGELOG
 - do not highlight changes in hex view in value editor tool
 - do not reverse entities themselves in command-line interface on --reverse, only their rows
 - mark changed pragma values with asterisks
+- use unsaved changes when exporting table data grid to another database
 - use hourglass cursor while showing busy message
 - allow saving SVG image as SVG in column editor
 - provide workaround for importing CSVs with mixed Windows and Unix linefeeds (issue #3)

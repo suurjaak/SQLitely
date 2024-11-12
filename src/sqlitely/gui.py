@@ -6309,7 +6309,8 @@ class DatabasePage(wx.Panel):
     def on_data_page_event(self, event):
         """Handler for a message from DataObjectPage."""
         if getattr(event, "export_db", False):
-            return self.on_export_to_db(category="table", names=event.names, selects=event.selects)
+            return self.on_export_to_db(category="table", names=event.names,
+                                        selects=event.selects, iterables=event.iterables)
 
         VARS = ("close", "modified", "updated", "open", "remove", "drop",
                 "reindex", "table", "row", "rows")
@@ -6451,16 +6452,18 @@ class DatabasePage(wx.Panel):
         finally: self.Thaw()
 
 
-    def on_export_to_db(self, event=None, category=None, names=(), data=True, selects=None):
+    def on_export_to_db(self, event=None, category=None, names=(), data=True,
+                        selects=None, iterables=None):
         """
         Handler for exporting one or more tables or views to another database,
         opens file dialog and performs direct copy.
         By default copies both structure and data.
 
-        @param   category  category to export if not both tables and views
-        @param   names     name or names to export if not all in category
-        @param   data      whether to export data
-        @param   selects   {table name: SELECT SQL if not using default}
+        @param   category   category to export if not both tables and views
+        @param   names      name or names to export if not all in category
+        @param   data       whether to export data
+        @param   selects    {table name: SELECT SQL if not using default}
+        @param   iterables  {table name: iterable yielding rows if not using select}
         """
         if data and self.panel_data_export.IsRunning(): return wx.MessageBox(
             "A global export is already underway.", conf.Title, wx.ICON_NONE
@@ -6680,7 +6683,7 @@ class DatabasePage(wx.Panel):
                 wx.PostEvent(self, OpenDatabaseEvent(self.Id, file=filename2))
 
 
-        args = {"schema": schema, "renames": renames, "selects": selects}
+        args = {"schema": schema, "renames": renames, "selects": selects, "iterables": iterables}
 
         if not data:
             # Purely structure export: do not open export panel

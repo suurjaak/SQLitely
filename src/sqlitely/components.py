@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.11.2024
+@modified    12.11.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -3081,8 +3081,13 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
 
     def _OnExportToDB(self, event=None):
         """Handler for exporting table grid contents to another database."""
-        selects = {self._item["name"]: self._grid.Table.GetSQL(sort=True, filter=True)}
-        self._PostEvent(export_db=True, names=self._item["name"], selects=selects)
+        selects, iterables = None, None
+        if self.IsChanged():
+            iterables = {self._item["name"]: self._grid.Table.GetRowIterator()}
+        else:
+            selects = {self._item["name"]: self._grid.Table.GetSQL(sort=True, filter=True)}
+        self._PostEvent(export_db=True, names=self._item["name"],
+                        selects=selects, iterables=iterables)
 
 
     def _OnExport(self, event=None):
