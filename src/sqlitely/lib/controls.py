@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    11.11.2024
+@modified    12.11.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -2146,7 +2146,9 @@ class FormDialog(wx.Dialog):
             splitter.SplitHorizontally(panel_wrap, panel_footer)
 
         self.Fit()
-        FRAMEH = 2 * wx.SystemSettings.GetMetric(wx.SYS_FRAMESIZE_Y) + wx.SystemSettings.GetMetric(wx.SYS_CAPTION_Y)
+        win = self.Parent and self.Parent.TopLevelParent or self
+        FRH, CPNH = (max(0, wx.SystemSettings.GetMetric(x, win)) for x in (wx.SYS_FRAMESIZE_Y, wx.SYS_CAPTION_Y))
+        FRAMEH = 2 * FRH + CPNH
         MINH = 25 + (self.HEIGHT_FOOTER if panel_footer else 0)
         self.Size = self.MinSize = (self.WIDTH, panel_wrap.VirtualSize[1] + MINH + sizer_buttons.Size[1] + FRAMEH)
         if splitter:
@@ -7022,7 +7024,8 @@ class ItemFilterDialog(wx.Dialog):
     def _SizeToFit(self):
         """Resizes dialog window to reasonable width and height."""
         self.Fit()
-        FRH, CPNH = (wx.SystemSettings.GetMetric(x) for x in (wx.SYS_FRAMESIZE_Y, wx.SYS_CAPTION_Y))
+        win = self.Parent and self.Parent.TopLevelParent or self
+        FRH, CPNH = (wx.SystemSettings.GetMetric(x, win) for x in (wx.SYS_FRAMESIZE_Y, wx.SYS_CAPTION_Y))
         MINH = 2 * FRH + CPNH
         container = self._ctrls["container"]
         for szitem in map(self.Sizer.GetItem, range(self.Sizer.ItemCount)):
