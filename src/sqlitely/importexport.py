@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.11.2024
+@modified    12.11.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -481,7 +481,7 @@ class DatabaseSink(Sink):
             sqls, params = zip(*self._state["sql_logs"])
             params = list(filter(bool, params))
             if not self._state["samefile"]: params = [self._filename] + params
-            self._db.log_query("EXPORT TO DB", ["%s;" % x for x in sqls], params)
+            self._db.log_query("EXPORT TO DB", [grammar.terminate(x) for x in sqls], params)
         util.try_ignore(lambda: self._progress(done=True))
         return result
 
@@ -517,7 +517,7 @@ class DatabaseSink(Sink):
             return False
         else:
             sqls, params = zip(*self._state["sql_logs"])
-            self._db.log_query("EXPORT QUERY TO DB", ["%s;" % x for x in sqls], params)
+            self._db.log_query("EXPORT QUERY TO DB", [grammar.terminate(x) for x in sqls], params)
         finally:
             self._db.unlock(None, None, self._filename)
             if not self._state["file_existed"] and not result:
