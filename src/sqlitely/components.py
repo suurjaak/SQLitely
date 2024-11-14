@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.11.2024
+@modified    14.11.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -333,10 +333,13 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         return result
 
 
-    def GetValue(self, row, col):
+    def GetValue(self, row, col, limit=500):
         """
         Returns grid value in specified cell, decoding binary buffers to string
         (wx.grid.GridTableBase override).
+
+        @param   limit  max length of strings to return, None or 0 or <0 disables
+                        (argument not present in GridTableBase.GetValue)
         """
         value = None
         if row < self.row_count:
@@ -348,6 +351,9 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         if value and isinstance(value, six.string_types) and "BLOB" == self.GetAffinity(col):
             # Text editor does not support control characters or null bytes.
             value = util.to_unicode(value).encode("unicode-escape").decode("latin1")
+        if limit and limit > 0 and isinstance(value, six.text_type) and len(value) > limit:
+            # Grids in Linux get slow with very long values
+            value = value[:limit]
         return value
 
 
@@ -1041,15 +1047,15 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         row = self.View.GridCursorRow
         filter_menu = [
             {"label": "Set value from &this column in current row #%s" % (row + 1),
-             "value": lambda x: self.GetValue(row, col), "disabled": row < 0},
+             "value": lambda x: self.GetValue(row, col, limit=None), "disabled": row < 0},
             {"label": "Set value from &focused column #%s in current row #%s" %
                       (self.View.GridCursorCol + 1, row + 1),
-             "value": lambda x: self.GetValue(row, self.View.GridCursorCol),
+             "value": lambda x: self.GetValue(row, self.View.GridCursorCol, limit=None),
              "disabled": row < 0 or self.View.GridCursorCol < 0},
             {"label": "Set value from current row #%s &column .." % (row + 1),
              "value": [{"label": "&%s. %s:\t%s" %  (c + 1, fmt_entity(cdata["name"], force=False),
                                                   row >= 0 and fmt_value(self.GetValue(row, c))),
-                        "value": (lambda c: lambda x: self.GetValue(row, c))(c)}
+                        "value": (lambda c: lambda x: self.GetValue(row, c, limit=None))(c)}
                         for c, cdata in enumerate(self.columns)],
              "disabled": row < 0 or self.View.GridCursorCol < 0},
             {"label": "Set &NULL", "value": None},
@@ -1087,13 +1093,14 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         row, col = self.View.GridCursorRow, self.View.GridCursorCol
         filter_menu = [
             {"label": "Set value from &this column in current row #%s" % (row + 1),
-             "value": lambda x, i: self.GetValue(row, i), "disabled": row < 0},
+             "value": lambda x, i: self.GetValue(row, i, limit=None), "disabled": row < 0},
             {"label": "Set value from &focused column #%s in current row #%s" % (col + 1, row + 1),
-             "value": lambda x, i: self.GetValue(row, col), "disabled": row < 0 or col < 0},
+             "value": lambda x, i: self.GetValue(row, col, limit=None),
+             "disabled": row < 0 or col < 0},
             {"label": "Set value from current row #%s &column .." % (row + 1),
              "value": [{"label": "&%s. %s:\t%s" %  (c + 1, fmt_entity(cdata["name"], force=False),
                                                   row >= 0 and fmt_value(self.GetValue(row, c))),
-                        "value": lambda x, i: self.GetValue(row, i)}
+                        "value": lambda x, i: self.GetValue(row, i, limit=None)}
                         for c, cdata in enumerate(self.columns)],
              "disabled": row < 0 or col < 0},
             {"label": "Set &NULL", "value": None},
@@ -1777,7 +1784,7 @@ class SQLiteGridBaseMixin(object):
         x, y = self._grid.CalcUnscrolledPosition(event.X, event.Y)
         row, col = self._grid.XYToCell(x, y)
         if row >= 0 and col >= 0:
-            value = self._grid.Table.GetValue(row, col)
+            value = self._grid.Table.GetValue(row, col, limit=None)
             col_name = self._grid.Table.columns[col]["name"].lower()
             if isinstance(value, six.integer_types + (float, )) and value > 100000000 \
             and ("time" in col_name or "date" in col_name or "stamp" in col_name):
