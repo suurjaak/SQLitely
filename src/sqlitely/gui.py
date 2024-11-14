@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.11.2024
+@modified    14.11.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -5122,6 +5122,9 @@ class DatabasePage(wx.Panel):
         self.worker_checksum.stop()
         self.panel_data_export.Stop()
 
+        pagevars = ["sqlpage"]
+        for var, dct in zip(("datapage", "schemapage"), (self.data_pages, self.schema_pages)):
+            if dct: pagevars.append(var)
         for p in (p for x in self.data_pages.values() for p in x.values()):
             p.Close(force=True)
         for p in (p for x in self.schema_pages.values() for p in x.values()):
@@ -5131,7 +5134,7 @@ class DatabasePage(wx.Panel):
         for p in self.sql_pages.values():
             p.Close(force=True)
         self.TopLevelParent.run_console(
-            "sqlpage = None")
+            "%s = None" % " = ".join(pagevars))
 
         try: self.db.connection.interrupt()
         except Exception: pass
@@ -6149,9 +6152,8 @@ class DatabasePage(wx.Panel):
                     self.pages_closed[self.notebook_schema].append({"name": p.Name, "type": c})
                 self.schema_pages[c].pop(k)
                 break # for c, k, p
-        self.TopLevelParent.run_console(
-            "schemapage = wx.FindWindowById(%s).notebook_schema.GetPage(0) # Schema object subtab" %
-            self.Id)
+        wx.CallAfter(self.TopLevelParent.run_console,
+            "schemapage = wx.FindWindowById(%s).notebook_schema.GetPage(0) # Schema object subtab" % self.Id)
         self.update_page_header()
 
 
@@ -6286,7 +6288,7 @@ class DatabasePage(wx.Panel):
                     self.sql_pages.pop(k)
                     break # for k, p
         finally: wx.CallAfter(lambda: self and self.notebook_sql.Thaw())
-        self.TopLevelParent.run_console(
+        wx.CallAfter(self.TopLevelParent.run_console,
             "sqlpage = wx.FindWindowById(%s).notebook_sql.GetPage(0) # SQL window subtab" % self.Id)
 
 
@@ -6301,9 +6303,8 @@ class DatabasePage(wx.Panel):
                 self.data_pages[c].pop(k)
                 break # for c, k, p
         self.update_page_header()
-        self.TopLevelParent.run_console(
-            "datapage = wx.FindWindowById(%s).notebook_data.GetPage(0) # Data object subtab" %
-            self.Id)
+        wx.CallAfter(self.TopLevelParent.run_console,
+            "datapage = wx.FindWindowById(%s).notebook_data.GetPage(0) # Data object subtab" % self.Id)
 
 
     def on_data_page_event(self, event):
