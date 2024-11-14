@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    22.10.2024
+@modified    14.11.2024
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -253,10 +253,10 @@ def terminate(sql, data=None):
             parser = SQLiteParser(stream)
             parser.removeErrorListeners()
             tree = parser.parse()
-            cc = stream.filterForChannel(0, len(stream.tokens) - 1, channel=2) or []
-            data["__comments__"]   = {x.start: x.text for x in cc}
+            comments = stream.filterForChannel(0, len(stream.tokens) - 1, channel=2) or []
+            data["__comments__"]   = {x.start: x.text for x in comments}
             data["__terminated__"] = any(isinstance(x, TerminalNode) and ";" == x.getText() and
-                                         any(x.getSourceInterval()[0] < c.start for c in cc)
+                                         any(c.start > x.getSourceInterval()[0] for c in comments)
                                          for x in tree.children[0].children[1:])
         except Exception: pass
     if data and data.get("__terminated__"): return sql
@@ -536,10 +536,10 @@ class Parser(object):
             else: result.pop("schema", None)
             self.rename_schema(ctx, renames)
 
-        cc = self._stream.filterForChannel(0, len(self._stream.tokens) - 1, channel=2) or []
-        result["__comments__"] = {x.start: x.text for x in cc}
+        comments = self._stream.filterForChannel(0, len(self._stream.tokens) - 1, channel=2) or []
+        result["__comments__"] = {x.start: x.text for x in comments}
         result["__terminated__"] = any(isinstance(x, TerminalNode) and ";" == x.getText() and
-                                       any(x.getSourceInterval()[0] < c.start for c in cc)
+                                       any(c.start > x.getSourceInterval()[0] for c in comments)
                                        for x in self._tree.children[0].children[1:])
         return result
 
