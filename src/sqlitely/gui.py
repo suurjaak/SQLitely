@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.11.2024
+@modified    15.11.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4898,9 +4898,10 @@ class DatabasePage(wx.Panel):
             self.check_pragma_changesql.Shown = True
         self.pragma_fullsql = not self.check_pragma_changesql.Value
         for name, opts in database.Database.PRAGMA.items():
+            if "table" == opts["type"]: continue # for name, opts
             ctrl = self.pragma_ctrls[name]
             writable = opts["write"](self.db) if callable(opts.get("write")) else opts.get("write")
-            ctrl.Enable(writable is not False and "table" != opts["type"])
+            ctrl.Enable(writable is not False)
         self.panel_pragma_sql.Layout()
         self.page_pragma.Layout()
         self.populate_pragma_sql()
@@ -4932,6 +4933,7 @@ class DatabasePage(wx.Panel):
                 ctrl.Value = value
             else:
                 ctrl.Value = "" if value is None else value
+            if "table" == opts["type"]: continue # for name, opts
             writable = opts["write"](self.db) if callable(opts.get("write")) else opts.get("write")
             ctrl.Enable(editmode and writable is not False and "table" != opts["type"])
         self.populate_pragma_sql()
@@ -4954,7 +4956,8 @@ class DatabasePage(wx.Panel):
         self.pragma_changes.clear()
         self.on_pragma_refresh()
         for name, opts in database.Database.PRAGMA.items():
-            if "table" != opts["type"]: self.pragma_ctrls[name].Disable()
+            if "table" == opts["type"]: continue # for name, opts
+            self.pragma_ctrls[name].Disable()
             self.pragma_items[name][0].Label = self.pragma_items[name][0].Label.rstrip(" *") + " "
         self.page_pragma.Layout()
         self.update_page_header()
