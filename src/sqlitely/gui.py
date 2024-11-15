@@ -1139,6 +1139,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """Handler for toggling automatic update checking, changes conf."""
         conf.UpdateCheckAutomatic = event.IsChecked()
         util.run_once(conf.save)
+        if conf.UpdateCheckAutomatic: wx.CallAfter(self.update_check)
 
 
     def on_database_page_event(self, event):
