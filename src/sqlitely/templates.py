@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.11.2024
+@modified    15.11.2024
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -2039,6 +2039,8 @@ def wrapclass(v):
       margin-top: 10px;
       padding: 10px;
       position: relative;
+      min-width: calc(100% - 22px);
+      width: fit-content;
     }
     div.section > h2:first-child {
       margin-top: 0;
@@ -2130,6 +2132,7 @@ def wrapclass(v):
     a.toggle.open::after { content: " \\25bc"; }
     a.toggle.right { display: block; text-align: right; }
     .hidden { display: none; }
+    .text_wrap { word-break: break-all; }
     div.toggle.header { text-align: right; }
     div.section div.toggle.header { position: absolute; right: 5px; top: 5px; }
     a.sort { display: inline-block; }
@@ -2317,7 +2320,7 @@ dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
 %>
         <a href="javascript:;" onclick="onToggleDarkmode()" id="darkmode" title="Click to toggle dark/light mode">&#x1F313;&#xFE0E;</a>
       </div><br />
-      Source: <b>{{ db }}</b>.<br />
+      Source: <b class="text_wrap">{{ db }}</b>.<br />
       Size: <b title="{{ stats.get("size", db.filesize) }}">{{ util.format_bytes(stats.get("size", db.filesize)) }}</b> (<span title="{{ stats.get("size", db.filesize) }}">{{ util.format_bytes(stats.get("size", db.filesize), max_units=False) }}</span>).<br />
 %if dt_created and dt_modified and dt_created != dt_modified:
       Date: <b>{{ dt_modified }}</b> (created <b>{{ dt_created }}</b>).<br />
