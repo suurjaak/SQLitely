@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.11.2024
+@modified    17.11.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -142,7 +142,7 @@ class CaselessDict(dict):
     def __iter__(self):
         if self._order is not None:
             return iter(self._keys[k] for k in self._order)
-        sortkey = lambda x: coalesce(x[0] if isinstance(x[0], tuple) else (x[1], ), "")
+        sortkey = lambda x: tuplefy(coalesce(x[0], ""))
         return iter(x for _, x in sorted(self._keys.items(), key=sortkey))
 
     def __setitem__(self, key, value):
