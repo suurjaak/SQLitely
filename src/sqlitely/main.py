@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.11.2024
+@modified    17.11.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -70,8 +70,7 @@ ARGUMENTS = {
     "arguments": [
         {"args": ["-v", "--version"], "action": "version",
          "version": "%s %s, %s." % (conf.Title, conf.Version, conf.VersionDate)},
-        {"args": ["--verbose"], "action": "store_true",
-         "help": "print detailed logging messages to stderr"},
+        {"args": ["--verbose"], "action": "store_true", "help": argparse.SUPPRESS},
         {"args": ["--config-file"], "dest": "config_file", "metavar": "FILE",
          "help": "path of program configuration file to use"},
         {"args": ["--binary-wait"], "type": int, "help": argparse.SUPPRESS},
