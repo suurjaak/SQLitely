@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    15.11.2024
+@modified    17.11.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -333,8 +333,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         LABELS = [("path", "Location"), ("size", "Size"),
                   ("modified", "Last modified"), ("tables", "Tables")]
         for field, title in LABELS:
-            lbltext = wx.StaticText(panel_detail, label="%s:" % title)
-            valtext = wx.TextCtrl(panel_detail, value="", size=(300, 35),
+            lbltext = wx.StaticText(panel_detail, label="%s:" % title, name="label_" + field)
+            valtext = wx.TextCtrl(panel_detail, value="", size=(300, 35), name=field,
                 style=wx.NO_BORDER | wx.TE_MULTILINE | wx.TE_RICH | wx.TE_NO_VSCROLL)
             ColourManager.Manage(valtext, "BackgroundColour", "WidgetColour")
             ColourManager.Manage(valtext, "ForegroundColour", wx.SYS_COLOUR_WINDOWTEXT)
