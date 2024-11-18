@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    15.11.2024
+@modified    18.11.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -2146,11 +2146,9 @@ class FormDialog(wx.Dialog):
             splitter.SplitHorizontally(panel_wrap, panel_footer)
 
         self.Fit()
-        win = self.Parent and self.Parent.TopLevelParent or self
-        FRH, CPNH = (max(0, wx.SystemSettings.GetMetric(x, win)) for x in (wx.SYS_FRAMESIZE_Y, wx.SYS_CAPTION_Y))
-        FRAMEH = 2 * FRH + CPNH
-        MINH = 25 + (self.HEIGHT_FOOTER if panel_footer else 0)
-        self.Size = self.MinSize = (self.WIDTH, panel_wrap.VirtualSize[1] + MINH + sizer_buttons.Size[1] + FRAMEH)
+        FRAMEH = get_window_height(self, exclude=splitter or panel_wrap)
+        FOOTERH = self.HEIGHT_FOOTER if panel_footer else 0
+        self.Size = self.MinSize = (self.WIDTH, FRAMEH + FOOTERH + panel_wrap.VirtualSize[1])
         if splitter:
             splitter.SetSashPosition(splitter.Size[1] - 65)
         self.CenterOnParent()
@@ -5295,7 +5293,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
             self.SetUseTabs(False)
             w = char_width * self.WIDTH * 3 + self.GetMarginWidth(0) + \
                 sum(max(x, 0) for x in self.GetMargins()) + \
-                wx.SystemSettings.GetMetric(wx.SYS_VSCROLL_X)
+                max(0, wx.SystemSettings.GetMetric(wx.SYS_VSCROLL_X))
             self.MinSize = self.MaxSize = w, -1
         else:
             self.MinSize = self.MaxSize = -1, 20
@@ -6268,7 +6266,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         self.SetStyleSpecs()
         self.SetOvertype(True)
         self.SetUseTabs(False)
-        w = self.TextWidth(0, "X") * (self.WIDTH + 2) + wx.SystemSettings.GetMetric(wx.SYS_VSCROLL_X)
+        w = self.TextWidth(0, "X") * (self.WIDTH + 2) + max(0, wx.SystemSettings.GetMetric(wx.SYS_VSCROLL_X))
         self.Size = self.MinSize = self.MaxSize = w, -1
 
         self.Bind(wx.EVT_CHAR,                    self.OnChar)
@@ -7027,12 +7025,8 @@ class ItemFilterDialog(wx.Dialog):
     def _SizeToFit(self):
         """Resizes dialog window to reasonable width and height."""
         self.Fit()
-        win = self.Parent and self.Parent.TopLevelParent or self
-        FRH, CPNH = (wx.SystemSettings.GetMetric(x, win) for x in (wx.SYS_FRAMESIZE_Y, wx.SYS_CAPTION_Y))
-        MINH = 2 * FRH + CPNH
         container = self._ctrls["container"]
-        for szitem in map(self.Sizer.GetItem, range(self.Sizer.ItemCount)):
-            MINH += 0 if szitem.Window is container else szitem.Size.Height
+        MINH = get_window_height(self, exclude=container)
         ITMH = max(x.Size.Height for x in map(container.Sizer.GetItem, range(container.Sizer.Cols)))
         self.MinSize = (450, MINH + ITMH)
         self.MaxSize = (600, -1)
@@ -8560,7 +8554,7 @@ def get_tool_rect(toolbar, id_tool):
     """
     HAS_LABELS = toolbar.WindowStyleFlag & wx.TB_HORZ_TEXT
     HAS_ICONS = not toolbar.WindowStyleFlag & wx.TB_NOICONS
-    BORDER       = wx.SystemSettings.GetMetric(wx.SYS_BORDER_X) if "nt" == os.name else 4
+    BORDER       = max(0, wx.SystemSettings.GetMetric(wx.SYS_BORDER_X)) if "nt" == os.name else 4
     PAD_BMP      = 2 if "nt" == os.name else (2 if HAS_LABELS else 3)
     PAD_BMP_JUST = 2 if "nt" == os.name else 7
     PAD_CTRL     = 3 if "nt" == os.name else 0
@@ -8606,6 +8600,27 @@ def get_tool_rect(toolbar, id_tool):
     if result.X > toolbar.Size.Width:
         result.X = toolbar.Size.Width - get_width(mytool)
     return result
+
+
+def get_window_height(window, exclude=()):
+    """
+    Returns minimum height of given window, including frame and content.
+
+    @param   exclude  wx objects to exclude from height calculations in window's vertical BoxSizer
+    """
+    metric_source = window.Parent.TopLevelParent if window.Parent else window
+    METRICS = (wx.SYS_CAPTION_Y, wx.SYS_FRAMESIZE_Y, wx.SYS_WINDOWMIN_Y)
+    CAPTION, FRAME, MIN = [max(0, wx.SystemSettings.GetMetric(x, metric_source)) for x in METRICS]
+    height = max(2 * FRAME + CAPTION, MIN) # Metric availability varies with platforms and versions
+    if exclude and isinstance(window.Sizer, wx.BoxSizer) \
+    and wx.VERTICAL == window.Sizer.Orientation:
+        if isinstance(exclude, wx.Object): exclude = [exclude]
+        for szitem in map(window.Sizer.GetItem, range(window.Sizer.ItemCount)):
+            if not any(x and x in exclude for x in (szitem.Window, szitem.Sizer)):
+                height += szitem.Size.Height
+    elif window.Sizer:
+        height += window.Sizer.Size.Height
+    return height
 
 
 def is_fixed(value):

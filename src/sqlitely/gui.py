@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.11.2024
+@modified    18.11.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -7712,29 +7712,31 @@ class DatabasePage(wx.Panel):
 class AboutDialog(wx.Dialog):
 
     def __init__(self, parent, title, content):
-        wx.Dialog.__init__(self, parent, title=title,
-                           style=wx.CAPTION | wx.CLOSE_BOX)
-        html = self.html = wx.html.HtmlWindow(self)
+        wx.Dialog.__init__(self, parent, title=title, style=wx.CAPTION | wx.CLOSE_BOX)
         self.content = content
+
+        html = self.html = wx.html.HtmlWindow(self)
         button_update = wx.Button(self, label="Check for &updates")
 
         html.SetPage(content() if callable(content) else content)
         html.BackgroundColour = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
-        html.Bind(wx.html.EVT_HTML_LINK_CLICKED, self.OnLink)
-        button_update.Bind(wx.EVT_BUTTON, parent.on_check_update)
 
-        self.Sizer = wx.BoxSizer(wx.VERTICAL)
-        self.Sizer.Add(html, proportion=1, flag=wx.GROW)
         sizer_buttons = self.CreateButtonSizer(wx.OK)
         sizer_buttons.Insert(0, button_update, border=50, flag=wx.RIGHT)
+        self.Sizer = wx.BoxSizer(wx.VERTICAL)
+        self.Sizer.Add(html, proportion=1, flag=wx.GROW)
         self.Sizer.Add(sizer_buttons, border=8, flag=wx.ALIGN_CENTER | wx.ALL)
+
+        self.Bind(wx.html.EVT_HTML_LINK_CLICKED, self.OnLink, html)
+        self.Bind(wx.EVT_BUTTON, parent.on_check_update, button_update)
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.OnSysColourChange)
         self.Bind(wx.EVT_CLOSE,  lambda e: self.Destroy())
         self.Bind(wx.EVT_BUTTON, lambda e: self.Destroy(), id=wx.ID_OK)
 
         self.Layout()
         if "win32" != sys.platform: self.MinSize = (550, -1)
-        self.Size = (self.Size[0], html.VirtualSize[1] + (10 if "win32" != sys.platform else 70))
+        MINH = controls.get_window_height(self, exclude=html)
+        self.Size = (self.Size[0], MINH + html.VirtualSize[1])
         self.CenterOnParent()
 
 
