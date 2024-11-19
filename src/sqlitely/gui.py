@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.11.2024
+@modified    19.11.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3418,6 +3418,7 @@ class DatabasePage(wx.Panel):
 
         nb = self.notebook_info = wx.Notebook(panel2)
         panel_stats, panel_schema = wx.Panel(nb), wx.Panel(nb)
+        for c in nb.Children: ColourManager.Manage(c, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
         panel_stats.Sizer  = wx.BoxSizer(wx.VERTICAL)
         panel_schema.Sizer = wx.BoxSizer(wx.VERTICAL)
 

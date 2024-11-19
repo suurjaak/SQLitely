@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.11.2024
+@modified    19.11.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -3772,6 +3772,7 @@ class SchemaObjectPage(wx.Panel):
         nb = self._notebook_table = wx.Notebook(panel)
         panel_columnwrapper     = self._MakeColumnsGrid(nb)
         panel_constraintwrapper = self._MakeConstraintsGrid(nb)
+        for c in nb.Children: ColourManager.Manage(c, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
 
         sizer_flags.Add(check_rowid)
         sizer_flags.Add(check_strict, border=5, flag=wx.LEFT) if check_strict else None
@@ -9216,6 +9217,7 @@ class ColumnDialog(wx.Dialog):
         nb.AddPage(self._CreatePageBase64(nb), "Base64")
         nb.AddPage(self._CreatePageDate(nb),   "Date / time")
         nb.AddPage(self._CreatePageImage(nb),  "Image")
+        for c in nb.Children: ColourManager.Manage(c, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
 
         self.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_header = wx.BoxSizer(wx.HORIZONTAL)
