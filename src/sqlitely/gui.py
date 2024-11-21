@@ -3321,7 +3321,7 @@ class DatabasePage(wx.Panel):
         """Creates a page for seeing general database information."""
         page = self.page_info = wx.Panel(notebook)
         self.pageorder[page] = len(self.pageorder)
-        notebook.AddPage(page, "Information")
+        notebook.AddPage(page, "Info")
         sizer = page.Sizer = wx.BoxSizer(wx.HORIZONTAL)
 
         splitter = self.splitter_info = wx.SplitterWindow(
