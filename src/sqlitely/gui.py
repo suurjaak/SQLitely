@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.11.2024
+@modified    21.11.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1909,7 +1909,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             dlg.Bind(wx.EVT_SHOW,  onclose)
             dlg._button_reset.Show()
             dlg._label_meta.Hide()
-            dlg.Size = 640, 390
             d = wx.Display(self if six.PY3 else 0)
             dlg.Position = [d.ClientArea[i] + a - b
                             for i, (a, b) in enumerate(zip(d.ClientArea[2:], dlg.Size))]

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.11.2024
+@modified    21.11.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -9155,7 +9155,7 @@ class ColumnDialog(wx.Dialog):
 
 
     def __init__(self, parent, gridbase, row, col, rowdata=None, columnlabel="column",
-                 id=wx.ID_ANY, title="Column Editor", pos=wx.DefaultPosition, size=(750, 450),
+                 id=wx.ID_ANY, title="Column Editor", pos=wx.DefaultPosition, size=wx.DefaultSize,
                  style=wx.CAPTION | wx.CLOSE_BOX | wx.MAXIMIZE_BOX | wx.RESIZE_BORDER,
                  name=wx.DialogNameStr):
         """
@@ -9165,6 +9165,8 @@ class ColumnDialog(wx.Dialog):
         @param   rowdata      current row data dictionary, if not taking from gridbase
         @param   columnlabel  label for column in buttons and other texts
         """
+        if size == wx.DefaultSize:
+            size = (750, 480) if "posix" == os.name else (600, 400)
         super(ColumnDialog, self).__init__(parent, id, title, pos, size, style, name)
 
         self._timer     = None               # Delayed change handler
@@ -10357,10 +10359,10 @@ class ColumnDialog(wx.Dialog):
         zcb     = wx.CheckBox(panel, label="Time&zone:")
         zedit   = wx.Choice(panel, size=(70, -1))
         zbutton = wx.Button(panel, label="Local", size=(50, 18))
-        dtlabel = wx.StaticText(page, label="Dat&e or time:", style=wx.ALIGN_RIGHT)
-        dtedit  = wx.TextCtrl(page, size=(200, -1))
-        tslabel = wx.StaticText(page, label="&Unix timestamp:", style=wx.ALIGN_RIGHT)
-        tsedit  = wx.TextCtrl(page, size=(200, -1))
+        dtlabel = wx.StaticText(page, label="Dat&e or time:")
+        dtedit  = wx.TextCtrl(page, size=(250, -1))
+        tslabel = wx.StaticText(page, label="&Unix timestamp:")
+        tsedit  = wx.TextCtrl(page, size=(250, -1))
 
         hint.Label = "Value as date or time"
         ColourManager.Manage(hint, "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
@@ -10386,7 +10388,7 @@ class ColumnDialog(wx.Dialog):
         sizer_center = wx.BoxSizer(wx.HORIZONTAL)
         panel.Sizer  = wx.BoxSizer(wx.VERTICAL)
         sizer_left   = wx.GridBagSizer(vgap=5, hgap=5)
-        sizer_right  = wx.FlexGridSizer(cols=2, vgap=20, hgap=5)
+        sizer_right  = wx.BoxSizer(wx.VERTICAL)
 
         sizer_header.Add(tb,   border=5, flag=wx.ALL)
         sizer_header.AddStretchSpacer()
@@ -10407,12 +10409,13 @@ class ColumnDialog(wx.Dialog):
 
         panel.Sizer.Add(sizer_left, proportion=1, flag=wx.GROW)
 
-        sizer_right.Add(dtlabel, flag=wx.ALIGN_RIGHT | wx.ALIGN_CENTER_VERTICAL)
+        sizer_right.Add(dtlabel)
         sizer_right.Add(dtedit, border=5, flag=wx.RIGHT)
-        sizer_right.Add(tslabel, flag=wx.ALIGN_RIGHT | wx.ALIGN_CENTER_VERTICAL)
+        sizer_right.AddSpacer(20)
+        sizer_right.Add(tslabel)
         sizer_right.Add(tsedit, border=5, flag=wx.RIGHT)
 
-        sizer_center.Add(panel,       border=10, flag=wx.RIGHT, proportion=1)
+        sizer_center.Add(panel,       border=10, flag=wx.RIGHT)
         sizer_center.Add(sizer_right, border=10, flag=wx.TOP)
 
         page.Sizer.Add(sizer_header, flag=wx.GROW)
