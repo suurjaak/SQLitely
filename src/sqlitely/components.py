@@ -11760,7 +11760,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             gradendcolour = self._diagram.DEFAULT_COLOURS["GradientEnd"]
             gtextcolour   = self._diagram.DEFAULT_COLOURS["Border"]
             hotcolour     = self._diagram.DEFAULT_COLOURS["DragForeground"]
-        elif wx.WHITE == wincolour:  # Prefer default header-footer colour if visibility ensured
+        elif not ColourManager.IsDark(): # Prefer default header-footer colour if visibility ensured
             gradendcolour = self._diagram.DEFAULT_COLOURS["GradientEnd"]
 
 

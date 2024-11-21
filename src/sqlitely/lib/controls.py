@@ -403,7 +403,6 @@ class ColourManager(object):
         """
         Returns difference between two colours, as wx.Colour of absolute deltas over channels.
 
-        Returns absolute difference between two colours, as a single integer over all channels.
         Arguments can be wx.Colour, RGB tuple, colour hex string, or wx.SystemSettings colour index.
         """
         colour1 = wx.SystemSettings.GetColour(colour1) \
@@ -416,12 +415,19 @@ class ColourManager(object):
 
 
     @classmethod
+    def IsDark(cls):
+        """Returns whether display is in dark mode (heuristical judgement from system colours)."""
+        try:              return wx.SystemSettings.GetAppearance().IsDark()
+        except Exception: return sum(cls.Diff(wx.WHITE, wx.SYS_COLOUR_WINDOW)[:3]) > 3 * 175
+
+
+    @classmethod
     def UpdateContainer(cls):
         """Updates configuration colours with current system theme values."""
         for name, colourid in cls.colourmap.items():
             setattr(cls.colourcontainer, name, cls.ColourHex(colourid))
 
-        if "#FFFFFF" != cls.ColourHex(wx.SYS_COLOUR_WINDOW):
+        if cls.IsDark():
             for name, colourid in cls.darkcolourmap.items():
                 setattr(cls.colourcontainer, name, cls.ColourHex(colourid))
         else:
