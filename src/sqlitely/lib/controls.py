@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    18.11.2024
+@modified    21.11.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -1906,7 +1906,7 @@ class FindReplaceDialog(wx.Dialog):
             return None if row2 < 0 or row2 > MAXROW - 1 else (row2, col2)
 
         def ensure_pos(pos, direction=0):  # Returns next visible grid cell position, or None
-            if not any(self._target.IsColShown(x) for x in range(COLS)): return None
+            if not ROWS or not any(self._target.IsColShown(x) for x in range(COLS)): return None
             if direction: pos = move_pos(pos, direction)
             while pos and not self._target.IsColShown(pos[1]):
                 pos = move_pos(pos, direction or 1)
@@ -1974,10 +1974,7 @@ class FindReplaceDialog(wx.Dialog):
 
     def _IsSearchable(self):
         """Returns whether target exists and is searchable (enabled, and has content if grid)."""
-        if not self._target or not self._target.Enabled: return False
-        if isinstance(self._target, wx.grid.Grid):
-            return all((self._target.Table.RowsCount, self._target.Table.ColsCount))
-        return True
+        return True if self._target and self._target.Enabled else False
 
 
     def _RefreshStatus(self, **status):
