@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.11.2024
+@modified    22.11.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -9394,6 +9394,7 @@ class ColumnDialog(wx.Dialog):
             p1, p2 = edit.GetSelection()
             if not replace:
                 if tedit.Shown: # Workaround for STC.SetValue emptying contents if exotic string
+                    tedit.Value = ""
                     try: tedit.SetTextRaw(value.encode("utf-8"))
                     except Exception: tedit.Value = value
                 else: nedit.Value = value
@@ -9648,7 +9649,18 @@ class ColumnDialog(wx.Dialog):
             tedit.StyleClearAll() # Apply the new default style to all styles
 
         def on_change(value):
+            if self._value is None:
+                nedit.Hint = tedit.Hint = ""
             self._Populate(value, skip=NAME)
+
+        def on_focus(event):
+            event.Skip()
+            if not tedit.Shown: return
+            if self._value is not None: return
+            # Workaround for STC.Hint interfering with editing: use only when not focused
+            hint = "<NULL>" if event.EventType == wx.EVT_KILL_FOCUS.typeId else ""
+            if hint != tedit.Hint:
+                wx.CallAfter(lambda: tedit and tedit.SetHint(hint))
 
         def update(value, reset=False):
             state["changing"] = True
@@ -9657,9 +9669,9 @@ class ColumnDialog(wx.Dialog):
             edit = tedit if tedit.Shown else nedit
             v = "" if value is None else util.to_unicode(value)
             edit.Hint = "<NULL>" if value is None else ""
-            with warnings.catch_warnings():
+            with warnings.catch_warnings(): # Possible unicode warnings from text comparison
                 warnings.simplefilter("ignore")
-                if v != edit.Value: set_value(v)
+                if not v or v != edit.Value: set_value(v)
             if reset:
                 tedit.DiscardEdits(), nedit.DiscardEdits()
                 button_case.Enable(tedit.Shown)
@@ -9685,25 +9697,28 @@ class ColumnDialog(wx.Dialog):
 
         page.Sizer    = wx.BoxSizer(wx.VERTICAL)
         sizer_header  = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_footer = wx.BoxSizer(wx.HORIZONTAL)
 
         sizer_header.Add(tb,   border=5, flag=wx.ALL)
-        sizer_buttons.Add(button_set,   border=5, flag=wx.RIGHT)
-        sizer_buttons.Add(button_case,  border=5, flag=wx.RIGHT)
-        sizer_buttons.Add(button_xform, border=5, flag=wx.RIGHT)
-        sizer_buttons.Add(button_copy)
+        sizer_footer.Add(button_set,   border=5, flag=wx.RIGHT)
+        sizer_footer.Add(button_case,  border=5, flag=wx.RIGHT)
+        sizer_footer.Add(button_xform, border=5, flag=wx.RIGHT)
+        sizer_footer.Add(button_copy)
+        sizer_footer.AddStretchSpacer()
 
         page.Sizer.Add(sizer_header,   flag=wx.GROW)
         page.Sizer.Add(tedit,          border=5, flag=wx.ALL | wx.GROW, proportion=1)
         page.Sizer.Add(nedit,          border=5, flag=wx.ALL)
-        page.Sizer.Add(sizer_buttons,  border=5, flag=wx.LEFT | wx.BOTTOM | wx.GROW)
+        page.Sizer.Add(sizer_footer,   border=5, flag=wx.LEFT | wx.BOTTOM | wx.GROW)
 
         handler = functools.partial(self._OnChar, name=NAME, handler=on_change)
 
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED, on_colour)
-        tedit.Bind(wx.EVT_TEXT, handler)
-        tedit.Bind(wx.stc.EVT_STC_MODIFIED, handler)
-        nedit.Bind(wx.EVT_TEXT, handler)
+        tedit.Bind(wx.EVT_SET_FOCUS,         on_focus)
+        tedit.Bind(wx.EVT_KILL_FOCUS,        on_focus)
+        tedit.Bind(wx.EVT_TEXT,              handler)
+        tedit.Bind(wx.stc.EVT_STC_MODIFIED,  handler)
+        nedit.Bind(wx.EVT_TEXT,              handler)
         button_set  .Bind(wx.EVT_BUTTON, on_set)
         button_case .Bind(wx.EVT_BUTTON, on_case)
         button_xform.Bind(wx.EVT_BUTTON, on_transform)
@@ -10659,29 +10674,41 @@ class ColumnDialog(wx.Dialog):
 
     def _OnChar(self, event, name=None, handler=None, mask=None, delay=1000, skip=None):
         """Handler for pressing a key in an edit control."""
-        if isinstance(event, wx.KeyEvent) and mask and not event.HasModifiers() \
-        and six.unichr(event.UnicodeKey) not in mask \
-        and event.KeyCode not in controls.KEYS.NAVIGATION + controls.KEYS.COMMAND:
+        if isinstance(event, wx.KeyEvent) and mask and not event.HasModifiers():
+            if six.unichr(event.UnicodeKey) not in mask \
+            and event.KeyCode not in controls.KEYS.NAVIGATION + controls.KEYS.COMMAND:
+                return # Swallow disallowed keys from masked controls
+
+        event.Skip()
+        if not handler:
             return
+        if self._state.get(name, {}).get("changing") is True:
+            return
+        if isinstance(event, wx.KeyEvent):
+            if event.HasModifiers():
+                return
+            if skip and event.KeyCode in skip:
+                return
+            if 0 <= event.UnicodeKey < wx.WXK_SPACE \
+            and event.KeyCode not in controls.KEYS.COMMAND + controls.KEYS.TAB:
+                return
+        if isinstance(event, wx.stc.StyledTextEvent):
+            if not event.ModificationType & (wx.stc.STC_MOD_DELETETEXT | wx.stc.STC_MOD_INSERTTEXT):
+                return
+            if self._value is None:
+                if event.EventObject.Hint and not event.EventObject.Text \
+                and event.ModificationType & wx.stc.STC_MOD_DELETETEXT:
+                    return # STC clearing its hint text on focus
+                if event.EventObject.Hint and event.EventObject.Text == event.EventObject.Hint \
+                and not event.EventObject.HasFocus() \
+                and event.ModificationType & wx.stc.STC_MOD_INSERTTEXT:
+                    return # STC restoring its hint text on unfocus
 
         def do_handle(ctrl, col):
             self._timer = None
             if not self or col != self._col: return
             handler(ctrl.GetValue())
 
-        event.Skip()
-        changestate = self._state.get(name, {}).get("changing")
-        if not handler or changestate is True \
-        or isinstance(changestate, dict) and changestate.get(event.EventObject) \
-        or isinstance(event, wx.KeyEvent) and (event.HasModifiers()
-        or 0 <= event.UnicodeKey < wx.WXK_SPACE
-        and event.KeyCode not in controls.KEYS.COMMAND + controls.KEYS.TAB) \
-        or isinstance(event, wx.KeyEvent) and skip \
-        and not event.HasModifiers() and event.KeyCode in skip \
-        or isinstance(event, wx.stc.StyledTextEvent) and not event.ModificationType & (
-            wx.stc.STC_MOD_DELETETEXT | wx.stc.STC_MOD_INSERTTEXT
-        ):
-            return
         if self._timer: self._timer.Stop()
         callback = functools.partial(do_handle, event.EventObject, self._col)
         self._timer = wx.CallLater(max(1, delay), callback)
