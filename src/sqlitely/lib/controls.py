@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    21.11.2024
+@modified    26.11.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -528,6 +528,29 @@ class ColourManager(object):
 
         stc.CallTipSetBackground(faces['calltipbg'])
         stc.CallTipSetForeground(faces['calltipfg'])
+
+
+    @classmethod
+    def Patch(cls, ctrl):
+        """
+        Ensures foreground and background system colours on control and its descendant controls.
+
+        Explicitly sets background colour on ComboBox, SpinCtrl and TextCtrl,
+        and foreground colour on wx.CheckBox and UltimateListCtrl header window
+        (workaround for dark mode in Windows 10+).
+        """
+        if "nt" != os.name or sys.getwindowsversion() < (10, ): return
+
+        PROPS = {wx.ComboBox: {"BackgroundColour": wx.SYS_COLOUR_WINDOW},
+                 wx.SpinCtrl: {"BackgroundColour": wx.SYS_COLOUR_WINDOW},
+                 wx.TextCtrl: {"BackgroundColour": wx.SYS_COLOUR_WINDOW},
+                 wx.CheckBox: {"ForegroundColour": wx.SYS_COLOUR_BTNTEXT},
+                 wx.lib.agw.ultimatelistctrl.UltimateListHeaderWindow:
+                              {"ForegroundColour": wx.SYS_COLOUR_LISTBOXTEXT}, }
+        for ctrl in [ctrl] + get_all_children(ctrl):
+            for prop, colour in PROPS.get(type(ctrl), {}).items():
+                if ctrl not in cls.ctrlprops or prop not in cls.ctrlprops[ctrl]:
+                    cls.Manage(ctrl, prop, colour)
 
 
 
@@ -2155,6 +2178,7 @@ class FormDialog(wx.Dialog):
         if splitter:
             splitter.SetSashPosition(splitter.Size[1] - 65)
         self.CenterOnParent()
+        ColourManager.Patch(self)
 
 
     def Populate(self, props=None, data=None, edit=None):
@@ -6910,6 +6934,7 @@ class ItemFilterDialog(wx.Dialog):
         self._SizeToFit()
         self._AlignColumns()
         self._Refresh()
+        ColourManager.Patch(self)
 
 
     def GetItems(self):
@@ -8521,6 +8546,17 @@ def cmp(x, y):
         return -1 if x < y else +1
     except TypeError:
         return -1 if str(x) < str(y) else +1
+
+
+def get_all_children(ctrl):
+    """Returns a list of all nested children of given wx component."""
+    result, stack = [], [ctrl]
+    while stack:
+        ctrl = stack.pop(0)
+        for child in ctrl.GetChildren() if hasattr(ctrl, "GetChildren") else []:
+            result.append(child)
+            stack.append(child)
+    return result
 
 
 def get_dialog_path(dialog):

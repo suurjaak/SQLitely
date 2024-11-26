@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.11.2024
+@modified    26.11.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -230,6 +230,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         else:
             self.Center(wx.HORIZONTAL)
             self.Position.top = 50
+        ColourManager.Patch(self)
         self.list_db.SetFocus()
 
         if not conf.AllowMultipleInstances:
@@ -2845,6 +2846,7 @@ class DatabasePage(wx.Panel):
         for b, (a, _, _) in zip(buttons, BUTTONS):
             b.Bind(wx.EVT_BUTTON, functools.partial(self.on_datapage_button, a, b))
         self.register_notebook_hotkeys(nb)
+        ColourManager.Patch(self)
 
 
     def create_page_schema(self, notebook):

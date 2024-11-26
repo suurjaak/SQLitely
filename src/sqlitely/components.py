@@ -4246,6 +4246,7 @@ class SchemaObjectPage(wx.Panel):
 
             self._PopulateSQL()
             self._ToggleControls(self._editmode)
+            ColourManager.Patch(self)
             self.Layout()
         finally: self.Thaw()
         wx.CallAfter(lambda: self and setattr(self, "_ignore_change", False))
@@ -7439,6 +7440,7 @@ class ImportDialog(wx.Dialog):
             self.Position = x + (w - w2)  // 2, y + (h - h2) // 2
 
         wx_accel.accelerate(self)
+        ColourManager.Patch(self)
         wx.CallLater(1, button_file.SetFocus)
 
 
@@ -9273,6 +9275,7 @@ class ColumnDialog(wx.Dialog):
             top = wx.GetApp().TopWindow
             (x, y), (w, h), (w2, h2) = top.Position, top.Size, self.Size
             self.Position = (x + (w - w2)  // 2), (y + (h - h2) // 2)
+        ColourManager.Patch(self)
         wx.CallAfter(self.Layout)
 
 
@@ -12587,6 +12590,7 @@ class ImportWizard(wx.adv.Wizard):
         self.Bind(wx.adv.EVT_WIZARD_FINISHED,      self.OnOpenData)
 
         wx_accel.accelerate(self)
+        ColourManager.Patch(self)
 
 
     def RunWizard(self):
