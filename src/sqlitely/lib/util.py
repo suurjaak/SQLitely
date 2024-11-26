@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.11.2024
+@modified    26.11.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1056,7 +1056,7 @@ def parse_time(s):
     Tries to parse string as time, returns input on error.
     Supports "HH:MM(:SS)?(.micros)?(Z|[+-]HH(:MM)?)?".
     """
-    if not isinstance(s, six.string_types) or len(s) < 18: return s
+    if not isinstance(s, six.string_types) or len(s) < 5: return s
     rgx = r"^\d{2}:\d{2}(:\d{2})?(\.\d+)?(([+-]\d{2}(:?\d{2})?)|Z)?$"
     result, match = s, re.match(rgx, s)
     if match:
@@ -1123,12 +1123,20 @@ def plural(word, items=None, numbers=True, single="1", sep="", pref="", suf="", 
     return result.strip()
 
 
-def round_float(value, precision=1):
+def round_float(value, precision=1, force_decimal=False):
     """
-    Returns the float as a string, rounded to the specified precision and
+    Returns number as a string, rounded to the specified precision and
     with trailing zeroes (and . if no decimals) removed.
+
+    @param   value          float or int
+    @param   precision      decimal places to keep
+    @param   force_decimal  whether to retain at least one decimal even if 0
     """
-    return str(round(value, precision)).rstrip("0").rstrip(".")
+    value = round(float(value), max(0, precision))
+    text = str(value) # Prefer str as giving shortest decimal representation
+    if "e" in text.lower(): text = "%f" % value # Enforce decimal notation over scientific
+    text = re.sub(r"(\.\d+?)0+$", r"\1", text)
+    return text if force_decimal else re.sub(r"\.0+$", "", text)
 
 
 def run_once(function):

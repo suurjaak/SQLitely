@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.11.2024
+@modified    26.11.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -9711,7 +9711,7 @@ class ColumnDialog(wx.Dialog):
         page.Sizer.Add(nedit,          border=5, flag=wx.ALL)
         page.Sizer.Add(sizer_footer,   border=5, flag=wx.LEFT | wx.BOTTOM | wx.GROW)
 
-        handler = functools.partial(self._OnChar, name=NAME, handler=on_change)
+        handler = functools.partial(self._OnText, name=NAME, handler=on_change)
 
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED, on_colour)
         tedit.Bind(wx.EVT_SET_FOCUS,         on_focus)
@@ -9965,7 +9965,7 @@ class ColumnDialog(wx.Dialog):
         page.Sizer.Add(stc, border=5, flag=wx.RIGHT | wx.GROW, proportion=1)
         page.Sizer.Add(sizer_footer, flag=wx.GROW)
 
-        stc.Bind(wx.stc.EVT_STC_MODIFIED, functools.partial(self._OnChar, name=NAME, handler=validate))
+        stc.Bind(wx.stc.EVT_STC_MODIFIED, functools.partial(self._OnText, name=NAME, handler=validate))
         self.Bind(wx.EVT_CHECKBOX,        on_toggle_validate, cb)
         self.Bind(wx.EVT_BUTTON,          on_format, btn)
 
@@ -10071,7 +10071,7 @@ class ColumnDialog(wx.Dialog):
         page.Sizer.Add(stc, border=5, flag=wx.RIGHT | wx.GROW, proportion=1)
         page.Sizer.Add(sizer_footer, flag=wx.GROW)
 
-        stc.Bind(wx.stc.EVT_STC_MODIFIED, functools.partial(self._OnChar, name=NAME, handler=validate))
+        stc.Bind(wx.stc.EVT_STC_MODIFIED, functools.partial(self._OnText, name=NAME, handler=validate))
         self.Bind(wx.EVT_CHECKBOX,        on_toggle_validate, cb)
         self.Bind(wx.EVT_BUTTON,          on_format, btn)
 
@@ -10175,8 +10175,8 @@ class ColumnDialog(wx.Dialog):
         page.Sizer.Add(sizer_footer, flag=wx.GROW)
 
         page.Bind(wx.EVT_CHECKBOX,           on_toggle_validate, cb)
-        stc.Bind(wx.EVT_CHAR_HOOK,           functools.partial(self._OnChar, name=NAME, handler=validate, mask=MASK))
-        stc.Bind(wx.stc.EVT_STC_MODIFIED,    functools.partial(self._OnChar, name=NAME, handler=validate))
+        stc.Bind(wx.EVT_CHAR_HOOK,           functools.partial(self._OnText, name=NAME, handler=validate, mask=MASK))
+        stc.Bind(wx.stc.EVT_STC_MODIFIED,    functools.partial(self._OnText, name=NAME, handler=validate))
         page.Bind(wx.EVT_SYS_COLOUR_CHANGED, lambda e: set_styles())
 
         self._ctrls[NAME].update({"edit": stc, "check_validate": cb, "label_status": status})
@@ -10251,8 +10251,8 @@ class ColumnDialog(wx.Dialog):
                 zedit.Selection = zones.index(z) if z in zones else -1
             set_value()
 
-        def change_value(value):
-            update(value)
+        def change_value(value, as_stamp):
+            update(value, as_stamp=as_stamp)
             if any(state["parts"].values()):
                 v = state["parts"]["ts"] if state["numeric"] else dtedit.Value
                 self._Populate(v, skip=NAME)
@@ -10263,31 +10263,38 @@ class ColumnDialog(wx.Dialog):
                          (u if ucb.Value else None), (z if zcb.Value else None)
             if t is None and u is not None: t = datetime.time()
             if t is not None and z is not None: t = t.replace(tzinfo=pytz.FixedOffset(z * 60))
-            v = datetime.datetime.combine(d, t) if d and t is not None else d or t
-            if isinstance(v, (datetime.datetime, datetime.time)) and u is not None:
-                v = v.replace(microsecond=u)
-            if z is None and getattr(v, "tzinfo", None) is not None:
-                v = v.replace(tzinfo=None)
+
+            if d is not None and t is not None: v = datetime.datetime.combine(d, t)
+            else: v = d if d is not None else t
+            if isinstance(v, (datetime.datetime, datetime.time)):
+                v = v.replace(microsecond=0 if u is None else u)
+                if z is None: v = v.replace(tzinfo=None)
 
             ts, vts = None, v
-            if isinstance(vts, datetime.datetime): pass
-            elif isinstance(vts, datetime.date):
+            if isinstance(vts, datetime.date) and not isinstance(vts, datetime.datetime):
                 vts = datetime.datetime.combine(vts, datetime.time())
             elif isinstance(vts, datetime.time):
                 vts = datetime.datetime.combine(EPOCH, vts)
             if isinstance(vts, datetime.datetime):
-                x = calendar.timegm(vts.timetuple()) + vts.microsecond / 1e6
-                if x >= 0: ts = x if x % 1 else int(x)
+                ts = calendar.timegm(vts.timetuple())
+                if vts.microsecond: ts += vts.microsecond / 1e6
 
-            dtedit.SetValue("" if v  is None else v.isoformat())
-            tsedit.SetValue("" if ts is None else util.round_float(ts, 6))
-            state["parts"].update(dt=v if d and t is not None else None, d=d, t=t, u=u, z=z, ts=ts)
+            dtvalue = "" if v is None else v.isoformat()
+            if u == 0 and sys.version_info >= (3, 6) and isinstance(v, (datetime.datetime, datetime.time)):
+                dtvalue = v.isoformat(timespec="microseconds")
+            tsvalue = "" if ts is None else util.round_float(ts, 6, force_decimal=u is not None)
+            dtedit.ChangeValue(dtvalue)
+            tsedit.ChangeValue(tsvalue)
+            state["parts"].update(dt=v if isinstance(v, datetime.datetime) else None,
+                                  d=d, t=t, u=u, z=z, ts=ts)
             if any(state["parts"].values()):
-                v = ts if state["numeric"] else dtedit.Value
+                v = ts if state["numeric"] else dtvalue
                 self._Populate(v, skip=NAME)
 
-        def update(value, reset=False):
+        def update(value, reset=False, as_stamp=None):
             state["changing"] = True
+            if reset: d_enabled = t_enabled = z_enabled = False
+            else: d_enabled, t_enabled, z_enabled = dcb.Value, tcb.Value, zcb.Value
             dt = ts = d = t = u = z = None
             dcb.Value = tcb.Value = ucb.Value = zcb.Value = False
             dedit.Enabled = tedit.Enabled = uedit.Enabled = zedit.Enabled = False
@@ -10296,64 +10303,99 @@ class ColumnDialog(wx.Dialog):
             dtlabel.Font, tslabel.Font = font_bold, font_normal
 
             if isinstance(value, (datetime.datetime, datetime.date, datetime.time)):
-                if isinstance(value, datetime.datetime):
-                    dt, d, t = value, value.date(), value.time()
-                    x = calendar.timegm(dt.timetuple()) + dt.microsecond / 1e6
-                    if x >= 0: ts = x if x % 1 else int(x)
-                elif isinstance(value, datetime.date): d = value
-                elif isinstance(value, datetime.time): t = value
+                if isinstance(value, datetime.datetime): dt, d, t = value, value.date(), value.time()
+                elif isinstance(value, datetime.date):   d = value
+                elif isinstance(value, datetime.time):   t = value
             else:
                 if self._gridbase.GetAffinity(self._col, self._row) in ("INTEGER", "REAL"):
                     state["numeric"] = True
                     dtlabel.Font, tslabel.Font = font_normal, font_bold
-                    try: x = datetime.datetime.fromtimestamp(float(value), pytz.UTC)
+                if as_stamp is None:
+                    try: as_stamp, _ = True, datetime.datetime.fromtimestamp(float(value))
+                    except Exception: pass
+
+                if as_stamp is True:
+                    try:
+                        fvalue, ivalue = float(value), int(float(value))
+                        tvalue = ivalue if isinstance(value, six.string_types) else value
+                        x = datetime.datetime.fromtimestamp(tvalue, pytz.UTC)
+                        if not z_enabled: x = x.replace(tzinfo=None)
+                        ts = ivalue if ivalue == fvalue else fvalue
                     except Exception: x = None
-                    else:
-                        ts = float(value)
-                        if not ts % 1: ts = int(ts)
+                    else: # Parse and add micros separately
+                        if isinstance(value, six.string_types) and fvalue != ivalue:
+                            # fromtimestamp(float) can add error: 17323232121.12 -> micros 119998
+                            if "." not in value: micros = int((fvalue - ivalue) * 1E6)
+                            else: micros = int(value[value.index(".") + 1:][:6].ljust(6, "0"))
+                            x = x.replace(microsecond=micros)
                 else: x = util.parse_datetime(value)
+
                 if isinstance(x, datetime.datetime):
                     dt, d, t = x, x.date(), x.time()
-                    if ts is None:
-                        y = calendar.timegm(dt.timetuple()) + dt.microsecond / 1e6
-                        if y >= 0: ts = y if y % 1 else int(y)
-            if not dt and not isinstance(value, (datetime.date, datetime.time)):
-                x = util.parse_date(value)
-                if isinstance(x, datetime.date): d = x
-            if not dt and not d and not isinstance(value, datetime.time):
-                x = util.parse_time(value)
-                if isinstance(x, datetime.time): t = x
-            if isinstance(t, datetime.time):
-                u = t.microsecond
-                if not u and (state["numeric"] and not float(value) % 1 or
-                              isinstance(value, six.string_types) and ".0" not in value):
-                    u = None
-            if getattr(dt or t, "tzinfo", None):
-                z = (dt or t).tzinfo.utcoffset(jan).total_seconds() * 3600
+                    if as_stamp is True:
+                        if not d_enabled and 0 <= calendar.timegm(dt.timetuple()) <= 24 * 3600:
+                            dt = d = None
+                        elif not t_enabled and not any((t.hour, t.minute, t.second, t.microsecond)):
+                            dt = t = None
+                else:
+                    x = util.parse_date(value)
+                    if isinstance(x, datetime.date): d = x
+                    else:
+                        x = util.parse_time(value)
+                        if isinstance(x, datetime.time): t = x
+
+            dt_or_t      = dt if dt is not None else t
+            dt_or_d_or_t = dt if dt is not None else d if d is not None else t
+            if dt_or_t is not None:
+                u = dt_or_t.microsecond
+                if u == 0:
+                    if isinstance(value, int) \
+                    or isinstance(value, six.string_types) and ".0" not in value:
+                        u = None # Do not populate micros=0 if not explicitly given
+            if dt_or_t is not None and dt_or_t.tzinfo is not None:
+                z = dt_or_t.tzinfo.utcoffset(jan).total_seconds() * 3600
+            if ts is None and dt_or_d_or_t is not None:
+                if dt is not None:
+                    ts = calendar.timegm(dt.timetuple())
+                    if dt.microsecond: ts += dt.microsecond / 1e6
+                elif d is not None:
+                    ts = calendar.timegm(d.timetuple())
+                elif t is not None:
+                    ts = 3600 * t.hour + 60 * t.minute + t.second
+                    if t.microsecond: ts += t.microsecond / 1e6
 
             state["ignore_change"] = True
-            if isinstance(d, datetime.date): dcb.SetValue(True), dedit.Enable(), dedit.SetDate(d)
-            else: dedit.SetDate(datetime.date.today())
-            if isinstance(t, datetime.time): tcb.SetValue(True), tedit.Enable(), tedit.SetTime(t.hour, t.minute, t.second)
-            else: tedit.SetTime(0, 0, 0)
-            if isinstance(u, six.integer_types): ucb.SetValue(True), uedit.Enable(), uedit.SetValue(str(u))
-            else: uedit.Value = "0"
-            if z is not None:
+            if d is None: dedit.SetDate(datetime.date.today())
+            else: dcb.SetValue(True), dedit.Enable(), dedit.SetDate(d)
+            if t is None: tedit.SetTime(0, 0, 0)
+            else: tcb.SetValue(True), tedit.Enable(), tedit.SetTime(t.hour, t.minute, t.second)
+            if u is None: uedit.Value = "0"
+            else: ucb.SetValue(True), uedit.Enable(), uedit.SetValue(str(u))
+            if z is None: zedit.Selection = zones.index(0)
+            else: 
                 zcb.SetValue(True), zedit.Enable()
                 offset = (dt or t).tzinfo.utcoffset(jan).total_seconds() * 3600
                 zedit.Selection = zones.index(offset) if offset in zones else -1
-            else: zedit.Selection = zones.index(0)
             dbutton.Enable(dcb.Value)
             tbutton.Enable(tcb.Value)
             ubutton.Enable(ucb.Value)
             zbutton.Enable(zcb.Value)
 
-            dtedit.ChangeValue(((dt or d or t).isoformat() if state["numeric"] else str(value))
-                               if len(set((dt, d, t))) > 1 else "")
-            tsedit.ChangeValue("" if ts is None else util.round_float(ts, 6))
+            dtvalue = "" if dt_or_d_or_t is None else dt_or_d_or_t.isoformat()
+            if u == 0 and sys.version_info >= (3, 6) and dt_or_t is not None:
+                dtvalue = dt_or_d_or_t.isoformat(timespec="microseconds") # Ensure micros
+            if dtvalue != dtedit.Value:
+                pos = dtedit.InsertionPoint
+                dtedit.ChangeValue(dtvalue)
+                dtedit.InsertionPoint = pos
+            tsvalue = "" if ts is None else util.round_float(ts, 6, force_decimal=u is not None)
+            if tsvalue != tsedit.Value:
+                pos = tsedit.InsertionPoint
+                tsedit.ChangeValue(tsvalue)
+                tsedit.InsertionPoint = pos
 
             state["parts"].update({"dt": dt, "ts": ts, "d": d, "t": t, "u": u, "z": z})
-            if reset: dtedit.DiscardEdits()
+            if reset: dtedit.DiscardEdits(), tsedit.DiscardEdits()
             state["ignore_change"] = False
             if reset: page.Layout()
             wx.CallAfter(state.update, {"changing": False})
@@ -10450,8 +10492,10 @@ class ColumnDialog(wx.Dialog):
         ubutton.Bind(wx.EVT_BUTTON,                   on_set_current)
         zbutton.Bind(wx.EVT_BUTTON,                   on_set_current)
 
-        dtedit.Bind(wx.EVT_CHAR_HOOK, functools.partial(self._OnChar, name=NAME, handler=change_value))
-        tsedit.Bind(wx.EVT_CHAR_HOOK, functools.partial(self._OnChar, name=NAME, handler=change_value))
+        dthandler = functools.partial(change_value, as_stamp=False)
+        tshandler = functools.partial(change_value, as_stamp=True)
+        dtedit.Bind(wx.EVT_TEXT, functools.partial(self._OnText, name=NAME, handler=dthandler))
+        tsedit.Bind(wx.EVT_TEXT, functools.partial(self._OnText, name=NAME, handler=tshandler))
 
         self._ctrls[NAME].update({"check_date": dcb, "check_time": tcb, "check_usec": ucb,
                                   "check_zone": zcb, "button_date_current": dbutton, "date": dedit,
@@ -10672,8 +10716,8 @@ class ColumnDialog(wx.Dialog):
         return page
 
 
-    def _OnChar(self, event, name=None, handler=None, mask=None, delay=1000, skip=None):
-        """Handler for pressing a key in an edit control."""
+    def _OnText(self, event, name=None, handler=None, mask=None, delay=1000, skip=None):
+        """Handler for pressing a key or changing text in an edit control."""
         if isinstance(event, wx.KeyEvent) and mask and not event.HasModifiers():
             if six.unichr(event.UnicodeKey) not in mask \
             and event.KeyCode not in controls.KEYS.NAVIGATION + controls.KEYS.COMMAND:

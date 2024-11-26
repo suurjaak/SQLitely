@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.4, 2024-11-24
+2.4, 2024-11-26
 ---------------
 - add support for generated columns
 - add find/replace dialog to data grids and column editors and database schema text
@@ -34,8 +34,8 @@ CHANGELOG
 - fix renaming columns in related entities on column rename for quoted or complex expressions
 - fix error on keyword-only search
 - fix representing very large integers in column editor hex view
-- fix cutting text from column editor hex view
-- fix pasting text into column editor hex view
+- fix cutting and pasting text in column editor hex view
+- fix logic and formatting issues in column editor date/time tab
 - fix converting images to GIF in column editor image view
 - fix edits being discarded in column editor after setting NULL
 - fix compatibility issues with Python 3.6
