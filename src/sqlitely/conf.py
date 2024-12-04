@@ -228,7 +228,7 @@ PopupUnexpectedErrors = True
 """Number of unhandled errors encountered during current runtime."""
 UnexpectedErrorCount = 0
 
-"""URLs for download list, changelog, submitting feedback and homepage."""
+"""URLs for download list, changelog, and homepage."""
 DownloadURL  = "https://erki.lap.ee/downloads/SQLitely/"
 ChangelogURL = "https://suurjaak.github.io/SQLitely/changelog.html"
 HomeUrl      = "https://suurjaak.github.io/SQLitely"
