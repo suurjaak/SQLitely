@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.11.2024
+@modified    04.12.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -800,18 +800,20 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             wx.CallLater(millis, self.update_check)
             return
 
-        check_delta = datetime.timedelta(days=conf.UpdateCheckInterval)
-        last_date = None
+        check_delta, last_date = datetime.timedelta(days=conf.UpdateCheckInterval), None
         if conf.LastUpdateCheck:
-            last_date = datetime.datetime.strptime(conf.LastUpdateCheck, "%Y%m%d")
+            try: last_date = datetime.datetime.strptime(conf.LastUpdateCheck, "%Y%m%d")
+            except Exception: logger.warning("Failed to parse last update check %r as date.",
+                                             conf.LastUpdateCheck, exc_info=True)
         do_check = not conf.WindowMinimizedToTray
         if do_check and last_date:
-            do_check = datetime.datetime.now() - check_delta < last_date
+            do_check = last_date < datetime.datetime.now() - check_delta
         if do_check:
             callback = functools.partial(self.on_check_update_callback, full_response=False)
             support.check_newest_version(callback)
         elif last_date: # Shift next check closer by elapsed time
-            check_delta -= datetime.datetime.now() - last_date
+            next_delta = check_delta - (datetime.datetime.now() - last_date)
+            if next_delta > datetime.timedelta(): check_delta = next_delta
         # Schedule next check, should the program run that long
         millis = max(1, min(sys.maxsize, int(util.timedelta_seconds(check_delta) * 1000)))
         wx.CallLater(millis, self.update_check)

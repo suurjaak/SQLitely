@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.4, 2024-11-26
+2.4, 2024-12-04
 ---------------
 - add support for generated columns
 - add find/replace dialog to data grids and column editors and database schema text
@@ -30,6 +30,7 @@ CHANGELOG
 - fix data grids lagging with very long column values in Linux (issue #4)
 - fix single instance checker stalling if existing instance has hung
 - fix entities not being sorted case insensitively
+- fix date arithmetic in automatic update check
 - fix error on cancelling export to another database
 - fix rolling back changes on error in schema editor test and save
 - fix renaming columns in related entities on column rename for quoted or complex expressions
