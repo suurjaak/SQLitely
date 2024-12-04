@@ -32,7 +32,7 @@ except ImportError: wx = None
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "2.4.dev219"
+Version = "2.4.dev220"
 VersionDate = "04.12.2024"
 
 Frozen, Snapped = getattr(sys, "frozen", False), (sys.executable or "").startswith("/snap/")
@@ -75,6 +75,7 @@ OptionalFileDirectives = [
     "UpdateCheckInterval",
 ]
 Defaults = {}
+Overrides = []
 
 """---------------------------- File directives: ----------------------------"""
 
@@ -407,6 +408,14 @@ def load(configfile=None):
 
         for name in FileDirectives + OptionalFileDirectives:
             [setattr(module, name, v) for v, s in [parse_value(name)] if s]
+        ALLOWED_OVERRIDES = ["Analyzer", "Colour", "Font", "Length", "Log", "Search", "Size"]
+        for name in parser.options(section):
+            if hasattr(module, name) and name not in FileDirectives + OptionalFileDirectives \
+            and any(allowed in name for allowed in ALLOWED_OVERRIDES):
+                value, success = parse_value(name)
+                if success:
+                    setattr(module, name, value)
+                    Overrides.append(name)
     except Exception:
         pass # Fail silently
 
@@ -450,6 +459,9 @@ def save(configfile=None):
                 value = getattr(module, name, None)
                 if Defaults.get(name) != value:
                     parser.set(section, name, json.dumps(value))
+            except Exception: pass
+        for name in Overrides:
+            try: parser.set(section, name, json.dumps(getattr(module, name)))
             except Exception: pass
         parser.write(f)
         f.close()
