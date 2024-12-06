@@ -32,7 +32,7 @@ except ImportError: wx = None
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "2.4.dev222"
+Version = "2.4.dev223"
 VersionDate = "06.12.2024"
 
 Frozen, Snapped = getattr(sys, "frozen", False), (sys.executable or "").startswith("/snap/")
@@ -207,7 +207,7 @@ SeekLeapLength = 10000
 """Number of rows to seek ahead on data grids, when scrolling to end of retrieved rows."""
 SeekLength = 100
 
-"""Texts in SQL window, loaded on reopening a database {filename: [(name, text), ], }."""
+"""Texts in SQL window, loaded on reopening a database {filename: [(name, text, ?{opts}), ], }."""
 SQLWindowTexts = {}
 
 """Width of the database statistics plots, in pixels."""

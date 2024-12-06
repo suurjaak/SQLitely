@@ -25,6 +25,7 @@ CHANGELOG
 - use unsaved changes when exporting table data grid to another database
 - use hourglass cursor while showing busy message
 - allow saving SVG image as SVG in column editor
+- restore last active SQL window on opening database
 - provide workaround for importing CSVs with mixed Windows and Unix linefeeds (issue #3)
 - improve support for dark mode in Windows 10+
 - fix data grids lagging with very long column values in Linux (issue #4)

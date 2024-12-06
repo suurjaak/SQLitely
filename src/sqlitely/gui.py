@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.12.2024
+@modified    06.12.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2649,9 +2649,10 @@ class DatabasePage(wx.Panel):
         notebook.SetSelection(self.pageorder[self.page_info])
         # Hack to get SQL window size to layout without quirks.
         notebook.SetSelection(self.pageorder[self.page_sql])
+        selected_sql_page = self.notebook_sql.GetSelection()
         for i in range(1, self.notebook_sql.GetPageCount() - 1):
             self.notebook_sql.SetSelection(i)
-        self.notebook_sql.SetSelection(0)
+        self.notebook_sql.SetSelection(selected_sql_page)
         firstpage = self.page_schema if db.temporary else self.page_data
         notebook.SetSelection(self.pageorder[firstpage])
         notebook.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_change_page, notebook)
@@ -3095,15 +3096,25 @@ class DatabasePage(wx.Panel):
         try: nb._pages.GetSingleLineBorderColour = nb.GetActiveTabColour
         except Exception: pass # Hack to get uniform background colour
 
+        selected = None
         oldpages = conf.SQLWindowTexts.get(self.db.filename, [])
-        for i, (name, text) in enumerate(oldpages[::-1]):
-            self.add_sql_page(name, text, console=(i == len(oldpages) - 1))
+        for i, entry in enumerate(oldpages[::-1]):
+            name, text = entry[:2]
+            if len(entry) > 2 and isinstance(entry[2], dict) and entry[2].get("selected"):
+                selected = i
+            self.add_sql_page(name, text, console=False)
         if self.sql_pages:
             self.sql_page_counter = max(
                 int(re.sub(r"[^\d]", "", x)) if re.match(r"^SQL \(\d+\)$", x, re.I) else 0
                 for x in self.sql_pages
             ) or len(self.sql_pages)
         else: self.add_sql_page()
+        if selected is not None:
+            nb.SetSelection(selected)
+            self.TopLevelParent.run_console(
+                "sqlpage = wx.FindWindowById(%s).notebook_sql.GetPage(%s) # SQL window subtab" %
+                (self.Id, selected)
+            )
         nb.AddPage(page=wx.Panel(page), text="+")
 
         sizer.Add(nb, proportion=1, border=5, flag=wx.GROW | wx.LEFT | wx.TOP)
@@ -5175,6 +5186,8 @@ class DatabasePage(wx.Panel):
         # Save page SQL windows content, if changed from previous value
         sqls = [(k, self.sql_pages[k].Text) for k in sql_order
                 if self.sql_pages[k].Text.strip()]
+        if self.notebook_sql.GetSelection():
+            sqls[self.notebook_sql.GetSelection()] += ({"selected": True}, )
         if sqls != conf.SQLWindowTexts.get(self.db.filename):
             if sqls: conf.SQLWindowTexts[self.db.filename] = sqls
             else: conf.SQLWindowTexts.pop(self.db.filename, None)
