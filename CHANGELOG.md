@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.4, 2024-12-04
+2.4, 2024-12-06
 ---------------
 - add support for generated columns
 - add find/replace dialog to data grids and column editors and database schema text
@@ -28,6 +28,7 @@ CHANGELOG
 - provide workaround for importing CSVs with mixed Windows and Unix linefeeds (issue #3)
 - improve support for dark mode in Windows 10+
 - fix data grids lagging with very long column values in Linux (issue #4)
+- fix SQL query results starting to lag after lots of queries (issue #4)
 - fix single instance checker stalling if existing instance has hung
 - fix entities not being sorted case insensitively
 - fix date arithmetic in automatic update check

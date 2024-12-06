@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.11.2024
+@modified    06.12.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -2197,7 +2197,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         if restore and isinstance(self._grid.Table, SQLiteGridBase):
             scrollpos = list(map(self._grid.GetScrollPos, [wx.HORIZONTAL, wx.VERTICAL]))
             cursorpos = [self._grid.GridCursorRow, self._grid.GridCursorCol]
-            hidden_columns = [c for c in range(self._grid.NumberCols) if not self._grid.IsColShown(c)]
+            hidden_columns = [c for c in range(self._grid.NumberCols)
+                              if not self._grid.IsColShown(c)]
             sortfilter_state = self._grid.Table.GetFilterSort() if self._grid.Table else {}
 
         self._grid.Freeze()
@@ -2206,11 +2207,12 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         self._tbgrid.EnableTool(wx.ID_MORE,  False)
         try:
             if cursor and cursor.description is not None \
-            and isinstance(self._grid.Table, SQLiteGridBase):
+            and isinstance(self._grid.Table, SQLiteGridBase) and self._history[-1:] != [sql]:
                 self._panel2.Freeze()
                 try: # Workaround, grid.BestSize remains sticky after wide results
                     idx = self._panel2.Sizer.Children.index(self._panel2.Sizer.GetItem(self._grid))
                     self._panel2.Sizer.Remove(idx)
+                    self._grid.Destroy()
                     self._grid = wx.grid.Grid(self._panel2)
                     SQLiteGridBaseMixin.__init__(self)
                     self._panel2.Sizer.Insert(idx, self._grid, proportion=1, flag=wx.GROW)
