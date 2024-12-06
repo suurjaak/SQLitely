@@ -2447,7 +2447,9 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         if (event.AltDown() or event.CmdDown()) \
         and event.KeyCode in controls.KEYS.ENTER:
             sql = (stc.SelectedText or stc.CurLine[0]).strip()
-            if sql: self.ExecuteSQL(sql)
+            if sql:
+                self.ExecuteSQL(sql)
+                if "linux" in sys.platform: stc.SetFocus() # Loses focus in Linux
 
 
     def _OnExecuteSQL(self, event=None):
