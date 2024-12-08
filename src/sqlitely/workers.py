@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.07.2024
+@modified    08.12.2024
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -56,16 +56,15 @@ class WorkerThread(threading.Thread):
         self._queue = queue.Queue()
 
 
-    def work(self, function, **kws):
+    def work(self, item, **kargs):
         """
         Registers new work to process. Starts thread if not running.
 
-        @param   function  callable to invoke as work
-        @param   kws       any additional parameters, will be returned
-                           in callback(data, **kws)
+        @param   item   callable to invoke as work, or work input in subclasses overriding run()
+        @param   kargs  any additional parameters, will be returned in callback(data, **kargs)
         """
         self._drop_results = False
-        self._queue.put((function, kws) if kws else function)
+        self._queue.put((item, kargs) if kargs else item)
         if not self._is_running:
             self.start()
 
