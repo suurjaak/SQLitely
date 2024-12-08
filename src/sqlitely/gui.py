@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.12.2024
+@modified    08.12.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -170,9 +170,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self, message="Choose a directory where to search for databases",
             defaultPath=six.moves.getcwd(),
             style=wx.DD_DIR_MUST_EXIST | wx.RESIZE_BORDER)
-        self.dialog_savefile = wx.FileDialog(self, defaultDir=six.moves.getcwd(),
-            style=wx.FD_SAVE | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
-        )
 
         # Memory file system for showing images in wx.HtmlWindow
         self.memoryfs = {"files": {}, "handler": wx.MemoryFSHandler()}
