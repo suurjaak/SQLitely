@@ -1231,8 +1231,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 selecteds.append(selected)
                 files.append(self.list_db.GetItemText(selected))
             selected = self.list_db.GetNextSelected(selected)
-        if event.GetIndex() >= 0 and event.GetIndex() not in selecteds:
-            if event.GetIndex():
+        if event.GetIndex() >= 0 and event.GetIndex() not in selecteds: # Click home or other file
+            files, selecteds = [], []
+            if event.GetIndex(): # Click other file
                 files = [self.list_db.GetItemText(event.GetIndex())]
                 selecteds = [event.GetIndex()]
         if not files:
