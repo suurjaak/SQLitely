@@ -1199,24 +1199,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         focuses filter on Ctrl-F.
         """
         if event.KeyCode in [wx.WXK_F5]:
-            any_selected = (self.list_db.GetFirstSelected() > 0)
-            items = []
-            for filename in conf.DBFiles:
-                data = defaultdict(lambda: None, name=filename)
-                if os.path.exists(filename):
-                    if filename in self.dbs:
-                        self.dbs[filename].update_fileinfo()
-                        data["size"] = self.dbs[filename].get_size()
-                        data["last_modified"] = self.dbs[filename].last_modified
-                    else:
-                        data["size"] = database.get_size(filename)
-                        data["last_modified"] = datetime.datetime.fromtimestamp(
-                                                os.path.getmtime(filename))
-                self.db_datas[filename].update(data)
-                items.append(data)
-            self.list_db.Populate(items, [1])
-            if any_selected:
-                self.update_database_detail()
+            self.refresh_database_list()
         elif event.KeyCode in [ord("F")] and event.CmdDown():
             self.edit_filter.SetFocus()
         elif event.KeyCode in controls.KEYS.ENTER and not event.AltDown():
@@ -1260,6 +1243,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                      else "Detect databases"
             item_new     = wx.MenuItem(menu, -1, "&New database")
             item_open    = wx.MenuItem(menu, -1, "&Open a database..")
+            item_refresh = wx.MenuItem(menu, -1, "Refresh list")
             item_import  = wx.MenuItem(menu, -1, label1)
             item_detect  = wx.MenuItem(menu, -1, label2)
             item_missing = wx.MenuItem(menu, -1, "Remove missing")
@@ -1267,18 +1251,20 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
             menu.Append(item_new)
             menu.Append(item_open)
+            menu.Append(item_refresh)
             menu.Append(item_import)
             menu.Append(item_detect)
             menu.AppendSeparator()
             menu.Append(item_missing)
             menu.Append(item_clear)
 
-            menu.Bind(wx.EVT_MENU, self.on_new_database,     item_new)
-            menu.Bind(wx.EVT_MENU, self.on_open_database,    item_open)
-            menu.Bind(wx.EVT_MENU, self.on_add_from_folder,  item_import)
-            menu.Bind(wx.EVT_MENU, self.on_detect_databases, item_detect)
-            menu.Bind(wx.EVT_MENU, self.on_remove_missing,   item_missing)
-            menu.Bind(wx.EVT_MENU, self.on_clear_databases,  item_clear)
+            menu.Bind(wx.EVT_MENU, self.on_new_database,      item_new)
+            menu.Bind(wx.EVT_MENU, self.on_open_database,     item_open)
+            menu.Bind(wx.EVT_MENU, self.on_refresh_databases, item_refresh)
+            menu.Bind(wx.EVT_MENU, self.on_add_from_folder,   item_import)
+            menu.Bind(wx.EVT_MENU, self.on_detect_databases,  item_detect)
+            menu.Bind(wx.EVT_MENU, self.on_remove_missing,    item_missing)
+            menu.Bind(wx.EVT_MENU, self.on_clear_databases,   item_clear)
 
             # Needs callback, actions can modify list while mouse event ongoing
             return wx.CallAfter(self.list_db.PopupMenu, menu)
@@ -1299,6 +1285,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         item_name    = wx.MenuItem(menu, -1, name)
         item_copy    = wx.MenuItem(menu, -1, "&Copy file path")
         item_folder  = wx.MenuItem(menu, -1, "Show in &folder")
+        item_refresh = wx.MenuItem(menu, -1, "Refresh list")
 
         item_name.Font = self.Font.Bold()
 
@@ -1312,6 +1299,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu.AppendSeparator()
         menu.Append(item_copy)
         menu.Append(item_folder)
+        menu.Append(item_refresh)
         menu.AppendSeparator()
         menu.Append(item_open)
         menu.Append(item_save)
@@ -1321,6 +1309,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         menu.Bind(wx.EVT_MENU, clipboard_copy,                item_copy)
         menu.Bind(wx.EVT_MENU, open_folder,                   item_folder)
+        menu.Bind(wx.EVT_MENU, self.on_refresh_databases,     item_refresh)
         menu.Bind(wx.EVT_MENU, self.on_open_current_database, item_open)
         menu.Bind(wx.EVT_MENU, self.on_save_database_as,      item_save)
         menu.Bind(wx.EVT_MENU, self.on_remove_database,       item_remove)
@@ -1463,6 +1452,25 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.update_database_count()
         if selected_files:
             wx.CallLater(100, self.update_database_detail)
+
+
+    def refresh_database_list(self):
+        """Reloads all file information and repopulates database list."""
+        items = []
+        for filename in conf.DBFiles:
+            data = defaultdict(lambda: None, name=filename)
+            if os.path.exists(filename):
+                if filename in self.dbs:
+                    self.dbs[filename].update_fileinfo()
+                    data["size"] = self.dbs[filename].get_size()
+                    data["last_modified"] = self.dbs[filename].last_modified
+                else:
+                    data["size"] = database.get_size(filename)
+                    data["last_modified"] = datetime.datetime.fromtimestamp(
+                                            os.path.getmtime(filename))
+            self.db_datas[filename].update(data)
+            items.append(data)
+        self.list_db.Populate(items, [1])
 
 
     def update_database_list(self, filenames=()):
@@ -2013,6 +2021,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         filename = self.history_file.GetHistoryFile(event.Id - wx.ID_FILE1)
         self.update_database_list(filename)
         self.load_database_page(filename, clearselection=True)
+
+
+    def on_refresh_databases(self, event=None):
+        """Handler for refreshing database list, reloads file information and repopulates list."""
+        self.refresh_database_list()
 
 
     def on_detect_databases(self, event):

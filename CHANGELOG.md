@@ -57,6 +57,7 @@ CHANGELOG
 - fix not retaining complex ALTER TABLE results in related tables
 - fix not updating info page and statistics on adding new schema entity
 - add all user-executed SQL to action history not only action queries
+- add "Refresh list" to database list context menu
 - shorten SQL parsing error texts in schema editor popups
 - refactor import-export functionality to classes
 - update SQL grammar up to SQLite version 3.46
