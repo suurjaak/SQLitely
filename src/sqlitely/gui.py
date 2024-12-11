@@ -1199,14 +1199,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         focuses filter on Ctrl-F.
         """
         if event.KeyCode in [wx.WXK_F5]:
-            items, selected_files, selected_home = [], [], False
-            selected = self.list_db.GetFirstSelected()
-            while selected >= 0:
-                if selected:
-                    selected_files.append(self.list_db.GetItemText(selected))
-                else: selected_home = True
-                selected = self.list_db.GetNextSelected(selected)
-
+            any_selected = (self.list_db.GetFirstSelected() > 0)
+            items = []
             for filename in conf.DBFiles:
                 data = defaultdict(lambda: None, name=filename)
                 if os.path.exists(filename):
@@ -1221,12 +1215,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 self.db_datas[filename].update(data)
                 items.append(data)
             self.list_db.Populate(items, [1])
-            if selected_home:
-                self.list_db.Select(0)
-            if selected_files:
-                for i in range(1, self.list_db.GetItemCount()):
-                    if self.list_db.GetItemText(i) in selected_files:
-                        self.list_db.Select(i)
+            if any_selected:
                 self.update_database_detail()
         elif event.KeyCode in [ord("F")] and event.CmdDown():
             self.edit_filter.SetFocus()

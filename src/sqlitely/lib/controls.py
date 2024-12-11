@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    26.11.2024
+@modified    11.12.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -4284,22 +4284,29 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
 
     def RefreshRows(self):
         """
-        Clears the list and inserts all unfiltered rows, auto-sizing the
-        columns.
+        Clears the list and inserts all unfiltered rows, auto-sizing the columns;
+        retains scroll position.
         """
-        selected_ids, selected_idxs, selected = [], [], self.GetFirstSelected()
+        selected_idxs, selected_items, selected = [], [], self.GetFirstSelected()
         while selected >= 0:
-            selected_ids.append(self.GetItemData(selected))
             selected_idxs.append(selected)
+            selected_items.append((selected, self.GetItemText(selected)))
             selected = self.GetNextSelected(selected)
 
         self.Freeze()
         try:
+            scrollpos = self.GetScrollPos(wx.VERTICAL)
             for i in selected_idxs:
                 self._mainWin.SendNotify(i, wx.wxEVT_COMMAND_LIST_ITEM_DESELECTED)
             wx.lib.agw.ultimatelistctrl.UltimateListCtrl.DeleteAllItems(self)
             self._PopulateTopRow()
-            self._PopulateRows(selected_ids)
+            self._PopulateRows(selected_items)
+            if scrollpos:
+                pixelh = self._mainWin.VirtualSize.Height - self._mainWin.Size.Height
+                scrollh = self.GetScrollRange(wx.VERTICAL) 
+                scrollh -= self._mainWin.GetScrollPageSize(wx.VERTICAL)
+                pixels_per_scroll = pixelh / scrollh
+                self.ScrollList(0, (scrollpos + 1) * pixels_per_scroll)
         finally: self.Thaw()
 
 
@@ -4452,8 +4459,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
             selected_ids.append(self.GetItemData(selected))
             selected = self.GetNextSelected(selected)
 
-        wx.lib.mixins.listctrl.ColumnSorterMixin.SortListItems(
-            self, col, ascending)
+        wx.lib.mixins.listctrl.ColumnSorterMixin.SortListItems(self, col, ascending)
 
         if selected_ids: # Re-select the previously selected items
             idindx = dict((self.GetItemData(i), i) for i in range(self.GetItemCount()))
@@ -4619,7 +4625,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         if self.GetItemCount() == 1: wx.CallAfter(resize)
 
 
-    def _PopulateRows(self, selected_ids=()):
+    def _PopulateRows(self, selected_items=()):
         """Populates all rows, restoring previous selecteds if any"""
 
         # To map list item data ID to row, ListCtrl allows only integer per row
@@ -4677,15 +4683,12 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         if self.GetSortState()[0] >= 0:
             self.SortListItems(*self.GetSortState())
 
-        if selected_ids: # Re-select the previously selected items
-            idindx = dict((self.GetItemData(i), i) for i in range(self.GetItemCount()))
-            for item_id in selected_ids:
-                if item_id not in idindx: continue # for item_id
-                self.Select(idindx[item_id])
-                if idindx[item_id] >= self.GetCountPerPage():
-                    lh = self.GetUserLineHeight()
-                    dy = (idindx[item_id] - self.GetCountPerPage() // 2) * lh
-                    self.ScrollList(0, dy)
+        if selected_items: # Re-select the previously selected items
+            idindx   = dict((self.GetItemData(i), i) for i in range(self.GetItemCount()))
+            textindx = dict((self.GetItemText(i), i) for i in range(self.GetItemCount()))
+            for item_id, item_text in selected_items:
+                index = textindx.get(item_text, idindx.get(item_id))
+                if index is not None: self.Select(index)
 
 
     def _RowMatchesFilter(self, row):
