@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.12.2024
+@modified    11.12.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -877,7 +877,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             item = wx.MenuItem(menu, -1, util.ellipsize(name))
             if page.db.filename == curfile or len(openfiles) == 1:
                 item.Font = boldfont
-            menu.Bind(wx.EVT_MENU, functools.partial(open_item, page.db.name), item)
+            menu.Bind(wx.EVT_MENU, functools.partial(open_item, page.db.filename), item)
             menu.Append(item)
         if openfiles: menu.AppendSeparator()
 

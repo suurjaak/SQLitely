@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.4, 2024-12-06
+2.4, 2024-12-11
 ---------------
 - add support for generated columns
 - add find/replace dialog to data grids and column editors and database schema text
@@ -53,6 +53,7 @@ CHANGELOG
 - fix compiled binary crashing on waiting until timeout
 - fix error on adding column to trigger in schema editor
 - fix error on dropping table column used in related indexes or triggers
+- fix error on selecting opened temporary database from tray menu
 - fix not retaining complex ALTER TABLE results in related tables
 - fix not updating info page and statistics on adding new schema entity
 - add all user-executed SQL to action history not only action queries
