@@ -317,7 +317,7 @@ type_name
  ;
 
 type_name_text
- : ENCLOSED_IDENTIFIER
+ : ( STRING_LITERAL | '`' (~'`' | '``')* '`' | '[' ~']'* ']' )
  | type_or_constraint_name_word+
  ;
 
@@ -339,7 +339,7 @@ column_constraint
  ;
 
 constraint_name
- : ENCLOSED_IDENTIFIER
+ : ( STRING_LITERAL | '`' (~'`' | '``')* '`' | '[' ~']'* ']' )
  | type_or_constraint_name_word
  ;
 
@@ -1040,12 +1040,6 @@ C_FALSE  : F A L S E;
 STRING_LITERAL
  : '\'' (~'\'' | '\'\'')* '\''
  | '"'  (~'"'  | '""'  )* '"'
- ;
-
-ENCLOSED_IDENTIFIER
- : STRING_LITERAL
- | '`' (~'`' | '``')* '`'
- | '[' ~']'* ']'
  ;
 
 IDENTIFIER

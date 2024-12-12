@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    14.11.2024
+@modified    13.12.2024
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -835,8 +835,8 @@ class Parser(object):
         result = {}
         result["name"] = self.u(ctx.column_name().any_name)
         if ctx.type_name():
-            if ctx.type_name().type_name_text().ENCLOSED_IDENTIFIER():
-                result["type"] = self.u(ctx.type_name().type_name_text().ENCLOSED_IDENTIFIER).upper()
+            if isinstance(ctx.type_name().type_name_text().children[0], TerminalNode):
+                result["type"] = self.u(ctx.type_name().type_name_text().children[0]).upper()
             else:
                 ww = ctx.type_name().type_name_text().type_or_constraint_name_word()
                 result["type"] = unquote(" ".join(self.t(x).upper() for x in ww))
