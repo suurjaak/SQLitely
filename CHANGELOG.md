@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.4, 2024-12-13
+2.4, 2024-12-15
 ---------------
 - add support for generated columns
 - add find/replace dialog to data grids and column editors and database schema text
@@ -29,6 +29,7 @@ CHANGELOG
 - provide workaround for importing CSVs with mixed Windows and Unix linefeeds (issue #3)
 - improve support for dark mode in Windows 10+
 - fix parsing []-enclosed identifiers in CREATE SQL statements
+- fix parsing context-specific keywords like ROWID and STRICT in identifiers
 - fix data grids lagging with very long column values in Linux (issue #4)
 - fix SQL query results starting to lag after lots of queries (issue #4)
 - fix single instance checker stalling if existing instance has hung

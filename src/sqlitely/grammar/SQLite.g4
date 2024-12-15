@@ -760,6 +760,12 @@ keyword
  | K_WINDOW
  | K_WITH
  | K_WITHOUT
+ // Keywords only in some context:
+ | C_ROWID
+ | C_STORED
+ | C_STRICT
+ | C_TRUE
+ | C_FALSE
  ;
 
 // TODO check all names below
