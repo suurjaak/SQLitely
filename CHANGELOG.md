@@ -32,6 +32,7 @@ CHANGELOG
 - fix parsing context-specific keywords like ROWID and STRICT in identifiers
 - fix data grids lagging with very long column values in Linux (issue #4)
 - fix SQL query results starting to lag after lots of queries (issue #4)
+- fix errors in data grid on opening virtual tables with hidden columns
 - fix single instance checker stalling if existing instance has hung
 - fix entities not being sorted case insensitively
 - fix date arithmetic in automatic update check

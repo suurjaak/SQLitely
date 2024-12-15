@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.11.2024
+@modified    15.12.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -706,7 +706,7 @@ class DatabaseSink(Sink):
         target_prefix = "%s." % self._state["schema2"] if self._state["schema2"] else ""
         rows = self._db.execute("PRAGMA %stable_xinfo(%s)" %
                                 (target_prefix, grammar.quote(table))).fetchall()
-        self._state["columnnames"] = [x["name"] for x in rows]
+        self._state["columnnames"] = [x["name"] for x in rows if x.get("hidden") != 1]
 
 
     def _prepare_query_table(self, table, query, params, is_select, cursor=None, create_sql=None):

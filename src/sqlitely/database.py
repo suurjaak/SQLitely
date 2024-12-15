@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    20.10.2024
+@modified    15.12.2024
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1135,6 +1135,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     else:
                         opts["columns"] = []
                         for row in rows:
+                            if row.get("hidden") == 1: continue # for row
                             col = {"name": row["name"]}
                             if row.get("type"): col["type"] = row["type"].upper()
                             if row.get("dflt_value") is not None:
