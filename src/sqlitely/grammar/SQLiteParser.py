@@ -187,27 +187,27 @@ def serializedATN():
         69,1982,8,69,10,69,12,69,1985,9,69,1,69,1,69,5,69,1989,8,69,10,69,
         12,69,1992,9,69,3,69,1994,8,69,1,70,1,70,1,70,1,70,1,70,3,70,2001,
         8,70,1,71,3,71,2004,8,71,1,71,1,71,1,72,1,72,1,73,1,73,1,74,1,74,
-        1,75,1,75,3,75,2016,8,75,1,76,1,76,1,77,1,77,1,78,1,78,1,79,1,79,
-        1,80,1,80,1,81,1,81,1,82,1,82,1,83,1,83,1,84,1,84,1,85,1,85,1,85,
-        1,85,5,85,2040,8,85,10,85,12,85,2043,9,85,1,85,1,85,1,86,1,86,1,
-        87,1,87,1,88,1,88,1,89,1,89,1,90,1,90,1,91,1,91,1,92,1,92,1,93,1,
-        93,1,94,1,94,1,94,1,94,1,94,1,94,3,94,2069,8,94,1,95,1,95,1,96,1,
-        96,1,97,1,97,1,98,1,98,1,99,1,99,1,99,1,99,1,99,1,99,1,99,3,99,2086,
-        8,99,1,99,1,427,1,82,100,0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,
-        30,32,34,36,38,40,42,44,46,48,50,52,54,56,58,60,62,64,66,68,70,72,
-        74,76,78,80,82,84,86,88,90,92,94,96,98,100,102,104,106,108,110,112,
-        114,116,118,120,122,124,126,128,130,132,134,136,138,140,142,144,
-        146,148,150,152,154,156,158,160,162,164,166,168,170,172,174,176,
-        178,180,182,184,186,188,190,192,194,196,198,0,26,3,0,66,66,79,79,
-        97,97,2,0,54,54,75,75,2,0,11,11,125,125,1,0,157,158,1,0,1,1,1,0,
-        4,4,11,0,9,9,11,11,51,52,56,56,64,64,87,87,119,119,122,122,136,136,
-        141,141,166,166,2,0,41,41,68,68,5,0,31,31,82,82,96,96,146,146,150,
-        150,2,0,13,13,18,19,1,0,14,15,1,0,20,23,1,0,24,27,1,0,5,6,4,0,91,
-        91,113,113,115,115,142,142,2,0,67,67,167,167,2,0,172,172,179,179,
-        3,0,93,93,139,139,152,152,3,0,31,31,82,82,150,150,2,0,84,84,111,
-        111,3,0,89,89,112,112,149,149,2,0,35,35,70,70,5,0,60,62,122,122,
-        181,183,185,185,188,188,2,0,14,16,119,119,1,0,183,184,1,0,31,182,
-        2419,0,202,1,0,0,0,2,206,1,0,0,0,4,211,1,0,0,0,6,237,1,0,0,0,8,271,
+        1,75,1,75,3,75,2016,8,75,1,76,1,76,1,76,3,76,2021,8,76,1,77,1,77,
+        1,78,1,78,1,79,1,79,1,80,1,80,1,81,1,81,1,82,1,82,1,83,1,83,1,84,
+        1,84,1,85,1,85,1,85,1,85,5,85,2043,8,85,10,85,12,85,2046,9,85,1,
+        85,1,85,1,86,1,86,1,87,1,87,1,88,1,88,1,89,1,89,1,90,1,90,1,91,1,
+        91,1,92,1,92,1,93,1,93,1,94,1,94,1,94,3,94,2069,8,94,1,95,1,95,1,
+        96,1,96,1,97,1,97,1,98,1,98,1,99,1,99,1,99,1,99,1,99,1,99,1,99,3,
+        99,2086,8,99,1,99,1,427,1,82,100,0,2,4,6,8,10,12,14,16,18,20,22,
+        24,26,28,30,32,34,36,38,40,42,44,46,48,50,52,54,56,58,60,62,64,66,
+        68,70,72,74,76,78,80,82,84,86,88,90,92,94,96,98,100,102,104,106,
+        108,110,112,114,116,118,120,122,124,126,128,130,132,134,136,138,
+        140,142,144,146,148,150,152,154,156,158,160,162,164,166,168,170,
+        172,174,176,178,180,182,184,186,188,190,192,194,196,198,0,25,3,0,
+        66,66,79,79,97,97,2,0,54,54,75,75,2,0,11,11,125,125,1,0,157,158,
+        1,0,1,1,1,0,4,4,11,0,9,9,11,11,51,52,56,56,64,64,87,87,119,119,122,
+        122,136,136,141,141,166,166,2,0,41,41,68,68,5,0,31,31,82,82,96,96,
+        146,146,150,150,2,0,13,13,18,19,1,0,14,15,1,0,20,23,1,0,24,27,1,
+        0,5,6,4,0,91,91,113,113,115,115,142,142,2,0,67,67,167,167,2,0,172,
+        172,179,179,3,0,93,93,139,139,152,152,3,0,31,31,82,82,150,150,2,
+        0,84,84,111,111,3,0,89,89,112,112,149,149,2,0,35,35,70,70,5,0,60,
+        62,122,122,181,183,185,185,188,188,2,0,14,16,119,119,1,0,31,182,
+        2421,0,202,1,0,0,0,2,206,1,0,0,0,4,211,1,0,0,0,6,237,1,0,0,0,8,271,
         1,0,0,0,10,302,1,0,0,0,12,311,1,0,0,0,14,319,1,0,0,0,16,329,1,0,
         0,0,18,337,1,0,0,0,20,373,1,0,0,0,22,405,1,0,0,0,24,452,1,0,0,0,
         26,521,1,0,0,0,28,553,1,0,0,0,30,583,1,0,0,0,32,596,1,0,0,0,34,628,
@@ -225,11 +225,11 @@ def serializedATN():
         1,0,0,0,126,1750,1,0,0,0,128,1787,1,0,0,0,130,1860,1,0,0,0,132,1862,
         1,0,0,0,134,1885,1,0,0,0,136,1901,1,0,0,0,138,1993,1,0,0,0,140,2000,
         1,0,0,0,142,2003,1,0,0,0,144,2007,1,0,0,0,146,2009,1,0,0,0,148,2011,
-        1,0,0,0,150,2015,1,0,0,0,152,2017,1,0,0,0,154,2019,1,0,0,0,156,2021,
-        1,0,0,0,158,2023,1,0,0,0,160,2025,1,0,0,0,162,2027,1,0,0,0,164,2029,
-        1,0,0,0,166,2031,1,0,0,0,168,2033,1,0,0,0,170,2035,1,0,0,0,172,2046,
-        1,0,0,0,174,2048,1,0,0,0,176,2050,1,0,0,0,178,2052,1,0,0,0,180,2054,
-        1,0,0,0,182,2056,1,0,0,0,184,2058,1,0,0,0,186,2060,1,0,0,0,188,2068,
+        1,0,0,0,150,2015,1,0,0,0,152,2020,1,0,0,0,154,2022,1,0,0,0,156,2024,
+        1,0,0,0,158,2026,1,0,0,0,160,2028,1,0,0,0,162,2030,1,0,0,0,164,2032,
+        1,0,0,0,166,2034,1,0,0,0,168,2036,1,0,0,0,170,2038,1,0,0,0,172,2049,
+        1,0,0,0,174,2051,1,0,0,0,176,2053,1,0,0,0,178,2055,1,0,0,0,180,2057,
+        1,0,0,0,182,2059,1,0,0,0,184,2061,1,0,0,0,186,2063,1,0,0,0,188,2068,
         1,0,0,0,190,2070,1,0,0,0,192,2072,1,0,0,0,194,2074,1,0,0,0,196,2076,
         1,0,0,0,198,2085,1,0,0,0,200,203,3,4,2,0,201,203,3,2,1,0,202,200,
         1,0,0,0,202,201,1,0,0,0,202,203,1,0,0,0,203,204,1,0,0,0,204,205,
@@ -843,50 +843,51 @@ def serializedATN():
         7,22,0,0,2008,145,1,0,0,0,2009,2010,7,23,0,0,2010,147,1,0,0,0,2011,
         2012,5,183,0,0,2012,149,1,0,0,0,2013,2016,3,68,34,0,2014,2016,3,
         82,41,0,2015,2013,1,0,0,0,2015,2014,1,0,0,0,2016,151,1,0,0,0,2017,
-        2018,7,24,0,0,2018,153,1,0,0,0,2019,2020,7,25,0,0,2020,155,1,0,0,
-        0,2021,2022,3,198,99,0,2022,157,1,0,0,0,2023,2024,3,198,99,0,2024,
-        159,1,0,0,0,2025,2026,3,198,99,0,2026,161,1,0,0,0,2027,2028,3,198,
-        99,0,2028,163,1,0,0,0,2029,2030,3,198,99,0,2030,165,1,0,0,0,2031,
-        2032,3,198,99,0,2032,167,1,0,0,0,2033,2034,3,198,99,0,2034,169,1,
-        0,0,0,2035,2036,5,9,0,0,2036,2041,3,168,84,0,2037,2038,5,11,0,0,
-        2038,2040,3,168,84,0,2039,2037,1,0,0,0,2040,2043,1,0,0,0,2041,2039,
-        1,0,0,0,2041,2042,1,0,0,0,2042,2044,1,0,0,0,2043,2041,1,0,0,0,2044,
-        2045,5,10,0,0,2045,171,1,0,0,0,2046,2047,3,198,99,0,2047,173,1,0,
-        0,0,2048,2049,3,198,99,0,2049,175,1,0,0,0,2050,2051,3,198,99,0,2051,
-        177,1,0,0,0,2052,2053,3,198,99,0,2053,179,1,0,0,0,2054,2055,3,198,
-        99,0,2055,181,1,0,0,0,2056,2057,3,198,99,0,2057,183,1,0,0,0,2058,
-        2059,3,198,99,0,2059,185,1,0,0,0,2060,2061,3,198,99,0,2061,187,1,
-        0,0,0,2062,2069,5,184,0,0,2063,2069,5,183,0,0,2064,2065,5,9,0,0,
-        2065,2066,3,188,94,0,2066,2067,5,10,0,0,2067,2069,1,0,0,0,2068,2062,
-        1,0,0,0,2068,2063,1,0,0,0,2068,2064,1,0,0,0,2069,189,1,0,0,0,2070,
-        2071,3,198,99,0,2071,191,1,0,0,0,2072,2073,3,198,99,0,2073,193,1,
-        0,0,0,2074,2075,3,198,99,0,2075,195,1,0,0,0,2076,2077,3,198,99,0,
-        2077,197,1,0,0,0,2078,2086,5,184,0,0,2079,2086,3,154,77,0,2080,2086,
-        5,183,0,0,2081,2082,5,9,0,0,2082,2083,3,198,99,0,2083,2084,5,10,
-        0,0,2084,2086,1,0,0,0,2085,2078,1,0,0,0,2085,2079,1,0,0,0,2085,2080,
-        1,0,0,0,2085,2081,1,0,0,0,2086,199,1,0,0,0,308,202,211,218,223,229,
-        235,237,269,276,284,292,297,300,309,313,321,325,327,332,334,337,
-        342,346,351,360,363,369,371,375,381,386,397,403,407,413,418,427,
-        434,443,446,450,454,460,465,472,483,486,488,494,500,504,511,517,
-        523,529,534,543,548,559,564,575,580,583,590,593,596,603,606,615,
-        618,624,626,630,638,643,651,656,664,669,677,682,687,695,705,708,
-        714,716,719,738,744,749,757,762,771,782,789,793,797,801,804,810,
-        819,826,830,832,836,843,845,849,852,858,868,871,877,879,882,890,
-        900,903,909,911,914,927,933,940,947,956,960,962,966,969,972,985,
-        991,998,1005,1014,1018,1020,1024,1027,1036,1039,1045,1047,1052,1056,
-        1061,1075,1081,1083,1091,1095,1100,1102,1108,1113,1117,1120,1138,
-        1144,1150,1152,1160,1164,1167,1172,1180,1185,1194,1198,1201,1209,
-        1230,1233,1238,1241,1249,1258,1262,1267,1300,1312,1316,1321,1333,
-        1339,1346,1350,1360,1363,1369,1372,1374,1376,1393,1398,1410,1414,
-        1418,1422,1429,1431,1434,1441,1451,1454,1457,1461,1468,1473,1479,
-        1482,1484,1490,1493,1495,1499,1504,1513,1516,1525,1528,1531,1543,
-        1545,1554,1563,1575,1587,1595,1601,1605,1608,1612,1617,1625,1644,
-        1650,1655,1665,1671,1673,1681,1688,1695,1700,1702,1706,1710,1717,
-        1723,1731,1736,1739,1743,1748,1757,1762,1766,1769,1782,1785,1787,
-        1792,1796,1799,1806,1811,1820,1823,1827,1830,1838,1842,1846,1849,
-        1855,1858,1860,1869,1874,1878,1882,1885,1896,1901,1905,1912,1921,
-        1925,1927,1931,1940,1945,1947,1960,1963,1972,1983,1990,1993,2000,
-        2003,2015,2041,2068,2085
+        2021,5,184,0,0,2018,2021,3,154,77,0,2019,2021,5,183,0,0,2020,2017,
+        1,0,0,0,2020,2018,1,0,0,0,2020,2019,1,0,0,0,2021,153,1,0,0,0,2022,
+        2023,7,24,0,0,2023,155,1,0,0,0,2024,2025,3,198,99,0,2025,157,1,0,
+        0,0,2026,2027,3,198,99,0,2027,159,1,0,0,0,2028,2029,3,198,99,0,2029,
+        161,1,0,0,0,2030,2031,3,198,99,0,2031,163,1,0,0,0,2032,2033,3,198,
+        99,0,2033,165,1,0,0,0,2034,2035,3,198,99,0,2035,167,1,0,0,0,2036,
+        2037,3,198,99,0,2037,169,1,0,0,0,2038,2039,5,9,0,0,2039,2044,3,168,
+        84,0,2040,2041,5,11,0,0,2041,2043,3,168,84,0,2042,2040,1,0,0,0,2043,
+        2046,1,0,0,0,2044,2042,1,0,0,0,2044,2045,1,0,0,0,2045,2047,1,0,0,
+        0,2046,2044,1,0,0,0,2047,2048,5,10,0,0,2048,171,1,0,0,0,2049,2050,
+        3,198,99,0,2050,173,1,0,0,0,2051,2052,3,198,99,0,2052,175,1,0,0,
+        0,2053,2054,3,198,99,0,2054,177,1,0,0,0,2055,2056,3,198,99,0,2056,
+        179,1,0,0,0,2057,2058,3,198,99,0,2058,181,1,0,0,0,2059,2060,3,198,
+        99,0,2060,183,1,0,0,0,2061,2062,3,198,99,0,2062,185,1,0,0,0,2063,
+        2064,3,198,99,0,2064,187,1,0,0,0,2065,2069,5,184,0,0,2066,2069,3,
+        154,77,0,2067,2069,5,183,0,0,2068,2065,1,0,0,0,2068,2066,1,0,0,0,
+        2068,2067,1,0,0,0,2069,189,1,0,0,0,2070,2071,3,198,99,0,2071,191,
+        1,0,0,0,2072,2073,3,198,99,0,2073,193,1,0,0,0,2074,2075,3,198,99,
+        0,2075,195,1,0,0,0,2076,2077,3,198,99,0,2077,197,1,0,0,0,2078,2086,
+        5,184,0,0,2079,2086,3,154,77,0,2080,2086,5,183,0,0,2081,2082,5,9,
+        0,0,2082,2083,3,198,99,0,2083,2084,5,10,0,0,2084,2086,1,0,0,0,2085,
+        2078,1,0,0,0,2085,2079,1,0,0,0,2085,2080,1,0,0,0,2085,2081,1,0,0,
+        0,2086,199,1,0,0,0,309,202,211,218,223,229,235,237,269,276,284,292,
+        297,300,309,313,321,325,327,332,334,337,342,346,351,360,363,369,
+        371,375,381,386,397,403,407,413,418,427,434,443,446,450,454,460,
+        465,472,483,486,488,494,500,504,511,517,523,529,534,543,548,559,
+        564,575,580,583,590,593,596,603,606,615,618,624,626,630,638,643,
+        651,656,664,669,677,682,687,695,705,708,714,716,719,738,744,749,
+        757,762,771,782,789,793,797,801,804,810,819,826,830,832,836,843,
+        845,849,852,858,868,871,877,879,882,890,900,903,909,911,914,927,
+        933,940,947,956,960,962,966,969,972,985,991,998,1005,1014,1018,1020,
+        1024,1027,1036,1039,1045,1047,1052,1056,1061,1075,1081,1083,1091,
+        1095,1100,1102,1108,1113,1117,1120,1138,1144,1150,1152,1160,1164,
+        1167,1172,1180,1185,1194,1198,1201,1209,1230,1233,1238,1241,1249,
+        1258,1262,1267,1300,1312,1316,1321,1333,1339,1346,1350,1360,1363,
+        1369,1372,1374,1376,1393,1398,1410,1414,1418,1422,1429,1431,1434,
+        1441,1451,1454,1457,1461,1468,1473,1479,1482,1484,1490,1493,1495,
+        1499,1504,1513,1516,1525,1528,1531,1543,1545,1554,1563,1575,1587,
+        1595,1601,1605,1608,1612,1617,1625,1644,1650,1655,1665,1671,1673,
+        1681,1688,1695,1700,1702,1706,1710,1717,1723,1731,1736,1739,1743,
+        1748,1757,1762,1766,1769,1782,1785,1787,1792,1796,1799,1806,1811,
+        1820,1823,1827,1830,1838,1842,1846,1849,1855,1858,1860,1869,1874,
+        1878,1882,1885,1896,1901,1905,1912,1921,1925,1927,1931,1940,1945,
+        1947,1960,1963,1972,1983,1990,1993,2000,2003,2015,2020,2044,2068,
+        2085
     ]
 
 class SQLiteParser ( Parser ):
@@ -8391,12 +8392,12 @@ class SQLiteParser ( Parser ):
                 self.expr(0)
                 self.state = 1482
                 self._errHandler.sync(self)
-                _la = self._input.LA(1)
-                if _la==40 or _la==183 or _la==184:
+                la_ = self._interp.adaptivePredict(self._input,212,self._ctx)
+                if la_ == 1:
                     self.state = 1479
                     self._errHandler.sync(self)
-                    _la = self._input.LA(1)
-                    if _la==40:
+                    la_ = self._interp.adaptivePredict(self._input,211,self._ctx)
+                    if la_ == 1:
                         self.state = 1478
                         self.match(SQLiteParser.K_AS)
 
@@ -8427,12 +8428,12 @@ class SQLiteParser ( Parser ):
                     self.expr(0)
                     self.state = 1493
                     self._errHandler.sync(self)
-                    _la = self._input.LA(1)
-                    if _la==40 or _la==183 or _la==184:
+                    la_ = self._interp.adaptivePredict(self._input,215,self._ctx)
+                    if la_ == 1:
                         self.state = 1490
                         self._errHandler.sync(self)
-                        _la = self._input.LA(1)
-                        if _la==40:
+                        la_ = self._interp.adaptivePredict(self._input,214,self._ctx)
+                        if la_ == 1:
                             self.state = 1489
                             self.match(SQLiteParser.K_AS)
 
@@ -10251,7 +10252,6 @@ class SQLiteParser ( Parser ):
 
         localctx = SQLiteParser.Result_columnContext(self, self._ctx, self.state)
         self.enterRule(localctx, 128, self.RULE_result_column)
-        self._la = 0 # Token type
         try:
             self.state = 1787
             self._errHandler.sync(self)
@@ -10278,12 +10278,12 @@ class SQLiteParser ( Parser ):
                 self.expr(0)
                 self.state = 1785
                 self._errHandler.sync(self)
-                _la = self._input.LA(1)
-                if _la==40 or _la==183 or _la==184:
+                la_ = self._interp.adaptivePredict(self._input,262,self._ctx)
+                if la_ == 1:
                     self.state = 1782
                     self._errHandler.sync(self)
-                    _la = self._input.LA(1)
-                    if _la==40:
+                    la_ = self._interp.adaptivePredict(self._input,261,self._ctx)
+                    if la_ == 1:
                         self.state = 1781
                         self.match(SQLiteParser.K_AS)
 
@@ -10418,12 +10418,12 @@ class SQLiteParser ( Parser ):
                 self.table_name()
                 self.state = 1799
                 self._errHandler.sync(self)
-                _la = self._input.LA(1)
-                if _la==9 or _la==40 or _la==183 or _la==184:
+                la_ = self._interp.adaptivePredict(self._input,266,self._ctx)
+                if la_ == 1:
                     self.state = 1796
                     self._errHandler.sync(self)
-                    _la = self._input.LA(1)
-                    if _la==40:
+                    la_ = self._interp.adaptivePredict(self._input,265,self._ctx)
+                    if la_ == 1:
                         self.state = 1795
                         self.match(SQLiteParser.K_AS)
 
@@ -10495,12 +10495,12 @@ class SQLiteParser ( Parser ):
                 self.match(SQLiteParser.CLOSE_PAR)
                 self.state = 1830
                 self._errHandler.sync(self)
-                _la = self._input.LA(1)
-                if _la==9 or _la==40 or _la==183 or _la==184:
+                la_ = self._interp.adaptivePredict(self._input,272,self._ctx)
+                if la_ == 1:
                     self.state = 1827
                     self._errHandler.sync(self)
-                    _la = self._input.LA(1)
-                    if _la==40:
+                    la_ = self._interp.adaptivePredict(self._input,271,self._ctx)
+                    if la_ == 1:
                         self.state = 1826
                         self.match(SQLiteParser.K_AS)
 
@@ -10545,12 +10545,12 @@ class SQLiteParser ( Parser ):
                 self.match(SQLiteParser.CLOSE_PAR)
                 self.state = 1849
                 self._errHandler.sync(self)
-                _la = self._input.LA(1)
-                if _la==9 or _la==40 or _la==183 or _la==184:
+                la_ = self._interp.adaptivePredict(self._input,276,self._ctx)
+                if la_ == 1:
                     self.state = 1846
                     self._errHandler.sync(self)
-                    _la = self._input.LA(1)
-                    if _la==40:
+                    la_ = self._interp.adaptivePredict(self._input,275,self._ctx)
+                    if la_ == 1:
                         self.state = 1845
                         self.match(SQLiteParser.K_AS)
 
@@ -10571,12 +10571,12 @@ class SQLiteParser ( Parser ):
                 self.match(SQLiteParser.CLOSE_PAR)
                 self.state = 1858
                 self._errHandler.sync(self)
-                _la = self._input.LA(1)
-                if _la==9 or _la==40 or _la==183 or _la==184:
+                la_ = self._interp.adaptivePredict(self._input,278,self._ctx)
+                if la_ == 1:
                     self.state = 1855
                     self._errHandler.sync(self)
-                    _la = self._input.LA(1)
-                    if _la==40:
+                    la_ = self._interp.adaptivePredict(self._input,277,self._ctx)
+                    if la_ == 1:
                         self.state = 1854
                         self.match(SQLiteParser.K_AS)
 
@@ -11578,6 +11578,10 @@ class SQLiteParser ( Parser ):
         def IDENTIFIER(self):
             return self.getToken(SQLiteParser.IDENTIFIER, 0)
 
+        def keyword(self):
+            return self.getTypedRuleContext(SQLiteParser.KeywordContext,0)
+
+
         def STRING_LITERAL(self):
             return self.getToken(SQLiteParser.STRING_LITERAL, 0)
 
@@ -11599,16 +11603,28 @@ class SQLiteParser ( Parser ):
 
         localctx = SQLiteParser.Column_aliasContext(self, self._ctx, self.state)
         self.enterRule(localctx, 152, self.RULE_column_alias)
-        self._la = 0 # Token type
         try:
-            self.enterOuterAlt(localctx, 1)
-            self.state = 2017
-            _la = self._input.LA(1)
-            if not(_la==183 or _la==184):
-                self._errHandler.recoverInline(self)
+            self.state = 2020
+            self._errHandler.sync(self)
+            token = self._input.LA(1)
+            if token in [184]:
+                self.enterOuterAlt(localctx, 1)
+                self.state = 2017
+                self.match(SQLiteParser.IDENTIFIER)
+                pass
+            elif token in [31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182]:
+                self.enterOuterAlt(localctx, 2)
+                self.state = 2018
+                self.keyword()
+                pass
+            elif token in [183]:
+                self.enterOuterAlt(localctx, 3)
+                self.state = 2019
+                self.match(SQLiteParser.STRING_LITERAL)
+                pass
             else:
-                self._errHandler.reportMatch(self)
-                self.consume()
+                raise NoViableAltException(self)
+
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
@@ -12101,7 +12117,7 @@ class SQLiteParser ( Parser ):
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 2019
+            self.state = 2022
             _la = self._input.LA(1)
             if not((((_la) & ~0x3f) == 0 and ((1 << _la) & -2147483648) != 0) or ((((_la - 64)) & ~0x3f) == 0 and ((1 << (_la - 64)) & -1) != 0) or ((((_la - 128)) & ~0x3f) == 0 and ((1 << (_la - 128)) & 36028797018963967) != 0)):
                 self._errHandler.recoverInline(self)
@@ -12147,7 +12163,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 156, self.RULE_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 2021
+            self.state = 2024
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -12188,7 +12204,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 158, self.RULE_function_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 2023
+            self.state = 2026
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -12229,7 +12245,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 160, self.RULE_schema_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 2025
+            self.state = 2028
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -12270,7 +12286,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 162, self.RULE_table_function_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 2027
+            self.state = 2030
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -12311,7 +12327,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 164, self.RULE_table_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 2029
+            self.state = 2032
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -12352,7 +12368,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 166, self.RULE_table_or_index_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 2031
+            self.state = 2034
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -12393,7 +12409,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 168, self.RULE_column_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 2033
+            self.state = 2036
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -12450,23 +12466,23 @@ class SQLiteParser ( Parser ):
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 2035
+            self.state = 2038
             self.match(SQLiteParser.OPEN_PAR)
-            self.state = 2036
+            self.state = 2039
             self.column_name()
-            self.state = 2041
+            self.state = 2044
             self._errHandler.sync(self)
             _la = self._input.LA(1)
             while _la==11:
-                self.state = 2037
+                self.state = 2040
                 self.match(SQLiteParser.COMMA)
-                self.state = 2038
+                self.state = 2041
                 self.column_name()
-                self.state = 2043
+                self.state = 2046
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
 
-            self.state = 2044
+            self.state = 2047
             self.match(SQLiteParser.CLOSE_PAR)
         except RecognitionException as re:
             localctx.exception = re
@@ -12507,7 +12523,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 172, self.RULE_collation_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 2046
+            self.state = 2049
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -12548,7 +12564,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 174, self.RULE_foreign_table)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 2048
+            self.state = 2051
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -12589,7 +12605,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 176, self.RULE_index_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 2050
+            self.state = 2053
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -12630,7 +12646,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 178, self.RULE_trigger_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 2052
+            self.state = 2055
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -12671,7 +12687,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 180, self.RULE_view_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 2054
+            self.state = 2057
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -12712,7 +12728,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 182, self.RULE_module_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 2056
+            self.state = 2059
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -12753,7 +12769,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 184, self.RULE_pragma_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 2058
+            self.state = 2061
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -12794,7 +12810,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 186, self.RULE_savepoint_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 2060
+            self.state = 2063
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -12814,18 +12830,12 @@ class SQLiteParser ( Parser ):
         def IDENTIFIER(self):
             return self.getToken(SQLiteParser.IDENTIFIER, 0)
 
+        def keyword(self):
+            return self.getTypedRuleContext(SQLiteParser.KeywordContext,0)
+
+
         def STRING_LITERAL(self):
             return self.getToken(SQLiteParser.STRING_LITERAL, 0)
-
-        def OPEN_PAR(self):
-            return self.getToken(SQLiteParser.OPEN_PAR, 0)
-
-        def table_alias(self):
-            return self.getTypedRuleContext(SQLiteParser.Table_aliasContext,0)
-
-
-        def CLOSE_PAR(self):
-            return self.getToken(SQLiteParser.CLOSE_PAR, 0)
 
         def getRuleIndex(self):
             return SQLiteParser.RULE_table_alias
@@ -12851,22 +12861,18 @@ class SQLiteParser ( Parser ):
             token = self._input.LA(1)
             if token in [184]:
                 self.enterOuterAlt(localctx, 1)
-                self.state = 2062
+                self.state = 2065
                 self.match(SQLiteParser.IDENTIFIER)
                 pass
-            elif token in [183]:
+            elif token in [31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182]:
                 self.enterOuterAlt(localctx, 2)
-                self.state = 2063
-                self.match(SQLiteParser.STRING_LITERAL)
-                pass
-            elif token in [9]:
-                self.enterOuterAlt(localctx, 3)
-                self.state = 2064
-                self.match(SQLiteParser.OPEN_PAR)
-                self.state = 2065
-                self.table_alias()
                 self.state = 2066
-                self.match(SQLiteParser.CLOSE_PAR)
+                self.keyword()
+                pass
+            elif token in [183]:
+                self.enterOuterAlt(localctx, 3)
+                self.state = 2067
+                self.match(SQLiteParser.STRING_LITERAL)
                 pass
             else:
                 raise NoViableAltException(self)

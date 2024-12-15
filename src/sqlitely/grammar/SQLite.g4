@@ -33,7 +33,6 @@
  *                add table_function_name;
  *                drop cte_table_name;
  *                fix multi-word column type;
- *                drop keywords in table_alias;
  *                more use of with_clause;
  *                drop Java-specific exception;
  *                double quotes allowed in string_literal;
@@ -609,6 +608,7 @@ module_argument
 
 column_alias
  : IDENTIFIER
+ | keyword
  | STRING_LITERAL
  ;
 
@@ -836,8 +836,8 @@ savepoint_name
 
 table_alias
  : IDENTIFIER
+ | keyword
  | STRING_LITERAL
- | '(' table_alias ')'
  ;
 
 transaction_name
