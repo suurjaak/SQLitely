@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    11.12.2024
+@modified    15.12.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -4329,6 +4329,12 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         self.RefreshRows()
 
 
+    def Select(self, idx, on=True):
+        """Selects/deselects an item; changes current item if selected."""
+        wx.lib.agw.ultimatelistctrl.UltimateListCtrl.Select(self, idx, on)
+        if on: self._mainWin.ChangeCurrent(idx)
+
+
     def DeleteItem(self, index):
         """Deletes the row at the specified index."""
         item_id = self.GetItemData(index)
@@ -4463,7 +4469,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
 
         if selected_ids: # Re-select the previously selected items
             idindx = dict((self.GetItemData(i), i) for i in range(self.GetItemCount()))
-            [self.Select(idindx[i]) for i in selected_ids if i in idindx]
+            for i in selected_ids: self.Select(idindx[i]) if i in idindx else None
 
 
     def GetColumnSorter(self):
