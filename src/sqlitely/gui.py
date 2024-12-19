@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.12.2024
+@modified    19.12.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -112,6 +112,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.is_started = False
         self.is_minimizing = False
         self.is_dragging_page = False
+        self.is_detail_pending = False
         self.wizard_import = None # components.ImportWizard
 
         # Restore cached parse results; memoize cache is {(sql, ..): (meta, error)}
@@ -366,6 +367,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         list_db.Bind(wx.EVT_LIST_ITEM_SELECTED,    self.on_select_list_db)
         list_db.Bind(wx.EVT_LIST_ITEM_DESELECTED,  self.on_deselect_list_db)
         list_db.Bind(wx.EVT_LIST_ITEM_ACTIVATED,   self.on_open_from_list_db)
+        list_db.Bind(wx.EVT_LIST_DELETE_ALL_ITEMS, self.on_remove_all_list_db)
         list_db.Bind(wx.EVT_CHAR_HOOK,             self.on_list_db_key)
         list_db.Bind(wx.EVT_LIST_COL_CLICK,        self.on_sort_list_db)
         list_db.Bind(wx.EVT_LIST_ITEM_RIGHT_CLICK, self.on_rclick_list_db)
@@ -384,7 +386,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.button_remove.Bind(wx.EVT_BUTTON,    self.on_remove_database)
         self.button_delete.Bind(wx.EVT_BUTTON,    self.on_delete_database)
 
-        splitter.Bind(wx.EVT_SPLITTER_SASH_POS_CHANGED, lambda e: self.list_db.ResetColumnWidths())
+        splitter.Bind(wx.EVT_SPLITTER_SASH_POS_CHANGED, lambda e: wx.CallAfter(self.list_db.AutoSizeColumns))
 
         panel_main.Sizer.Add(label_main, border=10, flag=wx.ALL | wx.GROW)
         panel_main.Sizer.Add((0, 10))
@@ -1033,7 +1035,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if not self.IsMaximized(): conf.WindowSize = self.Size[:]
         util.run_once(conf.save)
         # Right panel scroll
-        wx.CallAfter(lambda: self and (self.list_db.RefreshRows(),
+        wx.CallAfter(lambda: self and (self.list_db.AutoSizeColumns(),
                                        self.panel_db_main.Parent.Layout()))
 
 
@@ -1539,6 +1541,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """Updates database detail panel with current database information."""
         if not self: return
 
+        self.is_detail_pending = False
         self.label_db.Value = ""
         self.label_path.Value     = self.label_size.Value   = ""
         self.label_modified.Value = self.label_tables.Value = ""
@@ -2066,7 +2069,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             guibase.status("Detected %s.", util.plural(name, result["count"]), log=True)
         if result.get("done", False):
             self.button_detect.Label = "Detect databases"
-            self.list_db.ResetColumnWidths()
+            self.list_db.AutoSizeColumns()
             wx.Bell()
 
 
@@ -2109,7 +2112,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                            result["folder"], log=True)
         if result.get("done"):
             self.button_folder.Label = "&Import from folder"
-            self.list_db.ResetColumnWidths()
+            self.list_db.AutoSizeColumns()
             wx.Bell()
 
 
@@ -2165,7 +2168,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         and filename not in self.dbs_selected:
             self.dbs_selected.append(filename)
             conf.LastSelectedFiles[:] = self.dbs_selected[:]
-            self.update_database_detail()
+            if not self.is_detail_pending: # Multiselect causes N events in a row
+                self.is_detail_pending = True
+                wx.CallAfter(self.update_database_detail)
         elif event.GetIndex() == 0 and not self.dbs_selected \
         and not self.panel_db_main.Shown:
             self.panel_db_main.Show()
@@ -2182,11 +2187,25 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         conf.LastSelectedFiles[:] = self.dbs_selected[:]
 
         if self.dbs_selected:
-            self.update_database_detail()
+            if not self.is_detail_pending: # Multiselect causes N events in a row
+                self.is_detail_pending = True
+                wx.CallAfter(self.update_database_detail)
         else:
             self.panel_db_main.Show()
             self.panel_db_detail.Hide()
             self.panel_db_main.Parent.Layout()
+
+
+    def on_remove_all_list_db(self, event):
+        """Handler for database list deleting its content, unflags selected databases."""
+        self.dbs_selected = []
+        conf.LastSelectedFiles = []
+        def toggle_main_panel():
+            if self and not self.dbs_selected and not self.panel_db_main.Shown:
+                self.panel_db_main.Show()
+                self.panel_db_detail.Hide()
+                self.panel_db_main.Parent.Layout()
+        wx.CallAfter(toggle_main_panel)
 
 
     def on_exit(self, event):
@@ -2507,7 +2526,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 if not self.load_database(f, silent=True): continue # for f
                 self.update_database_list(f)
                 self.load_database_page(f)
-        if db_filenames: self.list_db.ResetColumnWidths()
+        if db_filenames: self.list_db.AutoSizeColumns()
         if notdb_filenames:
             t = "valid SQLite databases"
             if len(notdb_filenames) == 1: t = "a " + t[:-1]
@@ -6183,8 +6202,8 @@ class DatabasePage(wx.Panel):
         idx = self.notebook_schema.GetPageIndex(event.source)
         VARS = ("close", "modified", "updated", "reindex", "export", "data",
                 "truncate", "drop", "close_grids", "reload_grids")
-        close, modified, updated, reindex, export, data, truncate, drop, \
-        close_grids, reload_grids = (getattr(event, x, None) for x in VARS)
+        close, modified, updated, reindex, export, data, truncate, drop, close_grids, reload_grids \
+            = (getattr(event, x, None) for x in VARS)
         category, name = (event.item.get(x) for x in ("type", "name"))
         name0 = None
         if close and idx >= 0:

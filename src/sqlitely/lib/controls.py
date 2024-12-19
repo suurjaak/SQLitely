@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    15.12.2024
+@modified    19.12.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -4185,6 +4185,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         if imageIds: self._id_images[0] = self._ConvertImageIds(imageIds)
         else: self._id_images.pop(0, None)
         self._PopulateTopRow()
+        wx.CallAfter(self.AutoSizeColumns)
 
 
     def SetColumnFormatters(self, formatters):
@@ -4296,8 +4297,6 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         self.Freeze()
         try:
             scrollpos = self.GetScrollPos(wx.VERTICAL)
-            for i in selected_idxs:
-                self._mainWin.SendNotify(i, wx.wxEVT_COMMAND_LIST_ITEM_DESELECTED)
             wx.lib.agw.ultimatelistctrl.UltimateListCtrl.DeleteAllItems(self)
             self._PopulateTopRow()
             self._PopulateRows(selected_items)
@@ -4323,10 +4322,32 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         self._ApplyItemStyle(row, self.GetItemStyle(row))
 
 
-    def ResetColumnWidths(self):
-        """Resets the stored column widths, triggering a fresh autolayout."""
-        self._col_widths.clear()
-        self.RefreshRows()
+    def AutoSizeColumns(self, expand_main=True):
+        """
+        Autosizes all columns to fit current content.
+
+        @param   expand_main  whether first column gets sized to all remaining space
+        """
+        if not self: return
+        widths = []
+        get_width = lambda t: self.GetTextExtent(t)[0]
+        col_start = 1 if expand_main else 0
+        for col_index, (col_name, col_label) in enumerate(self._columns[col_start:], col_start):
+            header_width = get_width(col_label + "  ") + self.COL_PADDING # "  " sort space
+            texts = [self.GetItem(i, col_index).GetText() for i in range(self.GetItemCount())]
+            widths.append(max(header_width, max(get_width(t) for t in texts)))
+        if self._col_maxwidth > 0:
+            widths = [min(w, self._col_maxwidth) for w in widths]
+
+        if expand_main: # First column to maximum remaining from other columns and scrollbar
+            main_width = self.Size[0] - sum(widths) - 5 # Space for padding
+            if self.GetScrollRange(wx.VERTICAL) > 1:
+                main_width -= self.GetScrollThumb(wx.VERTICAL) # Space for scrollbar
+            widths.insert(0, main_width)
+
+        for col_index, width in enumerate(widths):
+            self.SetColumnWidth(col_index, width)
+            self._col_widths[col_index] = width
 
 
     def Select(self, idx, on=True):
@@ -4621,38 +4642,17 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
             self.SetStringItem(0, i, col_value)
         self._ApplyItemStyle(0, self.GetItemStyle(0))
 
-        def resize():
-            if not self: return
-            w = sum((self.GetColumnWidth(i) for i in range(1, len(self._columns))), 0)
-            width = self.Size[0] - w - 5 # Space for padding
-            if self.GetScrollRange(wx.VERTICAL) > 1:
-                width -= self.GetScrollThumb(wx.VERTICAL) # Space for scrollbar
-            self.SetColumnWidth(0, width)
-        if self.GetItemCount() == 1: wx.CallAfter(resize)
-
 
     def _PopulateRows(self, selected_items=()):
         """Populates all rows, restoring previous selecteds if any"""
-
         # To map list item data ID to row, ListCtrl allows only integer per row
         row_data_map = {} # {item_id: {row dict}, }
         item_data_map = {} # {item_id: [row values], }
-        # For measuring by which to set column width: header or value
-        header_lengths = {} # {col_name: integer}
-        col_lengths = {} # {col_name: integer}
-        for col_name, col_label in self._columns:
-            col_lengths[col_name] = 0
-            # Keep space for sorting arrows.
-            width = self.GetTextExtent(col_label + "  ")[0] + self.COL_PADDING
-            header_lengths[col_name] = width
         index = self.GetItemCount()
         for item_id, row in self._id_rows:
             if not self._RowMatchesFilter(row): continue # for item_id, row
             col_name = self._columns[0][0]
             col_value = self._formatters[col_name](row, col_name)
-            col_lengths[col_name] = max(col_lengths[col_name],
-                                        self.GetTextExtent(col_value)[0] + self.COL_PADDING)
-
             if item_id in self._id_images:
                 self.InsertImageStringItem(index, col_value, self._id_images[item_id])
             else: self.InsertStringItem(index, col_value)
@@ -4663,8 +4663,6 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
             col_index = 1 # First was already inserted
             for col_name, col_label in self._columns[col_index:]:
                 col_value = self._formatters[col_name](row, col_name)
-                col_width = self.GetTextExtent(col_value)[0] + self.COL_PADDING
-                col_lengths[col_name] = max(col_lengths[col_name], col_width)
                 self.SetStringItem(index, col_index, col_value)
                 item_data_map[item_id][col_index] = row.get(col_name)
                 col_index += 1
@@ -4673,19 +4671,11 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         self._data_map = row_data_map
         self.itemDataMap = item_data_map
 
-        if self._id_rows and not self._col_widths:
-            if self._col_maxwidth > 0:
-                for col_name, width in col_lengths.items():
-                    col_lengths[col_name] = min(width, self._col_maxwidth)
-                for col_name, width in header_lengths.items():
-                    header_lengths[col_name] = min(width, self._col_maxwidth)
-            for i, (col_name, col_label) in enumerate(self._columns):
-                col_width = max(col_lengths[col_name], header_lengths[col_name])
-                self.SetColumnWidth(i, col_width)
-                self._col_widths[i] = col_width
-        elif self._col_widths:
+        if self._col_widths:
             for col, width in self._col_widths.items():
                 self.SetColumnWidth(col, width)
+        else:
+            self.AutoSizeColumns()
         if self.GetSortState()[0] >= 0:
             self.SortListItems(*self.GetSortState())
 
