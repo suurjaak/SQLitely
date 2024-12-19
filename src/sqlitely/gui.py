@@ -1731,7 +1731,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         msg = util.plural("file", self.dbs_selected, single="this")
         if wx.YES != controls.YesNoMessageBox(
-            "Remove %s from database list?\n\n%s" % (msg, "\n".join(self.dbs_selected)),
+            "Remove %s from database list?\n\n%s" %
+            (msg, util.ellipsize("\n".join(self.dbs_selected), limit=1000)),
             conf.Title, wx.ICON_INFORMATION, default=wx.NO
         ): return
 
@@ -1786,7 +1787,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         msg = util.plural("file", self.dbs_selected, single="this")
         if wx.YES != controls.YesNoMessageBox(
-            "Delete %s from disk?\n\n%s" % (msg, "\n".join(self.dbs_selected)),
+            "Delete %s from disk?\n\n%s" %
+            (msg, util.ellipsize("\n".join(self.dbs_selected), limit=1000)),
             conf.Title, wx.ICON_WARNING, default=wx.NO
         ): return
 
