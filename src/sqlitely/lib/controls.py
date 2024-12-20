@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    19.12.2024
+@modified    20.12.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -4693,11 +4693,13 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         if self._filter:
             result = False
             patterns = list(map(re.escape, self._filter.split()))
+            matches = set()
             for col_name, col_label in self._columns:
                 col_value = self._formatters[col_name](row, col_name)
-                if all(re.search(p, col_value, re.I | re.U) for p in patterns):
+                matches.update(p for p in patterns if re.search(p, col_value, re.I | re.U))
+                if len(matches) == len(patterns):
                     result = True
-                    break
+                    break # for col_name
         return result
 
 
