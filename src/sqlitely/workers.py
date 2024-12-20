@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.12.2024
+@modified    20.12.2024
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -21,6 +21,7 @@ import sqlite3
 import subprocess
 import sys
 import threading
+import time
 import traceback
 
 import six
@@ -341,19 +342,30 @@ class DetectDatabaseThread(WorkerThread):
 
     def run(self):
         self._is_running = True
+
+        def progress():
+            if self._is_working: time.sleep(0.001)
+            return self._is_working
+
         while self._is_running:
             search = self._queue.get()
             if not search: continue # while self._is_running
 
             self._is_working, self._drop_results = True, False
             all_filenames = set() # To handle potential duplicates
-            for filenames in database.detect_databases(lambda: self._is_working):
-                filenames = all_filenames.symmetric_difference(filenames)
-                if not self._drop_results:
-                    self.postback({"filenames": filenames})
+            batch, batch_count = [], 0 # Yield filenames in batches for smoother updates
+            for filenames in database.detect_databases(progress):
+                filenames = set(filenames) - all_filenames
                 all_filenames.update(filenames)
+                batch.extend(filenames)
+                batch_count += 1
+                if batch and (len(batch) >= 10 or batch_count >= 10) and not self._drop_results:
+                    self.postback({"filenames": batch})
+                    batch, batch_count = [], 0
                 if not self._is_working:
                     break # for filename
+            if batch and not self._drop_results:
+                self.postback({"filenames": batch})
 
             if not self._drop_results:
                 self.postback({"done": True, "count": len(all_filenames)})
@@ -371,18 +383,30 @@ class ImportFolderThread(WorkerThread):
 
     def run(self):
         self._is_running = True
+
+        def progress():
+            if self._is_working: time.sleep(0.001)
+            return self._is_working
+
         while self._is_running:
             path = self._queue.get()
             if not path: continue # while self._is_running
 
             self._is_working, self._drop_results = True, False
             all_filenames = set()
-            for filenames in database.find_databases(path):
+            batch, batch_count = [], 0 # Yield filenames in batches for smoother updates
+            for filenames in database.find_databases(path, progress):
+                filenames = set(filenames) - all_filenames
                 all_filenames.update(filenames)
-                if filenames and not self._drop_results:
-                    self.postback({"filenames": filenames, "folder": path})
+                batch.extend(filenames)
+                batch_count += 1
+                if batch and (len(batch) >= 10 or batch_count >= 10) and not self._drop_results:
+                    self.postback({"filenames": batch, "folder": path})
+                    batch, batch_count = [], 0
                 if not self._is_working:
                     break # for filename
+            if batch and not self._drop_results:
+                self.postback({"filenames": batch, "folder": path})
 
             if not self._drop_results:
                 self.postback({"done": True, "count": len(all_filenames), "folder": path})

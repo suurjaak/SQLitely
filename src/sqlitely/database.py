@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    15.12.2024
+@modified    20.12.2024
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -2401,41 +2401,36 @@ def detect_databases(progress=None):
                 search_paths.append(path)
                 break # for path
     else:
-        search_paths = [os.getenv("HOME"),
-                        "/Users" if "mac" == os.name else "/home"]
+        search_paths = [os.getenv("HOME"), "/Users" if "mac" == os.name else "/home"]
     search_paths = [util.to_unicode(x) for x in search_paths]
     for search_path in filter(os.path.exists, search_paths):
         if progress and not progress(): return
         logger.info("Looking for SQLite databases under %s.", search_path)
-        for root, _, files in os.walk(search_path):
-            results = []
-            for f in files:
-                if progress and not progress(): break # for f
-                if is_sqlite_file(f, root):
-                    results.append(os.path.realpath(os.path.join(root, f)))
-            if results: yield results
-    if progress and not progress(): return
+        for files in find_databases(search_path, progress): yield files
 
     # Then search current working directory for database files.
-    search_path = six.moves.getcwd()
-    logger.info("Looking for SQLite databases under %s.", search_path)
-    for root, _, files in os.walk(search_path):
-        if progress and not progress(): return
+    if progress and not progress(): return
+    logger.info("Looking for SQLite databases under %s.", six.moves.getcwd())
+    for files in find_databases(six.moves.getcwd(), progress): yield files
+
+
+def find_databases(folder, progress=None):
+    """
+    Yields lists of all SQLite databases under the specified folder.
+
+    @param   progress  callback function returning whether task should continue
+    """
+    for root, _, files in os.walk(folder):
+        if progress and not progress(): break # for root
         results = []
         for f in files:
             if progress and not progress(): break # for f
             if is_sqlite_file(f, root):
                 results.append(os.path.realpath(os.path.join(root, f)))
+            if len(results) >= 100:
+                yield results
+                results = []
         if results: yield results
-
-
-def find_databases(folder):
-    """Yields lists of all SQLite databases under the specified folder."""
-    for root, _, files in os.walk(folder):
-        yield []
-        for f in files:
-            p = os.path.join(root, f)
-            yield [p] if is_sqlite_file(p) else []
 
 
 def fmt_entity(name, force=True, limit=None):
