@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.12.2024
+@modified    20.12.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -969,7 +969,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.db_menustate[page.db.filename] = {"full": True}
             self.page_db_latest = page
         elif page is self.page_main:
-            self.list_db.ContainingSizer.Layout()
+            self.panel_db_main.Parent.Layout()
         self.Title = " - ".join(filter(bool, (conf.Title, subtitle)))
         self.update_notebook_header()
 
