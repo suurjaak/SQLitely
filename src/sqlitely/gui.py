@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    20.12.2024
+@modified    22.12.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2375,6 +2375,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.run_console("db = page.db if page else None # SQLite database wrapper")
         wx.CallAfter(ColourManager.UpdateControls)
         self.SendSizeEvent() # Multiline wx.Notebooks need redrawing
+
+        self.Unbind(wx.EVT_LIST_DELETE_ALL_ITEMS, source=page.edit_searchall,
+                    handler=self.on_clear_searchall)
 
         # Change notebook page to last visited
         index_new = 0
