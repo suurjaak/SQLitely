@@ -1940,9 +1940,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 if i and isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name) \
                 and node.targets[0].id == name:
                     prev = tree.body[i - 1]
-                    if isinstance(prev, ast.Expr) \
-                    and isinstance(prev.value, (ast.Str, ast.Constant)):  # Py2: Str, Py3: Constant
-                        return prev.value.s.strip()
+                    if isinstance(prev, ast.Expr):
+                        if (isinstance(prev.value, ast.Str) # Py2/Py3
+                        or hasattr(ast, "Constant") and isinstance(prev.value, ast.Constant)): # Py3
+                            return prev.value.s.strip()
             return ""
 
         def typelist(mytype):

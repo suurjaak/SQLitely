@@ -4296,7 +4296,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
 
         self.Freeze()
         try:
-            scrollpos = self.GetScrollPos(wx.VERTICAL)
+            scrollpos = self._mainWin.GetScrollPos(wx.VERTICAL)
             wx.lib.agw.ultimatelistctrl.UltimateListCtrl.DeleteAllItems(self)
             self._PopulateTopRow()
             self._PopulateRows(selected_items)
