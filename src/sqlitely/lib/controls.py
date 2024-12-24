@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    20.12.2024
+@modified    24.12.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -4354,6 +4354,28 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         """Selects/deselects an item; changes current item if selected."""
         wx.lib.agw.ultimatelistctrl.UltimateListCtrl.Select(self, idx, on)
         if on: self._mainWin.ChangeCurrent(idx)
+
+
+    def CenterOnItem(self, idx):
+        """Scrolls to center view on item, if currently not visible."""
+        pixelh = self._mainWin.VirtualSize.Height - self._mainWin.Size.Height
+        scrollh = self.GetScrollRange(wx.VERTICAL) 
+        scrollh -= self._mainWin.GetScrollPageSize(wx.VERTICAL)
+        pixels_per_scroll = pixelh / scrollh
+        row_height = self.GetUserLineHeight()
+        count_per_page = self._mainWin.Size.Height / row_height
+        scrollpos = self._mainWin.GetScrollPos(wx.VERTICAL)
+        first_visible_pixel = pixels_per_scroll * scrollpos
+
+        first_visible = int(first_visible_pixel / row_height)
+        last_visible = int(first_visible + count_per_page)
+        if first_visible <= idx <= last_visible: return
+
+        y1 = (scrollpos + 1) * pixels_per_scroll
+        y2 = (idx - count_per_page // 2) * row_height
+        self.ScrollList(0, -y1)
+        self.ScrollList(0, y2)
+        self.Update()
 
 
     def DeleteItem(self, index):

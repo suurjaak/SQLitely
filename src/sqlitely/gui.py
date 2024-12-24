@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.12.2024
+@modified    24.12.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1164,8 +1164,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if self.list_db.IsSelected(0):
                 self.list_db.Select(0, False)
             for i in range(1, self.list_db.GetItemCount()):
-                itempath = self.list_db.GetItemText(i)
-                self.list_db.Select(i, on=(itempath == event.filename2))
+                is_filename2 = (self.list_db.GetItemText(i) == event.filename2)
+                self.list_db.Select(i, is_filename2)
+                if is_filename2: self.list_db.CenterOnItem(i)
             if event.filename2 in conf.RecentFiles: # Remove earlier position
                 recent_index = conf.RecentFiles.index(event.filename2)
                 try: self.history_file.RemoveFileFromHistory(recent_index)
@@ -1442,12 +1443,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     if first_selected_index < 0: first_selected_index = item_index
                     self.list_db.Select(item_index)
                     self.list_db.SetFocus()
-
-            if first_selected_index >= self.list_db.GetCountPerPage(): # Scroll to center selection
-                row_height = self.list_db.GetUserLineHeight()
-                dy = (first_selected_index - self.list_db.GetCountPerPage() // 2) * row_height
-                self.list_db.ScrollList(0, dy)
-                self.list_db.Update()
+            self.list_db.CenterOnItem(first_selected_index)
 
         self.button_missing.Show(bool(items))
         self.button_clear.Show(bool(items))
@@ -1695,7 +1691,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         if new_filenames:
             for i in range(1, self.list_db.GetItemCount()):
-                self.list_db.Select(i, on=(self.list_db.GetItemText(i) in new_filenames))
+                is_newname = self.list_db.GetItemText(i) in new_filenames
+                self.list_db.Select(i, is_newname)
+                if is_newname: self.list_db.CenterOnItem(i)
 
 
     def on_close_active_database(self, event=None):
@@ -2285,11 +2283,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if any, removes page from main notebook.
         """
         if self.is_dragging_page: return
-        if event.EventObject == self.notebook:
-            page = self.notebook.GetPage(event.GetSelection())
-        else:
-            page = event.EventObject
-            page.Show(False)
+        page = self.notebook.GetPage(event.GetSelection())
         if self.page_log == page:
             if not self.page_log.is_hidden:
                 event.Veto() # Veto delete event
@@ -2495,6 +2489,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 for i in range(1, self.list_db.GetItemCount()):
                     if self.list_db.GetItemText(i) == filename:
                         self.list_db.Select(i)
+                        self.list_db.CenterOnItem(i)
                         break # for i
             for i in range(self.notebook.GetPageCount()):
                 if self.notebook.GetPage(i) == page:
