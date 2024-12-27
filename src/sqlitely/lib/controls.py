@@ -4278,7 +4278,6 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         @return   item index, or NOT_FOUND
         """
         for i in range(self.GetItemCount()):
-            data = self.GetItemData(i)
             if self.GetItemText(i) == text: return i
         return wx.NOT_FOUND
 
