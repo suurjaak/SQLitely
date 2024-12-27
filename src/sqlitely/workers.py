@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    20.12.2024
+@modified    27.12.2024
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -85,11 +85,14 @@ class WorkerThread(threading.Thread):
         self._queue.put(None) # To wake up thread waiting on queue
 
 
-    def stop_work(self, drop=True):
+    def stop_work(self, drop=True, every=True):
         """
-        Signals to stop the currently ongoing work, if any. Obtained results
-        will be posted back, unless drop is false.
+        Signals to stop ongoing work, currently ongoing or every work item, if any.
+        Obtained results will be posted back, unless drop is false.
         """
+        while every and not self._queue.empty():
+            try: self._queue.get(block=False)
+            except queue.Empty: break
         self._is_working = False
         self._drop_results = drop
 
