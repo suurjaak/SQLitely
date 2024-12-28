@@ -9,9 +9,10 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     09.09.2024
-@modified    11.11.2024
+@modified    28.12.2024
 ------------------------------------------------------------------------------
 """
+import contextlib
 import copy
 import itertools
 import logging
@@ -275,7 +276,7 @@ class TestDatabaseSink(FileTest):
         logger.info("Verifying export_entities() into existing database.")
         outfile = self.mktemp(".db")
         populate_database(outfile, SCHEMA, COLUMNS, DATA)
-        with sqlite3.connect(outfile) as sqldb:
+        with contextlib.closing(sqlite3.connect(outfile, isolation_level=None)) as sqldb:
             for table in SCHEMA["table"]:
                 sqldb.execute("UPDATE %s SET id = id + 1" % grammar.quote(table))
             sqldb.execute("CREATE TABLE extra (id, value)")
@@ -590,7 +591,7 @@ class TestDatabaseSink(FileTest):
             renames[category] = {k.lower(): v for k, v in mapping.items()}
         self.assertTrue(os.path.isfile(filename), "Expected database file to exist.")
         self.assertTrue(os.path.getsize(filename), "Expected database file to have content.")
-        with sqlite3.connect(filename) as sqldb:
+        with contextlib.closing(sqlite3.connect(filename)) as sqldb:
             sqldb.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
             self.validate_schema(sqldb, schema, renames)
             for name, expected in data.items():

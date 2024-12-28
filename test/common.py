@@ -9,9 +9,10 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     16.09.2024
-@modified    17.09.2024
+@modified    28.12.2024
 ------------------------------------------------------------------------------
 """
+import contextlib
 import csv
 import itertools
 import collections
@@ -160,7 +161,7 @@ def populate_database(filename, schema, columns, data):
     """
     logger.debug("Populating test database %r with %s tables and %s rows.",
                  filename, len(data), sum(map(len, data.values())))
-    with sqlite3.connect(filename) as sqldb:
+    with contextlib.closing(sqlite3.connect(filename, isolation_level=None)) as sqldb:
         sqldb.executescript(";\n\n".join(s for d in schema.values() for s in d.values()))
         for item_name, rows in data.items():
             if not rows or item_name not in schema["table"]: continue # for
@@ -350,7 +351,7 @@ def validate_data_xlsx(testcase, filename, data_expected, query=None, columns=No
 def validate_data_sql(testcase, content, data_expected, schema_expected=None, columns=None):
     """Asserts SQL output containing valid expected data."""
     sqldb = None
-    with sqlite3.connect(":memory:") as sqldb:
+    with contextlib.closing(sqlite3.connect(":memory:")) as sqldb:
         try: sqldb.executescript(content)
         except Exception as e: testcase.fail("Expected valid SQL in output (%r)." % e)
         sqldb.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))

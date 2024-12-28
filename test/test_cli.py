@@ -11,9 +11,10 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     24.06.2024
-@modified    28.10.2024
+@modified    28.12.2024
 ------------------------------------------------------------------------------
 """
+import contextlib
 import glob
 import io
 import json
@@ -454,7 +455,7 @@ class TestCLI(FileTest):
             self.assertFalse(res, "Unexpected failure from import.")
             self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
             basename = os.path.splitext(os.path.basename(infile))[0]
-            with sqlite3.connect(outfile) as db:
+            with contextlib.closing(sqlite3.connect(outfile)) as db:
                 db.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
                 for item_name in schema:
                     table_name = item_name if combined else basename
@@ -488,7 +489,7 @@ class TestCLI(FileTest):
                 self.assertFalse(res, "Unexpected failure from import.")
                 self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
                 basename = os.path.splitext(os.path.basename(infile))[0]
-                with sqlite3.connect(outfile) as db:
+                with contextlib.closing(sqlite3.connect(outfile)) as db:
                     db.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
                     total = 0
                     for item_name in schema:
@@ -528,7 +529,7 @@ class TestCLI(FileTest):
             self.assertFalse(res, "Unexpected failure from import.")
             self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
             basename = os.path.splitext(os.path.basename(infile))[0]
-            with sqlite3.connect(outfile) as db:
+            with contextlib.closing(sqlite3.connect(outfile)) as db:
                 db.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
                 rows = db.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
                 received = set(r["name"] for r in rows)
@@ -557,7 +558,7 @@ class TestCLI(FileTest):
             self.assertFalse(res, "Unexpected failure from import.")
             self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
             basename = os.path.splitext(os.path.basename(infile))[0]
-            with sqlite3.connect(outfile) as db:
+            with contextlib.closing(sqlite3.connect(outfile)) as db:
                 db.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
                 for item_name in schema:
                     table_name = item_name if combined else basename
@@ -586,7 +587,7 @@ class TestCLI(FileTest):
             self.assertFalse(res, "Unexpected failure from import.")
             self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
             basename = os.path.splitext(os.path.basename(infile))[0]
-            with sqlite3.connect(outfile) as db:
+            with contextlib.closing(sqlite3.connect(outfile)) as db:
                 db.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
                 for item_name in schema:
                     table_name = item_name if combined else basename
@@ -627,7 +628,7 @@ class TestCLI(FileTest):
                 self.assertFalse(res, "Unexpected failure from import.")
                 self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
                 basename = os.path.splitext(os.path.basename(infile))[0]
-                with sqlite3.connect(outfile) as db:
+                with contextlib.closing(sqlite3.connect(outfile)) as db:
                     db.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
                     rows = db.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
                     received = set(r["name"] for r in rows)
@@ -668,7 +669,7 @@ class TestCLI(FileTest):
                                              "--row-header", "--columns", colset)
                 self.assertFalse(res, "Unexpected failure from import.")
                 self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
-                with sqlite3.connect(outfile) as db:
+                with contextlib.closing(sqlite3.connect(outfile)) as db:
                     db.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
                     for item_name in schema:
                         table_name = item_name if combined else basename
@@ -697,7 +698,7 @@ class TestCLI(FileTest):
                                          "--row-header", "--table-name", TABLE)
             self.assertFalse(res, "Unexpected failure from import.")
             self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
-            with sqlite3.connect(outfile) as db:
+            with contextlib.closing(sqlite3.connect(outfile)) as db:
                 db.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
                 rows = db.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
                 received = set(r["name"] for r in rows)
@@ -710,7 +711,7 @@ class TestCLI(FileTest):
                                          "--row-header", "--table-name", TABLE)
             self.assertFalse(res, "Unexpected failure from import.")
             self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
-            with sqlite3.connect(outfile) as db:
+            with contextlib.closing(sqlite3.connect(outfile)) as db:
                 db.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
                 rows = db.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
                 received = set(r["name"] for r in rows)
@@ -728,7 +729,7 @@ class TestCLI(FileTest):
                                          "--row-header", "--table-name", TABLE, "--create-always")
             self.assertFalse(res, "Unexpected failure from import.")
             self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
-            with sqlite3.connect(outfile) as db:
+            with contextlib.closing(sqlite3.connect(outfile)) as db:
                 db.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
                 rows = db.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
                 received = set(r["name"] for r in rows)
@@ -1088,7 +1089,7 @@ class TestCLI(FileTest):
         self.assertTrue(os.path.getsize(outfile), "Output file has no content in stats.")
         with io.open(outfile, "r", encoding="utf-8") as f: content = f.read()
         testfile = self.mktemp(".db")
-        with sqlite3.connect(testfile) as db:
+        with contextlib.closing(sqlite3.connect(testfile)) as db:
             db.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
             db.executescript(content)
             received = set(r["name"] for r in db.execute("SELECT name FROM space_used").fetchall())

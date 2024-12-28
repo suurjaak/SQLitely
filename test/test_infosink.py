@@ -9,9 +9,10 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.09.2024
-@modified    12.11.2024
+@modified    28.12.2024
 ------------------------------------------------------------------------------
 """
+import contextlib
 import io
 import logging
 import os
@@ -112,7 +113,7 @@ class TestInfoSink(FileTest):
         if "html" == fmt and diagram:
             self.assertIn(diagram["svg"], content, "Expected schema diagram in output.")
         if "sql" == fmt and stats:
-            with sqlite3.connect(self.mktemp(".db")) as sqldb:
+            with contextlib.closing(sqlite3.connect(self.mktemp(".db"))) as sqldb:
                 sqldb.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
                 sqldb.executescript(content)
                 tables = list_database(sqldb)

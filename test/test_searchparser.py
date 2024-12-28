@@ -9,9 +9,10 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     17.10.2024
-@modified    18.10.2024
+@modified    28.12.2024
 ------------------------------------------------------------------------------
 """
+import contextlib
 import logging
 import os
 import sqlite3
@@ -118,7 +119,7 @@ class TestSearchParser(unittest.TestCase):
 
     def verify_query_sql(self, label, sql, params):
         """Verifies SQL query in database."""
-        with sqlite3.connect(":memory:") as sqldb:
+        with contextlib.closing(sqlite3.connect(":memory:")) as sqldb:
             sqldb.executescript(SCHEMA_SQL)
             try: sqldb.execute(sql, params)
             except Exception as e:

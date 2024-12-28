@@ -9,9 +9,10 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     12.10.2024
-@modified    21.10.2024
+@modified    28.12.2024
 ------------------------------------------------------------------------------
 """
+import contextlib
 import collections
 import json
 import logging
@@ -595,7 +596,7 @@ class TestGrammar(unittest.TestCase):
         baseschema = kwargs.get("baseschema")
         db_sqls, db_infos = [], []
         for sql in create_sqls:
-            with sqlite3.connect(":memory:") as sqldb:
+            with contextlib.closing(sqlite3.connect(":memory:")) as sqldb:
                 sqldb.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
                 if "TABLE" not in sql: # Add an actual table as well for index/trigger/view
                     base_sqls = baseschema

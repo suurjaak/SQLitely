@@ -9,9 +9,10 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2024
-@modified    30.09.2024
+@modified    28.12.2024
 ------------------------------------------------------------------------------
 """
+import contextlib
 import collections
 import datetime
 import logging
@@ -171,7 +172,7 @@ class TestFileDataSource(FileTest):
         result = importexport.FileDataSource(infile, db).import_data(tables)
         self.assertTrue(result, "Unexpected failure from import.")
         self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
-        with sqlite3.connect(outfile) as sqldb:
+        with contextlib.closing(sqlite3.connect(outfile)) as sqldb:
             sqldb.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
             for table in schema:
                 rows = sqldb.execute("SELECT * FROM %s" % grammar.quote(table)).fetchall()
@@ -204,7 +205,7 @@ class TestFileDataSource(FileTest):
         result = importexport.FileDataSource(infile, db).import_data(tables)
         self.assertTrue(result, "Unexpected failure from import.")
         self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
-        with sqlite3.connect(outfile) as sqldb:
+        with contextlib.closing(sqlite3.connect(outfile)) as sqldb:
             sqldb.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
             for table in schema:
                 rows = sqldb.execute("SELECT * FROM %s" % grammar.quote(table)).fetchall()
@@ -222,7 +223,7 @@ class TestFileDataSource(FileTest):
         result = importexport.FileDataSource(infile, db).import_data(tables)
         self.assertTrue(result, "Unexpected failure from import.")
         self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
-        with sqlite3.connect(outfile) as sqldb:
+        with contextlib.closing(sqlite3.connect(outfile)) as sqldb:
             sqldb.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
             for table in schema:
                 rows = sqldb.execute("SELECT * FROM %s" % grammar.quote(table)).fetchall()
@@ -232,7 +233,7 @@ class TestFileDataSource(FileTest):
         # Add same data again
         result = importexport.FileDataSource(infile, db).import_data(tables)
         self.assertTrue(result, "Unexpected failure from import.")
-        with sqlite3.connect(outfile) as sqldb:
+        with contextlib.closing(sqlite3.connect(outfile)) as sqldb:
             sqldb.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
             for table in schema:
                 rows = sqldb.execute("SELECT * FROM %s" % grammar.quote(table)).fetchall()
@@ -244,7 +245,7 @@ class TestFileDataSource(FileTest):
         result = importexport.FileDataSource(infile, db).import_data(tables)
         self.assertTrue(result, "Unexpected failure from import.")
         expected_tables = list(schema) + [x["name"] for x in tables]
-        with sqlite3.connect(outfile) as sqldb:
+        with contextlib.closing(sqlite3.connect(outfile)) as sqldb:
             sqldb.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
             for table in expected_tables:
                 rows = sqldb.execute("SELECT * FROM %s" % grammar.quote(table)).fetchall()
@@ -262,7 +263,7 @@ class TestFileDataSource(FileTest):
         result = importexport.FileDataSource(infile, db).import_data(tables)
         self.assertTrue(result, "Unexpected failure from import.")
         self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
-        with sqlite3.connect(outfile) as sqldb:
+        with contextlib.closing(sqlite3.connect(outfile)) as sqldb:
             sqldb.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
             for table in schema:
                 rows = sqldb.execute("SELECT * FROM %s" % grammar.quote(table)).fetchall()
@@ -273,7 +274,7 @@ class TestFileDataSource(FileTest):
         for item in tables[1:]: item["section"] = "no such sheet"
         result = importexport.FileDataSource(infile, db).import_data(tables)
         self.assertFalse(result, "Expected failure on unknown sheet.")
-        with sqlite3.connect(outfile) as sqldb:
+        with contextlib.closing(sqlite3.connect(outfile)) as sqldb:
             sqldb.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
             for table in schema:
                 rows = sqldb.execute("SELECT * FROM %s" % grammar.quote(table)).fetchall()
@@ -285,7 +286,7 @@ class TestFileDataSource(FileTest):
             item["name"], item["section"] = "%s_dupe" % item["name"], "no such sheet"
         result = importexport.FileDataSource(infile, db).import_data(tables)
         self.assertFalse(result, "Expected failure on unknown sheet.")
-        with sqlite3.connect(outfile) as sqldb:
+        with contextlib.closing(sqlite3.connect(outfile)) as sqldb:
             sqldb.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
             received = list_database(sqldb)
             self.assertEqual(set(received), set(schema), "Unexpeced tables on rollback.")
@@ -319,7 +320,7 @@ class TestFileDataSource(FileTest):
             else:
                 self.assertTrue(result, "Unexpected failure from import.")
             self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
-            with sqlite3.connect(outfile) as sqldb:
+            with contextlib.closing(sqlite3.connect(outfile)) as sqldb:
                 sqldb.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
                 tables_received = list_database(sqldb)
                 if cancel_at:
@@ -397,7 +398,7 @@ class TestFileDataSource(FileTest):
         result = importexport.FileDataSource(infile, db).import_data(tables)
         self.assertTrue(result, "Unexpected failure from import.")
         self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
-        with sqlite3.connect(outfile) as sqldb:
+        with contextlib.closing(sqlite3.connect(outfile)) as sqldb:
             sqldb.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
             for i, table in enumerate(schema):
                 rows = sqldb.execute("SELECT * FROM %s" % grammar.quote(" " * i)).fetchall()
@@ -431,7 +432,7 @@ class TestFileDataSource(FileTest):
         result = source.import_data(tables)
         self.assertTrue(result, "Unexpected failure from import.")
         self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
-        with sqlite3.connect(outfile) as sqldb:
+        with contextlib.closing(sqlite3.connect(outfile)) as sqldb:
             sqldb.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
             for table in schema:
                 rows = sqldb.execute("SELECT * FROM %s" % grammar.quote(table)).fetchall()
@@ -454,7 +455,7 @@ class TestFileDataSource(FileTest):
         result = source.import_data(tables)
         self.assertTrue(result, "Unexpected failure from import.")
         self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
-        with sqlite3.connect(outfile) as sqldb:
+        with contextlib.closing(sqlite3.connect(outfile)) as sqldb:
             sqldb.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
             total = 0
             for table in schema:
