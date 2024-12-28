@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.11.2024
+@modified    28.12.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -362,6 +362,11 @@ class SingleInstanceChecker(object):
             else: result = True
             finally: try_ignore(client.close)
         return result or False
+
+
+    def IsReceiving(self):
+        """Returns whether listener is currently active."""
+        return bool(self._listener)
 
 
     def StartReceive(self, callback, port, portrange=10000):
