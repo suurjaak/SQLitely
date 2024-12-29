@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    25.10.2024
+@modified    29.12.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -388,41 +388,7 @@ class SchemaDiagram(object):
 
         @param   rect  if set, content outside the rect is not drawn
         """
-        if "linux" in sys.platform and sys.version_info >= (3, 9):
-            self.DrawToDC_manual(dc, rect) # Workaround for wx.PseudoDC in Linux with newer Python,
-            return                         # where all items get drawn to coordinate start
         self._dc.DrawToDC(dc) if rect is None else self._dc.DrawToDCClipped(dc, rect)
-
-
-    def DrawToDC_manual(self, dc, rect=None):
-        """
-        Draws current layout to wx.DC, without using the PseudoDC.DrawToDC() family.
-
-        @param   rect  if set, content outside the rect is not drawn
-        """
-        ids, bounder = list(self._ids), self._dc.GetIdBounds
-        adjust = lambda r, s: (r.Offset(s), r)[-1]
-        totalbounds = sum(map(bounder, ids[1:]), bounder(ids[0])) if ids else wx.Rect()
-        MARGIN = int(math.ceil(10 * self._zoom))
-        shift = [MARGIN - v for v in totalbounds.TopLeft]
-        dc.Background = controls.BRUSH(self.BackgroundColour)
-        dc.Clear()
-        dc.Font = self._font
-
-        self.RecordLines(dc=dc, shift=[2 * x for x in shift])
-        for o in (o for o in self._order if o["name"] not in self._sels):
-            bounds = bounder(o["id"])
-            if rect is not None and not rect.Intersects(adjust(bounds, shift)): continue # for o
-            pos = [a + b for a, b in zip(bounds[:2], shift)]
-            obmp, _ = self.GetItemBitmaps(o)
-            dc.DrawBitmap(obmp, pos, useMask=True)
-        for name in self._sels:
-            o = self._objs[name]
-            bounds = bounder(o["id"])
-            if rect is not None and not rect.Intersects(adjust(bounds, shift)): continue # for name
-            pos = [a + b - 2 * self._zoom for a, b in zip(bounds[:2], shift)]
-            _, obmp = self.GetItemBitmaps(o)
-            dc.DrawBitmap(obmp, Point(pos), useMask=True)
 
 
     def MoveItem(self, name, dx, dy):
