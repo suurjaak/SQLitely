@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    29.12.2024
+@modified    30.12.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -1389,7 +1389,8 @@ class SchemaDiagram(object):
         fdc.Clear()
         shift = 0
         if self._zoom % 0.5 in (self.ZOOM_STEP, self.ZOOM_STEP * 2):
-            shift = -1 # Heuristic: needs adjustment if zoom 1-2 steps above half or whole
+            if not ("linux" in sys.platform and wx.VERSION >= (4, 2, 2)):
+                shift = -1 # Heuristic: needs adjustment if zoom 1-2 steps above half or whole
         fdc.DrawBitmap(bmp, self.FMARGIN + shift, self.FMARGIN + shift, useMask=True)
         fdc.SelectObject(wx.NullBitmap)
         del fdc
