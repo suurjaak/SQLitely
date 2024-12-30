@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.12.2024
+@modified    30.12.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -56,6 +56,7 @@ from . import conf
 from . import database
 from . import grammar
 if is_gui_possible:
+    from . lib import controls
     from . import guibase
     from . import gui
 from . import importexport
@@ -1760,7 +1761,9 @@ def run_stats(dbname, args):
         diagrams = None
         if "html" == args.format:
             bar.update(afterword=" Generating diagram")
-            if is_gui_possible: _ = MainApp()
+            if is_gui_possible: # Create dummy wx app for wx functionality in diagram drawing
+                _ = MainApp()
+                controls.Patch.patch_wx()
             layout = scheme.SchemaDiagram(db)
             layout.SetFonts("Verdana",
                             ("Open Sans", conf.FontDiagramSize,
