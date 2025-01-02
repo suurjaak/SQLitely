@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.12.2024
+@modified    02.01.2025
 ------------------------------------------------------------------------------
 """
 try: from configparser import RawConfigParser                 # Py3
@@ -32,8 +32,8 @@ except ImportError: wx = None
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "2.4.dev246"
-VersionDate = "30.12.2024"
+Version = "2.4.dev247"
+VersionDate = "02.01.2025"
 
 Frozen, Snapped = getattr(sys, "frozen", False), (sys.executable or "").startswith("/snap/")
 if Frozen: # Running as a pyinstaller executable

@@ -106,7 +106,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    24.12.2024
+@modified    02.01.2025
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -4181,7 +4181,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         @param   data      item data dictionary
         @param   imageIds  list of indexes for the images associated to top row
         """
-        self._top_row = data
+        self._top_row = copy.deepcopy(data)
         if imageIds: self._id_images[0] = self._ConvertImageIds(imageIds)
         else: self._id_images.pop(0, None)
         self._PopulateTopRow()
@@ -4308,17 +4308,23 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         finally: self.Thaw()
 
 
-    def RefreshRow(self, row):
-        """Refreshes row with specified index from item data."""
+    def RefreshRow(self, index, data=None):
+        """
+        Refreshes row with specified index from item data.
+
+        @param   data  optional dictionary to update current data with
+        """
         if not self.GetItemCount(): return
-        if row < 0: row = row % self.GetItemCount()
-        data = not row and self._top_row or self._data_map.get(self.GetItemData(row))
-        if not data: return
+        if index < 0: index = index % self.GetItemCount()
+        if index == 0 and self._top_row: item = self._top_row
+        else: item = self._data_map.get(self.GetItemData(index))
+        if not item: return
+        if data: item.update(copy.deepcopy(data))
 
         for i, col_name in enumerate([c[0] for c in self._columns]):
-            col_value = self._formatters[col_name](data, col_name)
-            self.SetStringItem(row, i, col_value)
-        self._ApplyItemStyle(row, self.GetItemStyle(row))
+            col_value = self._formatters[col_name](item, col_name)
+            self.SetStringItem(index, i, col_value)
+        self._ApplyItemStyle(index, self.GetItemStyle(index))
 
 
     def AutoSizeColumns(self, expand_main=True):
@@ -4474,7 +4480,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         Ignores current filter if any.
         """
         col_name = self._columns[0][0]
-        rows = ([(0, self._top_row)] if self._top_row else []) + self._id_rows
+        rows = self._id_rows + ([(0, self._top_row)] if self._top_row else [])
         item_id = next(d for d, r in rows if self._formatters[col_name](r, col_name) == text)
         return self._id_styles.get(item_id)
     def SetItemStyleByText(self, text, style):
@@ -4486,13 +4492,21 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         if style is not None and style not in self.STYLES:
             raise ValueError("Unknown item style: %r" % (style, ))
         col_name = self._columns[0][0]
-        rows = ([(0, self._top_row)] if self._top_row else []) + self._id_rows
+        rows = self._id_rows + ([(0, self._top_row)] if self._top_row else [])
         item_id = next(d for d, r in rows if self._formatters[col_name](r, col_name) == text)
         if self._id_styles.get(item_id) == style: return
         self._id_styles[item_id] = style
         if item_id not in self._data_map: return
         index = next(i for i in range(self.GetItemCount()) if item_id == self.GetItemData(i))
         self._ApplyItemStyle(index, style)
+
+
+    def SetItemMappedDataByText(self, text, data):
+        """Updates the data dictionary mapped to the item with given primary label."""
+        col_name = self._columns[0][0]
+        rows = self._id_rows + ([(0, self._top_row)] if self._top_row else [])
+        row = next((r for _, r in rows if self._formatters[col_name](r, col_name) == text), None)
+        if row: row.update(copy.deepcopy(data))
 
 
     def GetListCtrl(self):

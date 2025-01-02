@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.12.2024
+@modified    02.01.2025
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1182,6 +1182,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if updated: # Make note to rebuild page entity lists in program menu
                 self.db_menustate[event.source.db.filename]["full"] = True
 
+        if ready or updated:
+            self.update_database_list(event.source.db.filename)
+            if event.source.db.filename in self.dbs_selected and not self.is_detail_pending:
+                self.is_detail_pending = True
+                wx.CallAfter(self.update_database_detail)
+
         if ready or rename:
             self.update_notebook_header()
 
@@ -1467,6 +1473,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     data["size"] = database.get_size(filename)
                     data["last_modified"] = datetime.datetime.fromtimestamp(
                                             os.path.getmtime(filename))
+            if filename in self.db_datas \
+            and any(self.db_datas[filename].get(k) != data.get(k) for k in ("size", "modified")):
+                self.db_datas[filename].pop("tables", None)
             self.db_datas[filename].update(data)
             items.append(data)
         self.list_db.Populate(items, [1])
@@ -1482,7 +1491,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         if not self: return
 
-        result, refresh_item_indexes = False, []
+        result, refresh_datas = False, []
         # Insert into database lists, if not already there
         for filename in util.tuplefy(filenames):
             filename = util.to_unicode(filename)
@@ -1507,10 +1516,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             else:
                 do_update = any(data_old.get(k) != data.get(k) for k in ("size", "modified"))
             if do_update:
+                data.pop("tables", None)
                 self.db_datas[filename].update(data)
-                item_index = self.list_db.FindItem(filename)
-                if item_index > 0:
-                    refresh_item_indexes.append(item_index)
+                refresh_datas.append(data)
                 result = True
 
         any_files_visible = (self.list_db.GetItemCount() > 1)
@@ -1519,8 +1527,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.button_clear.Show(any_files_visible)
             self.panel_db_main.Layout()
         self.update_database_count()
-        for item_index in refresh_item_indexes:
-            self.list_db.RefreshRow(item_index)
+        for data in refresh_datas:
+            self.list_db.SetItemMappedDataByText(data["name"], data)
+            self.list_db.RefreshRow(self.list_db.FindItem(data["name"]))
         return result
 
 
@@ -1574,9 +1583,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 self.label_tables.Value = data["tables"]
             else:
                 data.update(size=filesize, last_modified=filedate)
-                item_index = self.list_db.FindItem(filename)
-                if item_index > 0:
-                    self.list_db.RefreshRow(item_index)
+                self.list_db.SetItemMappedDataByText(filename, data)
+                self.list_db.RefreshRow(self.list_db.FindItem(filename))
                 wx.CallLater(10, self.update_database_stats, filename)
 
         if len(self.dbs_selected) > 1:
