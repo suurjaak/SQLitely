@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.01.2025
+@modified    03.01.2025
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2302,55 +2302,22 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         elif (not isinstance(page, DatabasePage) or not page.ready_to_close):
             return event.Veto()
 
-        unsaved = page.get_unsaved()
-        if unsaved:
-            if unsaved.pop("temporary", None) and not unsaved:
-                msg = "%s has modifications.\n\n" % page.db
-            else:
-                info = ""
-                if unsaved.get("pragma"): info = "PRAGMA settings"
-                if unsaved.get("table"):
-                    info += (", and " if info else "")
-                    info += util.plural("table", unsaved["table"], numbers=False)
-                    info += " " + ", ".join(map(fmt_entity, unsaved["table"]))
-                if unsaved.get("schema"):
-                    info += (", and " if info else "") + "schema changes"
-                if unsaved.get("temporary"):
-                    info += (", and " if info else "") + "temporary file"
-                msg = "There are unsaved changes in this file:\n%s.\n\n%s\n\n" % (info, page.db)
-
-            resp = wx.MessageBox(msg + "Do you want to save the changes?", conf.Title,
-                                 wx.YES | wx.NO | wx.CANCEL | wx.ICON_INFORMATION)
+        unsaved_info = page.get_unsaved_info(brief=True, temporary=True)
+        if unsaved_info:
+            msg = "There are unsaved changes in this file:\n\n%s\n\n" \
+                  "Do you want to save the changes?" % unsaved_info
+            resp = wx.MessageBox(msg, conf.Title, wx.YES | wx.NO | wx.CANCEL | wx.ICON_INFORMATION)
             if wx.CANCEL == resp: return event.Veto()
             if wx.YES == resp:
                 if not page.save_database(): return event.Veto()
 
-        ongoing = page.get_ongoing()
-        if ongoing:
-            infos = []
-            for category in database.Database.DATA_CATEGORIES:
-                if category in ongoing:
-                    info = ", ".join(sorted(ongoing[category], key=lambda x: x.lower()))
-                    title = util.plural(category, ongoing[category], numbers=False)
-                    info = "%s %s" % (title, info)
-                    if len(ongoing) > 1:
-                        info = "%s (%s)" % (util.plural(category, ongoing[category]), info)
-                    infos.append(info)
-            if "multi" in ongoing: infos.append(ongoing["multi"])
-            if "sql" in ongoing:
-                infos.append(util.plural("SQL query", ongoing["sql"]))
-
+        ongoing_info = page.get_ongoing_info()
+        if ongoing_info:
             if wx.YES != controls.YesNoMessageBox(
                 "There are ongoing exports in this file:\n\n%s\n\n- %s\n\n"
-                "Are you sure you want to cancel them?" % (page.db, "\n- ".join(infos)),
+                "Are you sure you want to cancel them?" % (page.db, ongoing_info),
                 conf.Title, wx.ICON_INFORMATION, default=wx.NO
             ): return event.Veto()
-
-        # Remove page from MainWindow data structures
-        if page.notebook.Selection >= 0 and not page.db.temporary:
-            conf.LastActivePages[page.db.filename] = page.notebook.Selection
-        elif page.db.filename in conf.LastActivePages:
-            del conf.LastActivePages[page.db.filename]
 
         page.on_close()
         if not page.db.temporary: self.list_db.SetItemStyleByText(page.db.filename, None)
@@ -2360,8 +2327,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         logger.info("Closed database tab for %s.", page.db)
         util.run_once(conf.save)
 
-        # Close databases, if not used in any other page
-        page.db.unregister_consumer(page)
+        # Close database, if not used in any other page
         if not page.db.has_consumers():
             if page.db.filename in self.dbs:
                 del self.dbs[page.db.filename]
@@ -3543,25 +3509,6 @@ class DatabasePage(wx.Panel):
     def handle_command(self, cmd, *args):
         """Handles a command, like "drop", ["table", name]."""
 
-        def format_changes(temp=False):
-            """Returns unsaved changes as readable text."""
-            info, changes = "", self.get_unsaved()
-            if changes.get("table"):
-                info += "Unsaved data in tables:\n- "
-                info += "\n- ".join(fmt_entity(x, force=False) for x in changes["table"])
-            if changes.get("schema"):
-                info += "%sUnsaved schema changes:\n- " % ("\n\n" if info else "")
-                names = {}
-                for x in changes["schema"]:
-                    names.setdefault(x.Category, []).append(x.Name)
-                info += "\n- ".join("%s %s" % (c, fmt_entity(n, force=False))
-                        for c in self.db.CATEGORIES for n in names.get(c, ()))
-            if changes.get("pragma"):
-                info += "%sPRAGMA settings" % ("\n\n" if info else "")
-            if temp and self.db.temporary:
-                info += "%s%s is a temporary file." % ("\n\n" if info else "", self.db)
-            return info
-
         def clipboard_copy(text, *_, **__):
             if wx.TheClipboard.Open():
                 d = wx.TextDataObject(text() if callable(text) else text)
@@ -4099,7 +4046,7 @@ class DatabasePage(wx.Panel):
                           if locks else "Database is currently unlocked.", conf.Title)
         elif "changes" == cmd:
             wx.MessageBox("Current unsaved changes:\n\n%s" %
-                          format_changes(temp=True), conf.Title)
+                          self.get_unsaved_info(temporary=True), conf.Title)
         elif "history" == cmd:
             components.HistoryDialog(self, self.db).ShowModal()
         elif "folder" == cmd:
@@ -4107,14 +4054,14 @@ class DatabasePage(wx.Panel):
         elif "save" == cmd:
             if wx.YES != controls.YesNoMessageBox(
                 "Are you sure you want to save the following changes:\n\n%s" %
-                format_changes(), conf.Title, wx.ICON_INFORMATION, default=wx.NO
+                self.get_unsaved_info(), conf.Title, wx.ICON_INFORMATION, default=wx.NO
             ): return
 
             self.save_database()
         elif "cancel" == cmd:
             if wx.YES != controls.YesNoMessageBox(
                 "Are you sure you want to cancel the following changes:\n\n%s" %
-                format_changes(), conf.Title, wx.ICON_INFORMATION, default=wx.NO
+                self.get_unsaved_info(), conf.Title, wx.ICON_INFORMATION, default=wx.NO
             ): return
 
             self.on_pragma_cancel()
@@ -5187,6 +5134,13 @@ class DatabasePage(wx.Panel):
         except Exception: pass
         self.db.clear_locks()
 
+        # Remove page from MainWindow data structures
+        if self.notebook.Selection >= 0 and not self.db.temporary:
+            conf.LastActivePages[self.db.filename] = self.notebook.Selection
+        elif self.db.filename in conf.LastActivePages:
+            del conf.LastActivePages[self.db.filename]
+
+        self.db.unregister_consumer(self)
         if self.db.temporary: return
 
         # Save search box state
@@ -5914,6 +5868,25 @@ class DatabasePage(wx.Panel):
         return result
 
 
+    def get_ongoing_info(self):
+        """Returns info string for ongoing exports in page, if any."""
+        infos = []
+        ongoing = self.get_ongoing()
+        if ongoing:
+            for category in database.Database.DATA_CATEGORIES:
+                if category in ongoing:
+                    info = ", ".join(sorted(ongoing[category], key=lambda x: x.lower()))
+                    title = util.plural(category, ongoing[category], numbers=False)
+                    info = "%s %s" % (title, info)
+                    if len(ongoing) > 1:
+                        info = "%s (%s)" % (util.plural(category, ongoing[category]), info)
+                    infos.append(info)
+            if "multi" in ongoing: infos.append(ongoing["multi"])
+            if "sql" in ongoing:
+                infos.append(util.plural("SQL query", ongoing["sql"]))
+        return "\n- ".join(infos)
+
+
     def get_unsaved(self):
         """
         Returns whether page has unsaved changes,
@@ -5937,6 +5910,47 @@ class DatabasePage(wx.Panel):
             self.db.populate_schema()
             if any(self.db.schema.values()): result["temporary"] = True
         return result
+
+
+    def get_unsaved_info(self, brief=False, temporary=False):
+        """
+        Returns info string for unsaved changes in page, if any, in full or brief text.
+
+        @param   temporary  whether to include that database is temporary
+        """
+        info = ""
+        changes = self.get_unsaved()
+        is_temporary = changes.pop("temporary", None)
+        if brief:
+            if is_temporary and not changes:
+                if temporary:
+                    info = "%s has modifications." % self.db
+            else:
+                if changes.get("pragma"): info = "PRAGMA settings"
+                if changes.get("table"):
+                    info += (", and " if info else "")
+                    info += util.plural("table", changes["table"], numbers=False)
+                    info += " " + ", ".join(map(fmt_entity, changes["table"]))
+                if changes.get("schema"):
+                    info += (", and " if info else "") + "schema changes"
+                if temporary and is_temporary:
+                    info += (", and " if info else "") + "temporary file"
+        else:
+            if changes.get("table"):
+                info += "Unsaved data in tables:\n- "
+                info += "\n- ".join(fmt_entity(x, force=False) for x in changes["table"])
+            if changes.get("schema"):
+                info += "%sUnsaved schema changes:\n- " % ("\n\n" if info else "")
+                names = {}
+                for x in changes["schema"]:
+                    names.setdefault(x.Category, []).append(x.Name)
+                info += "\n- ".join("%s %s" % (c, fmt_entity(n, force=False))
+                        for c in self.db.CATEGORIES for n in names.get(c, ()))
+            if changes.get("pragma"):
+                info += "%sPRAGMA settings" % ("\n\n" if info else "")
+            if temporary and is_temporary:
+                info += "%s%s is a temporary file." % ("\n\n" if info else "", self.db)
+        return info
 
 
     def get_unsaved_grids(self):
@@ -6633,7 +6647,7 @@ class DatabasePage(wx.Panel):
                 schema2[category][name] = True
                 continue # for category, name
 
-            name2 = name2_prev = value = name
+            name2 = value = name
             entryheader = "already contains a"
             while name2 is not None:
                 category2 = next(c for c, xx in schema2.items() if name2 in xx)
