@@ -1148,8 +1148,15 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
     def on_database_page_event(self, event):
         """Handler for notification from DatabasePage, updates UI."""
         page_index = self.notebook.GetPageIndex(event.source)
-        ready, modified = (getattr(event, x, None) for x in ("ready", "modified"))
+        ready, modified, clear = (getattr(event, x, None) for x in ("ready", "modified", "clear"))
         rename, updated = (getattr(event, x, None) for x in ("rename", "updated"))
+
+        if clear: # Clear search history globally in all pages
+            conf.SearchHistory = []
+            for page in self.db_pages:
+                page.edit_searchall.SetChoices([])
+                page.edit_searchall.Value = ""
+            util.run_once(conf.save)
 
         if rename:
             self.dbs.pop(event.filename1, None)
@@ -2347,9 +2354,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         wx.CallAfter(ColourManager.UpdateControls)
         self.SendSizeEvent() # Multiline wx.Notebooks need redrawing
 
-        self.Unbind(wx.EVT_LIST_DELETE_ALL_ITEMS, source=page.edit_searchall,
-                    handler=self.on_clear_searchall)
-
         # Change notebook page to last visited
         index_new = 0
         if self.pages_visited:
@@ -2358,22 +2362,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     index_new = i
                     break
         self.notebook.SetSelection(index_new)
-
-
-    def on_clear_searchall(self, event):
-        """
-        Handler for clicking to clear search history in a database page,
-        confirms action and clears history globally.
-        """
-        if wx.OK != wx.MessageBox("Clear search history?", conf.Title,
-                                  wx.OK | wx.CANCEL | wx.ICON_INFORMATION):
-            return
-        conf.SearchHistory = []
-        for page in self.db_pages:
-            page.edit_searchall.SetChoices(conf.SearchHistory)
-            page.edit_searchall.ShowDropDown(False)
-            page.edit_searchall.Value = ""
-        util.run_once(conf.save)
 
 
     def load_database(self, filename, silent=False):
@@ -2453,8 +2441,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 self.page_db_latest = page
                 self.run_console("page = self.page_db_latest # Database tab")
                 self.run_console("db = page.db # SQLite database wrapper")
-                self.Bind(wx.EVT_LIST_DELETE_ALL_ITEMS,
-                          self.on_clear_searchall, page.edit_searchall)
         else:
             page.handle_command("refresh")
         if page:
@@ -2581,6 +2567,8 @@ class DatabasePage(wx.Panel):
             size=(300, -1), style=wx.TE_PROCESS_ENTER)
         edit_search.ToolTip = self.label_search.ToolTip.Tip
         self.Bind(wx.EVT_TEXT_ENTER, self.on_searchall, edit_search)
+        self.Bind(wx.EVT_LIST_DELETE_ALL_ITEMS, self.on_searchall_clear, edit_search)
+
         tb = self.tb_search = wx.ToolBar(self, style=wx.TB_FLAT | wx.TB_NODIVIDER)
 
         bmp = wx.ArtProvider.GetBitmap(wx.ART_GO_FORWARD, wx.ART_TOOLBAR, (16, 16))
@@ -5417,6 +5405,20 @@ class DatabasePage(wx.Panel):
             event.Skip()
         elif not href.startswith("file://"):
             webbrowser.open(href)
+
+
+    def on_searchall_clear(self, event):
+        """
+        Handler for clicking to clear search history in a database page,
+        confirms action, clears local history, and propagates upwards to clear globally.
+        """
+        if wx.OK != wx.MessageBox("Clear search history?", conf.Title,
+                                  wx.OK | wx.CANCEL | wx.ICON_INFORMATION):
+            return
+        self.edit_searchall.ShowDropDown(False)
+        self.edit_searchall.SetChoices([])
+        self.edit_searchall.Value = ""
+        wx.PostEvent(self, DatabasePageEvent(self.Id, source=self, clear=True))
 
 
     def on_searchall_toggle_toolbar(self, event):
