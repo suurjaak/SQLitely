@@ -17,6 +17,7 @@ import copy
 import datetime
 import functools
 import inspect
+import io
 import logging
 import os
 import re
@@ -1936,7 +1937,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         try: source = inspect.getsource(conf)
         except Exception:
             try:
-                with open(os.path.join(conf.BinDirectory, "..", "conf.py")) as f:
+                source_path = os.path.join(conf.BinDirectory, "..", "conf.py")
+                with io.open(source_path, encoding="utf-8") as f:
                     source = f.read()
             except Exception: source = ""
 
