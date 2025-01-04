@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.01.2025
+@modified    05.01.2025
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2431,12 +2431,14 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 tab_title = make_unique_page_title(db.name, self.notebook, front=True)
                 self.db_datas.setdefault(db.filename, defaultdict(lambda: None, name=db.filename))
                 self.db_datas[db.filename]["title"] = tab_title
-                page = DatabasePage(self.notebook, tab_title, db, self.memoryfs)
-                if not page: return
+                page = DatabasePage(self.notebook, db)
+                self.notebook.InsertPage(1, page, tab_title)
+                page.PostCreate()
+                if not page: return # User closed page before loading was complete
                 if filename: self.list_db.SetItemStyleByText(db.filename, "active")
                 self.db_pages[page] = db
                 util.run_once(conf.save)
-                if not page: return # User closed page before loading was complete
+                if not page: return
 
                 self.page_db_latest = page
                 self.run_console("page = self.page_db_latest # Database tab")
@@ -2519,9 +2521,9 @@ class DatabasePage(wx.Panel):
     Notebook with a number of pages for searching, browsing, SQL, information.
     """
 
-    def __init__(self, parent_notebook, title, db, memoryfs):
-        wx.Panel.__init__(self, parent_notebook)
-        self.parent_notebook = parent_notebook
+    def __init__(self, parent, db):
+        """Two-step creation first part."""
+        wx.Panel.__init__(self, parent)
 
         self.pageorder = {} # {page: notebook index, }
         self.ready_to_close = False
@@ -2539,9 +2541,11 @@ class DatabasePage(wx.Panel):
         self.pragma_edit = False    # Whether in PRAGMA edit mode
         self.pragma_fullsql = True  # Whether show SQL for all PRAGMAs, changed or not
         self.pragma_filter = ""     # Current PRAGMA filter
-        self.memoryfs = memoryfs
-        parent_notebook.InsertPage(1, self, title)
-        busy = controls.BusyPanel(self, 'Loading "%s".' % db.name)
+
+
+    def PostCreate(self):
+        """Two-step creation second part, builds everything."""
+        busy = controls.BusyPanel(self, 'Loading "%s".' % self.db.name)
         ColourManager.Manage(self, "BackgroundColour", "WidgetColour")
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.on_sys_colour_change)
 
@@ -2637,13 +2641,13 @@ class DatabasePage(wx.Panel):
         for i in range(1, self.notebook_sql.GetPageCount() - 1):
             self.notebook_sql.SetSelection(i)
         self.notebook_sql.SetSelection(selected_sql_page)
-        firstpage = self.page_schema if db.temporary else self.page_data
+        firstpage = self.page_schema if self.db.temporary else self.page_data
         notebook.SetSelection(self.pageorder[firstpage])
         notebook.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_change_page, notebook)
         # Restore last active page
-        if db.filename in conf.LastActivePages \
-        and conf.LastActivePages[db.filename] not in (-1, notebook.Selection):
-            notebook.SetSelection(conf.LastActivePages[db.filename])
+        if self.db.filename in conf.LastActivePages \
+        and conf.LastActivePages[self.db.filename] not in (-1, notebook.Selection):
+            notebook.SetSelection(conf.LastActivePages[self.db.filename])
 
         try: self.load_data()
         finally: busy.Close()
