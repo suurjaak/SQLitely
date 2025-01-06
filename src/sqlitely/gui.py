@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.01.2025
+@modified    07.01.2025
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2434,7 +2434,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 page = DatabasePage(self.notebook, db)
                 self.notebook.InsertPage(1, page, tab_title)
                 page.PostCreate()
-                if not page: return # User closed page before loading was complete
+                if not page: return # User closed page in notebook before loading was complete
                 if filename: self.list_db.SetItemStyleByText(db.filename, "active")
                 self.db_pages[page] = db
                 util.run_once(conf.save)
@@ -6782,7 +6782,8 @@ class DatabasePage(wx.Panel):
                 return True
 
             sink = importexport.DatabaseSink(self.db, filename2, progress)
-            workers.WorkerThread(progress).work(functools.partial(sink.export_entities, **args))
+            callable = functools.partial(sink.export_entities, **args)
+            workers.WorkerThread(progress, oneshot=True).work(callable)
             return
 
         sink = importexport.DatabaseSink(self.db, filename2, self.panel_data_export.OnProgress)
