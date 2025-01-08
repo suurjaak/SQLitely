@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.01.2025
+@modified    08.01.2025
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4757,7 +4757,7 @@ class DatabasePage(wx.Panel):
 
         if (value == self.pragma.get(name)
         or not value and bool(value) == bool(self.pragma.get(name))
-        and isinstance(database.Database.PRAGMA[name]["type"], six.string_types)):
+        and database.Database.PRAGMA[name]["type"] in (six.binary_type, six.text_type)):
             self.pragma_changes.pop(name, None)
         else: self.pragma_changes[name] = value
 
@@ -5547,8 +5547,7 @@ class DatabasePage(wx.Panel):
                            text, self.db)
             nb = self.notebook_search
             data = {"id": controls.NewId(), "db": self.db, "text": text,
-                    "map": {}, "width": nb.Size.width * 5//9, "partial_html": "",
-                    "case": conf.SearchCaseSensitive}
+                    "map": {}, "case": conf.SearchCaseSensitive}
             if "meta" == source or conf.SearchInMeta:
                 data["source"] = "meta"
                 fromtext = "database metadata"
