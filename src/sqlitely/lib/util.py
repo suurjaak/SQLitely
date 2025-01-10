@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.12.2024
+@modified    10.01.2025
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -921,7 +921,7 @@ def is_samepath(path1, path2):
     return path1 == path2
 
 
-def join(sep, iterable, last=", and "):
+def join(sep, iterable, last=" and "):
     """Returns sep.join(iterable) but with a custom separator before last."""
     lst = list(iterable)
     return "" if not lst else lst[0] if len(lst) < 2 else sep.join(lst[:-1]) + last + lst[-1]

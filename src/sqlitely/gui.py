@@ -3554,7 +3554,8 @@ class DatabasePage(wx.Panel):
             if wx.YES != controls.YesNoMessageBox(
                 "Are you REALLY sure you want to drop everything in the database?\n\n"
                 "This will delete: %s." % util.join(", ",
-                    (util.plural(c, categories[c]) for c in self.db.CATEGORIES if c in categories)
+                    (util.plural(c, categories[c]) for c in self.db.CATEGORIES if c in categories),
+                    last=", and "
                 ), conf.Title, wx.ICON_WARNING, default=wx.NO
             ): return
 
@@ -3673,14 +3674,14 @@ class DatabasePage(wx.Panel):
                     errors = ["%s %s: %s" % (c, fmt_entity(n), v)
                               for c, d in notdeleteds.items() for n, v in d.items()]
                     wx.MessageBox("Failed to drop %s:\n\n- %s" %
-                                  (util.join(", ", catwords), "\n- ".join(errors)),
+                                  (util.join(", ", catwords, last=", and "), "\n- ".join(errors)),
                                   conf.Title, wx.ICON_WARNING | wx.OK)
 
                 if notdeleteds: wx.CallAfter(after_err) if deleteds else after_err()
                 if deleteds:
                     catcounts = [util.plural(c, deleteds[c]) for c in self.db.CATEGORIES
                                  if c in deleteds]
-                    guibase.status("Dropped %s." % util.join(", ", catcounts), log=True)
+                    guibase.status("Dropped %s." % util.join(", ", catcounts, last=", and "), log=True)
                     def after():
                         if not self: return
                         self.reload_schema()
