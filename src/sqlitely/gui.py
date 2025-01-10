@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.01.2025
+@modified    10.01.2025
 ------------------------------------------------------------------------------
 """
 import ast
@@ -6049,9 +6049,8 @@ class DatabasePage(wx.Panel):
                 shutil.copy(tempname, filename2)
                 self.db.reopen(filename2)
             except Exception as e:
-                error = "Error saving %s as %s:\n\n" % util.format_exc(e)
-                logger.exception("Error saving temporary file %s as %s.",
-                                 tempname, filename2)
+                error = "Error saving %s as %s:\n\n%s" % (filename1, filename2, util.format_exc(e))
+                logger.exception("Error saving temporary file %s as %s.", tempname, filename2)
 
         if not success and rename:
             self.db.reopen(filename1)
@@ -6835,8 +6834,8 @@ class DatabasePage(wx.Panel):
         ): return
 
 
-        locks = [n for n in names if self.db.get_lock("table", n)]
-        if locks: return wx.MessageBox("%s, cannot truncate." % "\n".join(locks),
+        locks = list(filter(bool, (self.db.get_lock("table", n) for n in names)))
+        if locks: return wx.MessageBox("Cannot truncate.\n\n%s." % ".\n".join(locks),
                                        conf.Title, wx.OK | wx.ICON_WARNING)
 
         count = 0
