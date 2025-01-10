@@ -6871,7 +6871,8 @@ class DatabasePage(wx.Panel):
 
         if wx.YES != controls.YesNoMessageBox(
             "Are you REALLY sure you want to delete all rows from all tables?\n\n"
-            "Database currently contains %s." % util.count(items, "row"),
+            "Database currently contains %s in %s." %
+            (util.count(items, "row"), util.plural("table", items)),
             conf.Title, wx.ICON_WARNING, default=wx.NO
         ): return
 
