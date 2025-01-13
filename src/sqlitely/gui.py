@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.01.2025
+@modified    13.01.2025
 ------------------------------------------------------------------------------
 """
 import ast
@@ -5585,13 +5585,15 @@ class DatabasePage(wx.Panel):
     def on_close_search_page(self, event):
         """Handler for closing a search page, stops its ongoing search if any."""
         tab_data = self.notebook_search.GetPage(event.GetSelection())
-        if tab_data and tab_data.get("info"):
+        if not tab_data: return
+
+        if tab_data.get("info"):
             item = {"name": tab_data["info"]["text"], "type": tab_data["info"]["source"]}
             self.pages_closed[self.notebook_search].append(item)
-        if tab_data and tab_data["id"] == tab_data["id"]:
-            self.tb_search_settings.SetToolNormalBitmap(
-                wx.ID_STOP, images.ToolbarStopped.Bitmap)
-        if tab_data and tab_data["id"] in self.workers_search:
+        active_data = self.notebook_search.GetActiveTabData()
+        if active_data and active_data["id"] == tab_data["id"]:
+            self.tb_search_settings.SetToolNormalBitmap(wx.ID_STOP, images.ToolbarStopped.Bitmap)
+        if tab_data["id"] in self.workers_search:
             self.workers_search[tab_data["id"]].stop()
             del self.workers_search[tab_data["id"]]
 
@@ -6504,7 +6506,6 @@ class DatabasePage(wx.Panel):
             sink = importexport.FileDataSink(self.db, filename, extname, progress)
             exports.append({
                 "filename": filename, "category": mycategory,
-                "name": "all %s to file" % util.plural(mycategory),
                 "callable": functools.partial(sink.export_entity, **args),
                 "total": data.get("count"),
                 "is_total_estimated": data.get("is_count_estimated")
