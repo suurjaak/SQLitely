@@ -3830,7 +3830,7 @@ class DatabasePage(wx.Panel):
                 name2 = dlg_value.strip()
                 if not name2 or name2 == name: return
 
-            duplicate = next((vv.get(name2) for vv in self.db.schema.values()), None) \
+            duplicate = next((x[name2] for x in self.db.schema.values() if name2 in x), None) \
                         if not util.lceq(name, name2) else None
             if duplicate:
                 wx.MessageBox(
@@ -3951,8 +3951,8 @@ class DatabasePage(wx.Panel):
 
             allnames = sum(map(list, self.db.schema.values()), [])
             name2 = util.make_unique(name, allnames)
-            dlg = wx.TextEntryDialog(self, "Clone %s%s %s as:"
-                % (category, fmt_entity(name), "" if with_data else " structure"),
+            dlg = wx.TextEntryDialog(self, "Clone %s %s %sas:"
+                % (category, fmt_entity(name), "" if with_data else "structure "),
                 conf.Title, value=name2, style=wx.OK | wx.CANCEL
             )
             dlg.CenterOnParent()
@@ -3966,7 +3966,7 @@ class DatabasePage(wx.Panel):
             qname, qname2 = (grammar.quote(n, force=True) for n in (name, name2))
             sname, sname2 = fmt_entity(name), fmt_entity(name2)
 
-            duplicate = next((vv.get(name2) for vv in self.db.schema.values()), None)
+            duplicate = next((x[name2] for x in self.db.schema.values() if name2 in x), None)
             if duplicate:
                 wx.MessageBox(
                     "Cannot clone %s as %s:\n\nthere already exists %s named %s."
