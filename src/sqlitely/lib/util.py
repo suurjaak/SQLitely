@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.01.2025
+@modified    20.01.2025
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -916,8 +916,7 @@ def is_samepath(path1, path2):
     if six.PY3:
         try: return os.stat(path1) == os.stat(path2)
         except Exception: pass
-    path1, path2 = os.path.realpath(path1), os.path.realpath(path2)
-    if "nt" == os.name: path1, path2 = path1.lower(), path2.lower()
+    path1, path2 = (os.path.normcase(os.path.normpath(p)) for p in (path1, path2))
     return path1 == path2
 
 

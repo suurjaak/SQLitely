@@ -1672,7 +1672,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             basename = os.path.basename(filename)
             filename2 = os.path.join(path, basename) if len(filenames) > 1 else path
 
-            if filename == filename2:
+            if util.is_samepath(filename, filename2):
                 logger.error("Attempted to save %s as itself.", filename)
                 wx.MessageBox("Cannot overwrite %s with itself." % filename,
                               conf.Title, wx.OK | wx.ICON_WARNING)
@@ -6006,11 +6006,11 @@ class DatabasePage(wx.Panel):
             if wx.ID_OK != dialog.ShowModal(): return
 
             filename2 = controls.get_dialog_path(dialog)
-            if filename1 != filename2 and filename2 in conf.DBsOpen: return wx.MessageBox(
-                "%s is currently open in %s." % (filename2, conf.Title),
-                conf.Title, wx.OK | wx.ICON_WARNING
-            )
-        rename = (filename1 != filename2)
+            if filename2 in conf.DBsOpen and not util.is_samepath(filename1, filename2):
+                wx.MessageBox("%s is currently open in %s." % (filename2, conf.Title),
+                              conf.Title, wx.OK | wx.ICON_WARNING)
+                return
+        rename = not util.is_samepath(filename1, filename2)
 
         if rename:
             # Use a tertiary file in case something fails
@@ -6567,7 +6567,7 @@ class DatabasePage(wx.Panel):
         wx.SafeYield() # Allow dialog to disappear
 
         filename2 = controls.get_dialog_path(dialog)
-        is_samefile = util.lceq(self.db.filename, filename2)
+        is_samefile = util.is_samepath(self.db.filename, filename2)
         file_exists = is_samefile or os.path.isfile(filename2)
 
         if is_samefile and wx.YES != controls.YesNoMessageBox(
