@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.01.2025
+@modified    20.01.2025
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1779,7 +1779,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 # - i, as item count is getting smaller one by one
                 item_index = item_indexes[i] - i
                 filename = self.list_db.GetItemText(item_index)
-                self.clear_database_data(filename, recent=True)
+                self.clear_database_data(filename)
                 if filename in self.db_datas: self.db_datas[filename].pop("name", None)
                 self.list_db.DeleteItem(item_index)
         finally: self.list_db.Thaw()
@@ -1832,7 +1832,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 conf.Title, wx.ICON_INFORMATION, default=wx.NO
             ): return
 
-        errors = []
+        errors, missing = [], []
         self.list_db.Freeze()
         try:
             for filename in self.dbs_selected[:]:
@@ -1842,9 +1842,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     if page:
                         page.on_close()
                         self.notebook.DeletePage(self.notebook.GetPageIndex(page))
-                    os.unlink(filename)
+                    if os.path.exists(filename): os.unlink(filename)
+                    else:
+                        logger.warning("Cannot delete file nonexistent file: %s.", filename)
+                        missing.append(filename)
 
-                    self.clear_database_data(filename, recent=True)
+                    self.clear_database_data(filename)
                     self.dbs.pop(filename, None)
                     conf.DBsOpen.pop(filename, None)
                     self.db_datas.get(filename, {}).pop("name", None)
@@ -1861,11 +1864,17 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.list_db.Select(0, False), self.list_db.Select(0) # Ensure selection event
         self.update_database_list()
         util.run_once(conf.save)
-        if errors:
-            wx.MessageBox("Error removing %s:\n\n%s" % (
+        if errors or missing:
+            msg = ""
+            if errors: msg += "Error removing %s:\n\n%s" % (
                 util.plural("file", errors, numbers=False),
                 "\n".join(errors)
-            ), conf.Title, wx.OK | wx.ICON_ERROR)
+            )
+            if missing: msg += ("\n\n" if msg else "") + "%s not on disk:\n\n%s" % (
+                util.plural("File", missing, numbers=False), "\n".join(missing)
+            )
+            icon_style = wx.ICON_ERROR if errors else wx.ICON_WARNING
+            wx.MessageBox(msg, conf.Title, wx.OK | icon_style)
 
 
     def on_showhide_log(self, event):
@@ -2499,15 +2508,14 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                           conf.Title, wx.OK | wx.ICON_ERROR)
 
 
-    def clear_database_data(self, filename, recent=False):
+    def clear_database_data(self, filename):
         """Clears database data from configuration."""
-        lists = [conf.DBFiles, conf.LastSelectedFiles]
-        dicts = conf.LastActivePages, conf.LastSearchResults, conf.SchemaDiagrams, conf.SQLWindowTexts
-        if recent: lists.append(conf.RecentFiles)
+        lists = [conf.DBFiles, conf.LastSelectedFiles, conf.RecentFiles]
+        dicts = [conf.LastActivePages, conf.LastSearchResults, conf.SchemaDiagrams,
+                 conf.SQLWindowTexts]
         for lst in lists:
             if filename in lst: lst.remove(filename)
         for dct in dicts: dct.pop(filename, None)
-        if not recent: return
         # Remove from recent file history
         idx = next((i for i in range(self.history_file.Count)
                     if self.history_file.GetHistoryFile(i) == filename), None)
