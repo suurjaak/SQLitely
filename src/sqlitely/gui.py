@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    20.01.2025
+@modified    27.01.2025
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4429,15 +4429,12 @@ class DatabasePage(wx.Panel):
     def populate_statistics(self):
         """Populates statistics HTML window."""
         if not self: return
-        previous_scrollpos = getattr(self.html_stats, "_last_scroll_pos", None)
         ns = dict(self.statistics, running=self.worker_analyzer.is_working())
         html = step.Template(templates.STATISTICS_HTML, escape=True).expand(ns)
         self.html_stats.Freeze()
         try:
             self.html_stats.SetPage(html)
             self.html_stats.BackgroundColour = conf.BgColour
-            if previous_scrollpos:
-                self.html_stats.Scroll(*previous_scrollpos)
         finally: self.html_stats.Thaw()
         self.tb_stats.EnableTool(wx.ID_REFRESH, not self.worker_analyzer.is_working())
         bmp = (images.ToolbarStop if self.worker_analyzer.is_working() else images.ToolbarStopped).Bitmap
