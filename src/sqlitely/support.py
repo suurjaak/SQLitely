@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.07.2024
+@modified    31.01.2025
 ------------------------------------------------------------------------------
 """
 import logging
@@ -56,7 +56,7 @@ def check_newest_version(callback=None):
     update_window = True
     try:
         logger.info("Checking for new version at %s.", conf.DownloadURL)
-        html = util.to_unicode(url_opener.open(conf.DownloadURL).read())
+        html = util.to_unicode(url_opener.open(conf.DownloadURL, timeout=10).read())
         links = re.findall(r"<a[^>]*\shref=['\"](.+)['\"][^>]*>", html, re.I)
         if links:
             # Determine release types
@@ -89,7 +89,7 @@ def check_newest_version(callback=None):
                 changes = ""
                 try:
                     logger.info("Reading changelog from %s.", conf.ChangelogURL)
-                    html = util.to_unicode(url_opener.open(conf.ChangelogURL).read())
+                    html = util.to_unicode(url_opener.open(conf.ChangelogURL, timeout=10).read())
                     match = re.search(r"<h4[^>]*>(v%s,.*)</h4\s*>" % version,
                                       html, re.I)
                     if match:
@@ -128,7 +128,7 @@ def download_and_install(url):
             parent.Position.x + parent.Size.width  - dlg_progress.Size.width,
             parent.Position.y + parent.Size.height - dlg_progress.Size.height)
         update_window = dlg_progress
-        urlfile = url_opener.open(url)
+        urlfile = url_opener.open(url, timeout=10)
         filepath = os.path.join(tmp_dir, filename)
         logger.info("Downloading %s to %s.", url, filepath)
         filesize = int(urlfile.headers.get("content-length", sys.maxsize))
