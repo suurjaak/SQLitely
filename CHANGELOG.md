@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.4, 2024-12-19
+2.4, 2025-02-01
 ---------------
 - add support for generated columns
 - add find/replace dialog to data grids and column editors and database schema text
@@ -9,6 +9,7 @@ CHANGELOG
 - update known and deprecated pragma directives up to SQLite version 3.46
 - upgrade embedded sqlite3_analyzer Windows binary from 3.29 to 3.43
 - upgrade ANTLR version from 4.9 to 4.13
+- upgrade snap distribution to Ubuntu 22 base using wxPython 4.2.0
 - show STRICT checkbox for STRICT table in schema editor even if current SQLite does not support it
 - add ANY as possible column type if SQLite version supports STRICT
 - add SQL functions to SQL editors auto-completes
