@@ -10795,6 +10795,9 @@ class ColumnDialog(wx.Dialog):
         self._unhide_dialog_find = False
         if isinstance(event.EventObject, wx.ToolBar): dlg.Show(not dlg.Shown)
         else: dlg.Show() if not dlg.Shown else dlg.Hide() if dlg.HasFocus() else dlg.SetFocus()
+        if dlg.Shown and self.IsModal() and "linux" in sys.platform:
+            # Workaround for Linux: non-modal dialog from modal dialog will not get focus otherwise
+            dlg.ShowWindowModal()
 
 
     def _OnChangePage(self, event):
