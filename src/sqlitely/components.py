@@ -9172,7 +9172,7 @@ class ColumnDialog(wx.Dialog):
         @param   columnlabel  label for column in buttons and other texts
         """
         if size == wx.DefaultSize:
-            size = (750, 480) if "posix" == os.name else (600, 400)
+            size = (750, 480) if "posix" == os.name else (600, 410)
         super(ColumnDialog, self).__init__(parent, id, title, pos, size, style, name)
 
         self._timer     = None               # Delayed change handler
@@ -10438,7 +10438,7 @@ class ColumnDialog(wx.Dialog):
         tslabel.Font = font_bold
         dtlabel.MinSize = tslabel.MinSize = tslabel.Size
         tslabel.Font = font_normal
-        panel.MinSize = (300, 300)
+        panel.MinSize = (dedit.Size.Width + ucb.Size.Width + 10, 300)
 
         jan = datetime.datetime.now().replace(month=1, day=2, hour=1)
         offset = lambda z: z.utcoffset(jan).total_seconds() // 3600
@@ -10471,7 +10471,7 @@ class ColumnDialog(wx.Dialog):
         sizer_left.Add(zedit,    pos=(4, 1))
         sizer_left.Add(zbutton,  pos=(4, 2), flag=wx.ALIGN_CENTER_VERTICAL)
 
-        panel.Sizer.Add(sizer_left, proportion=1, flag=wx.GROW)
+        panel.Sizer.Add(sizer_left, proportion=1, flag=wx.GROW | wx.LEFT, border=5)
 
         sizer_right.Add(dtlabel)
         sizer_right.Add(dtedit, border=5, flag=wx.RIGHT)
