@@ -6697,6 +6697,7 @@ class ExportProgressPanel(wx.Panel):
         self._close_label = close_label
         self._multi       = multi
         self._current     = None # Current task index
+        self._yielding    = False # Tracks yielding control from progress callbacks to UI
         self._worker      = workers.WorkerThread(self._OnWorker)
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -6811,6 +6812,10 @@ class ExportProgressPanel(wx.Panel):
             ctrls["text"].Parent.Thaw()
             if count is not None or error is not None:
                 self._panel.Layout()
+                if "linux" in sys.platform and not self._yielding: # Workaround: get UI to update
+                    self._yielding = True
+                    wx.Yield() # May invoke after() again if already queued; stack overflow
+                    self._yielding = False
 
         if opts["pending"] and any(x is not None for x in (name, count, error)):
             wx.CallAfter(after, name, count, error)
@@ -7226,6 +7231,7 @@ class ImportDialog(wx.Dialog):
         self._has_pk      = False # Whether new table has auto-increment primary key
         self._importing   = False # Whether import underway
         self._table_fixed = False # Whether table selection is immutable
+        self._yielding    = False # Tracks yielding control from progress callbacks to UI
         self._progress   = {}     # {count}
         self._worker_import = workers.WorkerThread()
         self._worker_read   = workers.WorkerThread(self._OnWorkerRead)
@@ -7879,7 +7885,7 @@ class ImportDialog(wx.Dialog):
         q = None
         if self._importing and kwargs.get("error") and not kwargs.get("done"):
             q = queue.Queue()
-        wx.CallAfter(self._OnProgress, callback=q.put if q else None, **kwargs)
+        wx.CallAfter(wx.CallLater, 1, self._OnProgress, callback=q.put if q else None, **kwargs)
         return q.get() if q else self._importing
 
 
@@ -7908,7 +7914,10 @@ class ImportDialog(wx.Dialog):
                 text += ", %s" % util.plural("error", errorcount)
             self._info_gauge.Label = text
             self._gauge.ContainingSizer.Layout()
-            wx.YieldIfNeeded()
+            if "linux" in sys.platform and not self._yielding: # Workaround: get UI to update
+                self._yielding = True
+                wx.Yield() # May invoke _OnProgress() again if already queued; stack overflow
+                self._yielding = False
 
         if (error or done) and self._dlg_cancel:
             self._dlg_cancel.EndModal(wx.ID_CANCEL)
