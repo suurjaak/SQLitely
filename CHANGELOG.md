@@ -61,6 +61,7 @@ CHANGELOG
 - fix error on selecting opened temporary database from tray menu
 - fix not retaining complex ALTER TABLE results in related tables
 - fix not updating info page and statistics on adding new schema entity
+- fix not showing changes in write-only PRAGMA values
 - add all user-executed SQL to action history not only action queries
 - add "Refresh list" to database list context menu
 - shorten SQL parsing error texts in schema editor popups

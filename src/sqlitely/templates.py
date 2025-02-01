@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    15.11.2024
+@modified    01.02.2025
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -3183,6 +3183,7 @@ except Exception as e:
 Database PRAGMA statements SQL template.
 
 @param   pragma   PRAGMA values as {name: value}
+@param   ?write   whether SQL is for writing, to include write-only PRAGMAs
 @param   ?db      database, if any
 @param   ?schema  schema for PRAGMA directive, if any
 """
@@ -3191,9 +3192,10 @@ import six
 from sqlitely import database, grammar
 
 pragma, db = dict(pragma), get("db")
-for name, opts in database.Database.PRAGMA.items():
-    if opts.get("read") is False:
-        pragma.pop(name, None)
+if not get("write"):
+    for name, opts in database.Database.PRAGMA.items():
+        if opts.get("read") is False:
+            pragma.pop(name, None)
 
 lastopts, lastvalue, flags, count = {}, None, {}, 0
 is_initial  = lambda o, v: o["initial"](db, v) if callable(o.get("initial")) else o.get("initial")

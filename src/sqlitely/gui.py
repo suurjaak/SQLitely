@@ -4782,7 +4782,7 @@ class DatabasePage(wx.Panel):
             if self.pragma_fullsql: values = dict(self.pragma, **values)
 
             template = step.Template(templates.PRAGMA_SQL, strip=False)
-            sql = template.expand(pragma=values, db=self.db)
+            sql = template.expand(pragma=values, write=self.pragma_edit, db=self.db)
             self.stc_pragma.SetReadOnly(False)
             self.stc_pragma.Text = sql
             self.stc_pragma.SetReadOnly(True)
@@ -4855,7 +4855,7 @@ class DatabasePage(wx.Panel):
         result = True
 
         template = step.Template(templates.PRAGMA_SQL, strip=False)
-        sql = template.expand(pragma=self.pragma_changes, db=self.db)
+        sql = template.expand(pragma=self.pragma_changes, write=self.pragma_edit, db=self.db)
         if sql and wx.YES != controls.YesNoMessageBox(
             "Save PRAGMA changes?\n\n%s" % sql, conf.Title,
             wx.ICON_INFORMATION, default=wx.NO
