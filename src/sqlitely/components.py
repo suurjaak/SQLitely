@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.12.2024
+@modified    01.02.2025
 ------------------------------------------------------------------------------
 """
 import base64
@@ -9830,7 +9830,7 @@ class ColumnDialog(wx.Dialog):
         panel   = wx.ScrolledWindow(page)
         stchex  = controls.HexTextCtrl (panel, style=wx.BORDER_STATIC,
                                         addressed=True, show_changes=True)
-        stctxt  = controls.ByteTextCtrl(panel, style=wx.BORDER_STATIC)
+        stctxt  = controls.ByteTextCtrl(panel, style=wx.BORDER_STATIC, show_changes=True)
         status1 = wx.StaticText(page)
         status2 = wx.StaticText(page)
 
