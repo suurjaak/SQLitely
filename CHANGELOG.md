@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.4, 2025-02-01
+2.4, 2025-02-03
 ---------------
 - add support for generated columns
 - add find/replace dialog to data grids and column editors and database schema text
