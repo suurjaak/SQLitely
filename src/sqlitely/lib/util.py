@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.06.2024
+@modified    20.01.2025
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -142,7 +142,7 @@ class CaselessDict(dict):
     def __iter__(self):
         if self._order is not None:
             return iter(self._keys[k] for k in self._order)
-        sortkey = lambda x: coalesce(x[0] if isinstance(x[0], tuple) else (x[1], ), "")
+        sortkey = lambda x: tuplefy(coalesce(x[0], ""))
         return iter(x for _, x in sorted(self._keys.items(), key=sortkey))
 
     def __setitem__(self, key, value):
@@ -329,7 +329,7 @@ class SingleInstanceChecker(object):
         return self._otherpid
 
 
-    def SendToOther(self, data, port, portrange=10000):
+    def SendToOther(self, data, port, portrange=1000):
         """
         Sends data to the other program instance via multiprocessing.
 
@@ -338,17 +338,35 @@ class SingleInstanceChecker(object):
         @param   portrange  maximum steps to try increasing port number if connection fails
         @return             True if operation successful, False otherwise
         """
+        MAX_PORT = 65535
         result = None
         authkey = self._name or "%s-%s" % (wx.GetApp().AppName, wx.GetUserId())
-        while result is None and portrange >= 0:
-            kwargs = {"address": ("localhost", port), "authkey": authkey}
-            try: client = multiprocessing.connection.Client(**kwargs)
-            except Exception: port, portrange = port + 1, portrange - 1
-            else:
-                try:              result, _ = True, client.send(data)
-                except Exception: result = False
-                finally:          try_ignore(client.close)
+
+        def launch_client(results, port, portrange):
+            client = None
+            while client is None and portrange >= 0 and port <= MAX_PORT:
+                kwargs = {"address": ("localhost", port), "authkey": authkey}
+                try: client = multiprocessing.connection.Client(**kwargs)
+                except Exception: port, portrange = port + 1, portrange - 1
+            if client is not None: results.append(client)
+
+        clients = []
+        t = threading.Thread(target=launch_client, args=(clients, port, portrange))
+        t.daemon = True
+        t.start() # Use thread because opening connection may stall if other side stalls
+        t.join(timeout=2)
+        if clients:
+            client = clients[0]
+            try: client.send(data)
+            except Exception: result = False
+            else: result = True
+            finally: try_ignore(client.close)
         return result or False
+
+
+    def IsReceiving(self):
+        """Returns whether listener is currently active."""
+        return bool(self._listener)
 
 
     def StartReceive(self, callback, port, portrange=10000):
@@ -455,7 +473,7 @@ def memoize(*args, **kwargs):
     Returns function result, cached if available, caches result otherwise.
     Returns deep copies if result is dict, list, set, or tuple.
 
-    Acts as decorator if invoked with a single function argument or with 
+    Acts as decorator if invoked with a single function argument or with
     recognized keyword arguments; returning an outer decorator for the latter:
 
     @memoize
@@ -533,6 +551,7 @@ def memoize(*args, **kwargs):
                 if type(k1) is type(k2) and k1 == k2:
                     return returner(value)
         value = ns["func"](*args, **kwargs)
+        key2 = [copy.deepcopy(x) if isinstance(x, (dict, list, set, tuple)) else x for x in key2]
         tuples.append((key2, value))
         return returner(value)
 
@@ -548,7 +567,7 @@ def memoize(*args, **kwargs):
     if "__nohash__" in kwargs: nohash = kwargs.pop("__nohash__")
     if "__key__"    in kwargs: root   = kwargs.pop("__key__")
     if as_outer and kwargs:
-        raise TypeError("memoize() got an unexpected keyword argument '%s'" % 
+        raise TypeError("memoize() got an unexpected keyword argument '%s'" %
                         next(iter(kwargs)))
 
     if not as_outer:
@@ -845,10 +864,10 @@ def img_wx_to_pil(image):
     (w, h), data = image.GetSize(), image.GetData()
 
     chans = [Image.new("L", (w, h)) for i in range(3)]
-    for i in range(3): chans[i].frombytes(str(data[i::3]))
+    for i in range(3): chans[i].frombytes(bytes(data[i::3]))
     if image.HasAlpha():
         chans += [Image.new("L", (w, h))]
-        chans[-1].frombytes(str(image.GetAlpha()))
+        chans[-1].frombytes(bytes(image.GetAlpha()))
 
     return Image.merge("RGBA"[:len(chans)], chans)
 
@@ -866,7 +885,7 @@ def img_wx_to_raw(img, format="PNG"):
 def int_to_base(value, digits=string.ascii_uppercase):
     """
     Returns integer represented in custom base.
-    
+
     @param   value   integer to represent, like 702
     @param   digits  base digits, defaults to upper-case ASCII letters A..Z
     @return          integer string in given base, like "AAA" for 702
@@ -892,7 +911,16 @@ def is_python_64bit():
     return (struct.calcsize("P") * 8) == 64
 
 
-def join(sep, iterable, last=", and "):
+def is_samepath(path1, path2):
+    """Returns whether the two paths point to the same file."""
+    if six.PY3:
+        try: return os.stat(path1) == os.stat(path2)
+        except Exception: pass
+    path1, path2 = (os.path.normcase(os.path.normpath(p)) for p in (path1, path2))
+    return path1 == path2
+
+
+def join(sep, iterable, last=" and "):
     """Returns sep.join(iterable) but with a custom separator before last."""
     lst = list(iterable)
     return "" if not lst else lst[0] if len(lst) < 2 else sep.join(lst[:-1]) + last + lst[-1]
@@ -1032,7 +1060,7 @@ def parse_time(s):
     Tries to parse string as time, returns input on error.
     Supports "HH:MM(:SS)?(.micros)?(Z|[+-]HH(:MM)?)?".
     """
-    if not isinstance(s, six.string_types) or len(s) < 18: return s
+    if not isinstance(s, six.string_types) or len(s) < 5: return s
     rgx = r"^\d{2}:\d{2}(:\d{2})?(\.\d+)?(([+-]\d{2}(:?\d{2})?)|Z)?$"
     result, match = s, re.match(rgx, s)
     if match:
@@ -1099,12 +1127,20 @@ def plural(word, items=None, numbers=True, single="1", sep="", pref="", suf="", 
     return result.strip()
 
 
-def round_float(value, precision=1):
+def round_float(value, precision=1, force_decimal=False):
     """
-    Returns the float as a string, rounded to the specified precision and
+    Returns number as a string, rounded to the specified precision and
     with trailing zeroes (and . if no decimals) removed.
+
+    @param   value          float or int
+    @param   precision      decimal places to keep
+    @param   force_decimal  whether to retain at least one decimal even if 0
     """
-    return str(round(value, precision)).rstrip("0").rstrip(".")
+    value = round(float(value), max(0, precision))
+    text = str(value) # Prefer str as giving shortest decimal representation
+    if "e" in text.lower(): text = "%f" % value # Enforce decimal notation over scientific
+    text = re.sub(r"(\.\d+?)0+$", r"\1", text)
+    return text if force_decimal else re.sub(r"\.0+$", "", text)
 
 
 def run_once(function):
@@ -1175,7 +1211,7 @@ def shortpath(path):
 
     ctypes.windll.kernel32.GetShortPathNameW.argtypes = [
         # lpszLongPath, lpszShortPath, cchBuffer
-        wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD 
+        wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD
     ]
     ctypes.windll.kernel32.GetShortPathNameW.restype = wintypes.DWORD
     buf = ctypes.create_unicode_buffer(4 * len(path))
@@ -1219,7 +1255,7 @@ def timedelta_seconds(timedelta):
 
 def titlecase(text):
     """
-    Returns a titlecased version of text, leaving URLs as is 
+    Returns a titlecased version of text, leaving URLs as is
     and not considering apostrophe as word separator.
     """
     re_url = re.compile(r"((?:(?:(?:(?:[a-z]+)?://)|(?:www\.))" # protocol:// or www.
@@ -1309,9 +1345,9 @@ def try_ignore(func, *args, **kwargs):
 
 
 def tuplefy(value):
-    """Returns the value in or as a tuple if not already a tuple."""
+    """Returns the value as a tuple if list/set/tuple else as a tuple of one."""
     return value if isinstance(value, tuple) \
-           else tuple(value) if isinstance(value, list) else (value, )
+           else tuple(value) if isinstance(value, (list, set)) else (value, )
 
 
 def unique_path(pathname):
@@ -1358,15 +1394,14 @@ def unrepeat(s, front="", end="", case=False):
     """
     s = re.sub("^(%s){2,}" % re.escape(front), front, s, flags=0 if case else re.I) if front else s
     s = re.sub("(%s){2,}$" % re.escape(end),   end,   s, flags=0 if case else re.I) if end   else s
-    return s    
+    return s
 
 
 def url_to_path(url, double_decode=False):
     """Returns file URL as path, e.g. "file:///my%20file" as "/my file"."""
     if not url.startswith("file:"): return url
     path = urllib.request.url2pathname(url[5:])
-    if any(path.startswith(x) for x in ["\\\\\\", "///"]):
-        path = path[3:] # Strip redundant filelink slashes
+    path = re.sub(r"^[\\/]+([\\/])([^\\/])", r"\1\2", path) # Strip redundant filelink slashes
     if double_decode and isinstance(path, six.text_type):
         # Workaround for wx.html.HtmlWindow double encoding
         try: path = path.encode("latin1", errors="xmlcharrefreplace").decode("utf-8")

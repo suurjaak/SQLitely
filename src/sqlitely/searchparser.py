@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.07.2024
+@modified    27.10.2024
 """
 import calendar
 import collections
@@ -166,8 +166,8 @@ class SearchQueryParser(object):
                 kw_sql = self._makeKeywordsSQL(keywords, params, item, case)
                 result = "SELECT * FROM %s%s%s%s%s" % (
                          grammar.quote(item["name"]),
-                         " WHERE " if result else "", result,
-                         " AND " if result and kw_sql else "", kw_sql)
+                         " WHERE " if result or  kw_sql else "", result,
+                         " AND "   if result and kw_sql else "", kw_sql)
         else:
             kw_sql = self._makeKeywordsSQL(keywords, params, item, case)
         if not item and kw_sql:
@@ -395,10 +395,10 @@ def match_keywords(texts, keywords, name, case=False, neg="-", when=any):
     """
     provals, convals = keywords.get(name), keywords.get(neg + name)
     pros, cons = [], []
-    for text in ([texts] if isinstance(texts, six.text_type) else texts):
+    for text in ([texts] if isinstance(texts, six.string_types) else texts):
         pros.append(match_words(text, provals, case, when) if provals else None)
         cons.append(match_words(text, convals, case, when) if convals else None)
-    if set(pros + cons) == set([None]): return None 
+    if set(pros + cons) == set([None]): return None
     if not texts: return not provals
     return False if (any(cons) or pros and all(x is False for x in pros)) else True
 
@@ -415,81 +415,3 @@ def match_words(text, words, case=False, when=any):
                 for w in words for x in [re.escape(flatten(w)[0])]]
     text_search, flags = (text, 0) if case else (text.lower(), re.I)
     return when(re.search(y, text_search, flags) for y in words_re) if text and words else False
-
-
-
-def test():
-    DO_TRACE = True
-    TEST_QUERIES = [
-        'WORDTEST word "quoted words"',
-        'ORTEST OR singleword OR (grouped words) OR lastword',
-        'NEGATIONTEST -notword -"not this phrase" -(not these words) '
-                     '-table:notthistable -column:notthiscolumn -date:1..9999',
-        'WILDCARDTEST under_score percent% wild*card table:notawild*card',
-        'DATETEST date:2002 -date:2002-12-24..2003 date:..2002-12-29 '
-                 'date:*-*-24',
-        'CHARACTERTEST ragnarök OR bust!½{[]}\\$$£@~§´` table:jörmungandr',
-        'KEYWORDTEST --table:notkeyword tables:notkeyword table: singleword '
-                    'table:"quoted title" date:t date:20022-x-20..2003-x-y',
-        'WORDFAILTEST table:parens in(anyword',
-        'BIGTEST OR word OR (grouped words) OR -(excluded grouped words) '
-                'OR -excludedword OR (word2 OR (nested grouped words)) '
-                'date:2011-11..2013-02 -date:2012-06..2012-08 '
-                '-(excluded last grouped words) (last grouped words) '
-                '(last (nested grouped words)) verylastword',
-    ]
-    import textwrap
-
-    parser = SearchQueryParser()
-    # Decorate SearchQueryParser._makeSQL() with a print logger
-    loglines = [] # Cached trace lines
-    def makeSQLLogger(func):
-        level = [0] # List as workaround: enclosing scope cannot be reassigned
-        def inner(parseresult, params, keywords, case=False, item=None, parent_name=None):
-            txt = "%s_makeSQL(<%s> %s, parent_name=%s)" % \
-                  ("  " * level[0], parseresult.__class__.__name__, item, parent_name)
-            if hasattr(parseresult, "getName"):
-                txt += ", name=%s" % parseresult.getName()
-            loglines.append(txt)
-            level[0] += 1
-            result = func(parseresult, params, keywords, case, item, parent_name)
-            level[0] -= 1
-            loglines.append("%s = %s." % (txt, result))
-            return result
-        return inner
-    if DO_TRACE:
-        parser._makeSQL = makeSQLLogger(parser._makeSQL)
-
-    item = {"name": "m", "type": "table",
-            "columns": [{"name": "n"}, {"name": "d", "type": "DATETIME"}]}
-    for i, text in enumerate(TEST_QUERIES):
-        del loglines[:]
-        print("\n%s\n" % ("-" * 60) if i else "")
-        print("QUERY: %s" % repr(text))
-        d1 = datetime.datetime.now()
-        r = parser.Parse(text, item)
-        d2 = datetime.datetime.now()
-        print("\n".join(loglines))
-        print("PARSE DURATION: %s" % (d2 - d1))
-        try:
-            parsetree = parser._grammar.parseString(text, parseAll=True)
-            print("PARSE TREE: %s" % parsetree)
-        except Exception as e:
-            print("PARSE TREE: FAILED: %s" % e)
-        sql, params, words, keywords = r
-        for name, value in params.items():
-            sql = sql.replace(":%s " % name, '"%s" ' % value)
-            sql = sql.replace(":%s)" % name, '"%s")' % value)
-        wrapper = textwrap.TextWrapper(width=140, subsequent_indent="  ",
-                                       replace_whitespace=False,
-                                       drop_whitespace=False)
-        print("SQL: %s" % "\n".join(wrapper.wrap(sql)))
-        print("PARAMS: %s" % "\n".join(wrapper.wrap(repr(params))))
-        print("WORDS: %s" % repr(words))
-        print("KEYWORDS: %s" % repr(keywords))
-        print("QUERY: %s" % text)
-
-
-
-if "__main__" == __name__:
-    test()

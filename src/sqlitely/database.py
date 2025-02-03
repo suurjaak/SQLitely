@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.06.2024
+@modified    20.12.2024
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -21,6 +21,7 @@ import math
 import os
 import re
 import sqlite3
+import string
 import sys
 import tempfile
 
@@ -42,6 +43,7 @@ class Database(object):
 
     """Column type affinity map."""
     AFFINITY = {
+        "ANY":     ["ANY"],  # Removed if SQLite version does not support "strict"
         "INTEGER": ["INT", "INTEGER", "TINYINT", "SMALLINT", "MEDIUMINT", "BIGINT", "UNSIGNED BIG INT", "INT2", "INT8"],
         "TEXT":    ["CHARACTER", "VARCHAR", "VARYING CHARACTER", "NCHAR", "NATIVE CHARACTER", "NVARCHAR", "TEXT", "CLOB", "JSON"],
         "BLOB":    ["BLOB"],
@@ -56,8 +58,29 @@ class Database(object):
     DATA_CATEGORIES = ["table", "view"]
 
     """SQLite features and the runtime library version they appeared in."""
-    FEATURE_SUPPORT = {"full_rename_table": (3, 25), "rename_column": (3, 25),
-                       "strict":            (3, 37), "view_columns":  (3,  9)}
+    FEATURE_SUPPORT = {
+        "full_rename_table": (3, 25),
+        "generated_column":  (3, 31),
+        "rename_column":     (3, 25),
+        "strict":            (3, 37),
+        "view_columns":      (3,  9),
+    }
+
+    """SQLite PRAGMA extensions and the runtime library version they appeared in."""
+    PRAGMA_SUPPORT = {
+        "analysis_limit":      (3, 32),
+        "function_list":       (3, 30),
+        "hard_heap_limit":     (3, 31),
+        "legacy_alter_table":  (3, 26),
+        "module_list":         (3, 30),
+        "pragma_list":         (3, 30),
+        "trusted_schema":      (3, 31),
+    }
+
+    """SQLite PRAGMA extensions and the runtime library version they were deprecated in."""
+    PRAGMA_SUPPORT_DEPRECATED = {
+        "case_sensitive_like": (3, 44),
+    }
 
     """
     SQLite PRAGMA settings, as {
@@ -69,8 +92,8 @@ class Database(object):
         ?values:      {primitive: label},
         ?default:     directive default value,
         ?deprecated:  whether directive is deprecated,
-        ?dump:        whether directive should be included in db dump
-                      and statistics export,
+        ?dump:        whether directive should be included in db dump and statistics export,
+        ?format:      callable(row) for pragmas of type "table", returning row as formatted value,
         ?stats:       whether directive should be included in statistics export,
         ?initial:     whether directive should be issued before creating schema
                       or a callable(db, value) returning whether,
@@ -79,10 +102,20 @@ class Database(object):
         ?read:        false if setting is write-only,
         ?write:       false if setting is read-only
                       or a callable(db) returning false,
-        ?col:         result column to select if type "table"
     }.
     """
     PRAGMA = {
+      "analysis_limit": {
+        "name": "analysis_limit",
+        "label": "Analysis limit",
+        "type": int,
+        "short": "Limit on the approximate ANALYZE setting",
+        "description": """The approximate number of rows examined in each index by the ANALYZE command.
+0: analysis limit is disabled and the ANALYZE command will examine all rows of each index.
+> 0: ANALYZE commands will stop analyzing each index after it has examined approximately N rows.
+
+Setting to 100 or 1000 allows the ANALYZE command to run very quickly, even on multi-gigabyte database files. """
+      },
       "application_id": {
         "name": "application_id",
         "label": "Application ID",
@@ -133,6 +166,7 @@ Must be turned on before any tables are created, not possible to change afterwar
         "label": "Case-sensitive LIKE",
         "type": bool,
         "read": False,
+        "deprecated": PRAGMA_SUPPORT_DEPRECATED.get("case_sensitive_like", (sys.maxsize, )) >= sqlite3.sqlite_version_info,
         "short": "Case sensitivity on LIKE operator",
         "description": "Toggles case sensitivity on LIKE operator.",
       },
@@ -163,7 +197,6 @@ Must be turned on before any tables are created, not possible to change afterwar
         "name": "collation_list",
         "label": "Collation list",
         "type": "table",
-        "col": "name",
         "write": False,
         "short": "Collating sequences for current session",
         "description": "A list of the collating sequences defined for the current database connection.",
@@ -172,7 +205,6 @@ Must be turned on before any tables are created, not possible to change afterwar
         "name": "compile_options",
         "label": "Compile options",
         "type": "table",
-        "col": "compile_option",
         "write": False,
         "short": "SQLite compile-time options",
         "description": "Compile-time options used when building current SQLite library.",
@@ -269,6 +301,25 @@ Must be turned on before any tables are created, not possible to change afterwar
         "short": "Use Full FSYNC",
         "description": "Determines whether or not the F_FULLFSYNC syncing method is used on systems that support it (Mac OS-X only).",
       },
+      "function_list": {
+        "name": "function_list",
+        "label": "Function list",
+        "type": "table",
+        "format": lambda v: "%s(%s)" % (
+            v["name"], ".." if v["narg"] < 0 else ", ".join(("XYZ" + string.ascii_uppercase)[:v["narg"]]),
+        ),
+        "write": False,
+        "short": "SQL functions known to the database connection",
+        "description": "A list of SQL functions known to the database connection. Each row describes a single calling signature for a single SQL function. Some SQL functions will have multiple rows in the result set if they can (for example) be invoked with a varying number of arguments or can accept text in various encodings.",
+      },
+      "hard_heap_limit": {
+        "name": "hard_heap_limit",
+        "label": "Hard heap limit",
+        "type": int,
+        "min": 1,
+        "short": "Hard limit on allocated heap memory",
+        "description": "Hard upper bound of N bytes on the amount of heap memory that will be allocated. This pragma can only lower the heap limit, never raise it."
+      },
       "ignore_check_constraints": {
         "name": "ignore_check_constraints",
         "label": "Ignore check constraints",
@@ -296,6 +347,13 @@ Must be turned on before any tables are created, not possible to change afterwar
         "short": "Journal size byte limit",
         "description": """  Byte limit on the size of rollback-journal and WAL files left in the file-system after transactions or checkpoints. Each time a transaction is committed or a WAL file resets, SQLite compares the size of the rollback journal file or WAL file left in the file-system to the size limit set by this pragma, and if the journal or WAL file is larger, it is truncated to the limit.
   A negative number implies no limit. To always truncate rollback journals and WAL files to their minimum size, set to zero.""",
+      },
+      "legacy_alter_table": {
+        "name": "legacy_alter_table",
+        "label": "Legacy alter table",
+        "type": bool,
+        "short": "ALTER TABLE RENAME behavior",
+        "description": "If enabled, ALTER TABLE RENAME command only rewrites the initial occurrence of the table name in its CREATE TABLE statement and in any associated CREATE INDEX and CREATE TRIGGER statements. If disabled, all references to the table anywhere in the schema are converted to the new name.",
       },
       "legacy_file_format": {
         "name": "legacy_file_format",
@@ -329,6 +387,14 @@ Must be turned on before any tables are created, not possible to change afterwar
         "description": """  The maximum number of bytes that are set aside for memory-mapped I/O on a single database. If zero, memory mapped I/O is disabled.
   If negative, the limit reverts to the default value determined by the most recent sqlite3_config(SQLITE_CONFIG_MMAP_SIZE), or to the compile time default determined by SQLITE_DEFAULT_MMAP_SIZE if no start-time limit has been set.""",
       },
+      "module_list": {
+        "name": "module_list",
+        "label": "Module list",
+        "type": "table",
+        "write": False,
+        "short": "Virtual table modules",
+        "description": "A list of virtual table modules registered with the database connection.",
+      },
       "page_count": {
         "name": "page_count",
         "label": "Page count",
@@ -347,6 +413,14 @@ Must be turned on before any tables are created, not possible to change afterwar
         "initial": True,
         "short": "Database page byte size",
         "description": "The page size of the database. Specifying a new size does not change the page size immediately. Instead, the new page size is remembered and is used to set the page size when the database is first created, if it does not already exist when the page_size pragma is issued, or at the next VACUUM command that is run on the same database connection while not in WAL mode.",
+      },
+      "pragma_list": {
+        "name": "pragma_list",
+        "label": "Pragma list",
+        "type": "table",
+        "write": False,
+        "short": "Known PRAGMA commands",
+        "description": "A list of PRAGMA commands known to the database connection.",
       },
       "query_only": {
         "name": "query_only",
@@ -394,6 +468,14 @@ Must be turned on before any tables are created, not possible to change afterwar
         "short": "Result columns omit table name prefix",
         "description": "Affects the way SQLite names columns of data returned by SELECT statements.",
       },
+      "soft_heap_limit": {
+        "name": "soft_heap_limit",
+        "label": "Soft heap limit",
+        "type": int,
+        "min": 1,
+        "short": "Soft limit on allocated heap memory",
+        "description": "Advisory upper bound of N bytes on the amount of heap memory that will be allocated. SQLite strives to keep heap memory utilization below the soft heap limit by reducing the number of pages held in the page cache as heap memory usages approaches the limit."
+      },
       "synchronous": {
         "name": "synchronous",
         "label": "Synchronous",
@@ -414,8 +496,8 @@ Must be turned on before any tables are created, not possible to change afterwar
         "dump": True,
         "short": "Location of temporary tables and indexes",
         "description": """  DEFAULT: the compile-time C preprocessor macro SQLITE_TEMP_STORE is used to determine where temporary tables and indexes are stored.
-  FILE: temporary tables and indexes are stored in a file. The temp_store_directory pragma can be used to specify the directory containing temporary files when FILE is specified. 
-  MEMORY: temporary tables and indexes are kept in as if they were pure in-memory databases memory. 
+  FILE: temporary tables and indexes are stored in a file. The temp_store_directory pragma can be used to specify the directory containing temporary files when FILE is specified.
+  MEMORY: temporary tables and indexes are kept in as if they were pure in-memory databases memory.
 
   When the temp_store setting is changed, all existing temporary tables, indexes, triggers, and views are immediately deleted.""",
       },
@@ -435,6 +517,13 @@ Must be turned on before any tables are created, not possible to change afterwar
         "min": 0,
         "short": "Number of auxiliary threads for prepared statements",
         "description": "The upper bound on the number of auxiliary threads that a prepared statement is allowed to launch to assist with a query.",
+      },
+      "trusted_schema": {
+        "name": "trusted_schema",
+        "label": "Trusted schema",
+        "type": bool,
+        "short": "Whether non-audited SQL functions and virtual tables are allowed",
+        "description": "Per-connection setting that determines whether or not SQL functions and virtual tables that have not been security audited are allowed to be run by views, triggers, or in expressions of the schema such as CHECK constraints, DEFAULT clauses, generated columns, expression indexes, and/or partial indexes.",
       },
       "user_version": {
         "name": "user_version",
@@ -457,17 +546,17 @@ Must be turned on before any tables are created, not possible to change afterwar
         "label": "Writable schema",
         "type": bool,
         "short": "Writable sqlite_master",
-        "description": """If enabled, the sqlite_master table can be changed using ordinary UPDATE, INSERT, and DELETE statements, for the duration of the current session. 
+        "description": """If enabled, the sqlite_master table can be changed using ordinary UPDATE, INSERT, and DELETE statements, for the duration of the current session.
 
 WARNING: misuse can easily result in a corrupt database file.""",
       },
     }
     """Additional PRAGMA directives not usable as settings."""
     EXTRA_PRAGMAS = [
-        "database_list", "foreign_key_check", "foreign_key_list",
-        "incremental_vacuum", "index_info", "index_list", "index_xinfo",
-        "integrity_check", "optimize", "quick_check", "read_uncommitted",
-        "shrink_memory", "soft_heap_limit", "table_info", "wal_checkpoint"
+        "database_list", "foreign_key_check", "foreign_key_list", "incremental_vacuum",
+        "index_info", "index_list", "index_xinfo", "integrity_check", "optimize",
+        "quick_check", "read_uncommitted", "shrink_memory", "table_info", "table_xinfo",
+        "wal_checkpoint",
     ]
 
     """Temporary file name counter."""
@@ -508,7 +597,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         # {"table|index|view|trigger":
         #   {name:
         #     {name: str, sql: str, ?table: str, ?columns: [], ?count: int,
-        #      __id__: unique, ?__parsed__: bool,
+        #      __id__: unique, ?__parsed__: bool, ?__parse_error__: str,
         #      ?meta: {full metadata}}}}
         self.schema = defaultdict(CaselessDict)
         self.connection = None
@@ -561,6 +650,17 @@ WARNING: misuse can easily result in a corrupt database file.""",
         self.filename = filename
         if not self.temporary: self.name = filename
         self.open()
+
+
+    def __enter__(self):
+        """Context manager entry, ensures database is opened, returns self."""
+        self.open()
+        return self
+
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Context manager exit, closes database."""
+        self.close()
 
 
     def check_integrity(self):
@@ -689,14 +789,14 @@ WARNING: misuse can easily result in a corrupt database file.""",
     def lock(self, category, name, key, label=None):
         """
         Locks a schema object for altering or deleting.
-        
+
         For views, cascades lock to tables and views the view queries, recursively.
 
         @param   key       any hashable to identify lock by
         @param   label     an informational label for lock
         """
-        category, name = (x.lower() if x else x is not None for x in (category, name))
-        if name is not None and name not in self.schema.get(category, {}): return            
+        category, name = (x.lower() if x is not None else x for x in (category, name))
+        if name is not None and name not in self.schema.get(category, {}): return
         self.locks[category][name].add(key)
         self.locklabels[key] = label
         if "view" == category and name is not None:
@@ -829,7 +929,6 @@ WARNING: misuse can easily result in a corrupt database file.""",
         @param   reverse   whether to reverse order
         @return            [(rowid, ?"DESC")] or [(pkcol1, ?"DESC"), ] if table,
                            ["row_number() OVER () DESC"] if view in reverse else []
-                           
         """
         category = "table" if name in self.schema["table"] else "view"
         if "view" == category:
@@ -880,8 +979,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
         if maxcount is not None:
             counts = [totals] if isinstance(totals, six.integer_types) else totals.values() \
                      if isinstance(totals, dict) else [x.get("count", 0) for x in totals]
-            mylimit = [max(0, min(limit if limit > 0 else maxcount, maxcount - sum(counts)))] + \
-                      ([offset] if offset > 0 else [])
+            mylimit = [max(0, min(limit if limit >= 0 else maxcount, maxcount - sum(counts)))]
+            if offset > 0: mylimit.append(offset)
         return (" " +
             " ".join(" ".join(x) for x in zip(("LIMIT", "OFFSET"), map(str, mylimit)))
         ) if mylimit else ""
@@ -951,7 +1050,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             if sys.version_info < (3, ) and datatype is buffer:  # Py2
                 result[name] = str(result[name]).decode("latin1")
             elif datatype is memoryview:
-                result[name] = datatype.to_bytes().decode("latin1")
+                result[name] = datatype.tobytes().decode("latin1")
             elif datatype is six.binary_type:
                 try:
                     result[name] = result[name].decode("utf-8")
@@ -1003,7 +1102,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     continue # for row
 
             sqlraw = row["sql"].strip().replace("\r\n", "\n")
-            sql = re.sub("\n\s+\)(?=[\s;]*$)", "\n)", sqlraw) # "\n  );\n" -> "\n)"
+            sql = re.sub("\n\\s+\\)(?=[\\s;]*$)", "\n)", sqlraw) # "\n  );\n" -> "\n)"
             row["sql"], row["sql0"], row["sqlraw"] = sql, sql, sqlraw
             self.schema[row["type"]][row["name"]] = row
 
@@ -1025,7 +1124,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 if mycategory in ("table", "view") and opts0 and opts["sqlraw"] == opts0["sqlraw"]:
                     opts["columns"] = opts0.get("columns") or []
                 elif mycategory in ("table", "index", "view"):
-                    pragma = "index_info" if "index" == mycategory else "table_info"
+                    pragma = "index_info" if "index" == mycategory else "table_xinfo"
                     sql = "PRAGMA %s(%s)" % (pragma, grammar.quote(myname))
                     try:
                         rows = self.execute(sql, log=False).fetchall()
@@ -1036,12 +1135,14 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     else:
                         opts["columns"] = []
                         for row in rows:
+                            if row.get("hidden") == 1: continue # for row
                             col = {"name": row["name"]}
                             if row.get("type"): col["type"] = row["type"].upper()
                             if row.get("dflt_value") is not None:
                                 col["default"] = {"expr": row["dflt_value"]}
-                            if row.get("notnull"): col["notnull"] = {}
-                            if row.get("pk"):      col["pk"]      = {}
+                            if row.get("notnull"):          col["notnull"]   = {}
+                            if row.get("pk"):               col["pk"]        = {}
+                            if row.get("hidden") in (2, 3): col["generated"] = {}
                             opts["columns"].append(col)
 
                 # Use previous metainfo if unchanged
@@ -1074,9 +1175,12 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 # Parse metainfo from SQL if commanded and not already available
                 meta, sql = None, None
                 if parse and not opts.get("__parsed__"):
-                    meta, _ = grammar.parse(opts["sql0"])
+                    opts.pop("__parse_error__", None)
+                    meta, err = grammar.parse(opts["sql0"])
                     if meta:
                         opts["__parsed__"] = True
+                    else:
+                        opts["__parse_error__"] = err
                     if meta and "table" == mycategory:
                         if "columns" in opts and "columns" in meta \
                         and (len(opts["columns"]) != len(opts["columns"]) or any(
@@ -1481,9 +1585,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
 
     @classmethod
-    def has_feature(cls, name):
+    def has_support(cls, name):
         """Returns whether the current SQLite version supports given feature."""
-        version_min = cls.FEATURE_SUPPORT.get(name, (sys.maxsize, ))
+        versions = cls.PRAGMA_SUPPORT if name in cls.PRAGMA_SUPPORT else cls.FEATURE_SUPPORT
+        version_min = versions.get(name, (sys.maxsize, ))
         return sqlite3.sqlite_version_info >= version_min
 
 
@@ -1818,7 +1923,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
             if not rows:
                 if not callable(opts["type"]): continue # for name, opts
                 value = opts["type"]()
-            elif "table" == opts["type"]: value = [next(iter(x.values())) for x in rows]
+            elif "table" == opts["type"]:
+                getter = opts.get("format") or (lambda x: next(iter(x.values())))
+                value = sorted(getter(x) for x in rows)
             else:
                 value = next(iter(rows[0].values()))
                 if callable(opts["type"]): value = opts["type"](value)
@@ -1826,6 +1933,11 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 result[name] = value
 
         return result
+
+
+    def get_sql_functions(self):
+        """Returns a list of names of SQL functions known to the database connection."""
+        return sorted(set(x["name"] for x in self.execute("PRAGMA function_list", log=False)))
 
 
     def notify_rename(self, category, oldname, newname):
@@ -1850,8 +1962,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
     def rename_item(self, category, name, name2):
         """
-        Carries out renaming schema item, using "ALTER TABLE" if table 
-        and name is not case change, else dropping and re-creating the item 
+        Carries out renaming schema item, using "ALTER TABLE" if table
+        and name is not case change, else dropping and re-creating the item
         under the new name. Retains item ID.
         """
         if name == name2: return
@@ -1902,7 +2014,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         else:
             resets  = defaultdict(dict) # {category: {name: SQL}}
             if "table" == category \
-            and (name2 == grammar.quote(name2) or not self.has_feature("full_rename_table")):
+            and (name2 == grammar.quote(name2) or not self.has_support("full_rename_table")):
                 # Modify sqlite_master directly, as "ALTER TABLE x RENAME TO y"
                 # sets a quoted name "y" to CREATE statements, including related objects,
                 # regardless of whether the name required quoting.
@@ -1926,7 +2038,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                    for c in (item or {}).get("meta", {}).get("columns", [])):
             return
         table = item["name"]
-        if self.has_feature("rename_column"):
+        if self.has_support("rename_column"):
             altersql, err = grammar.generate(dict(
                 name=table, name2=table, columns=[(name, name2)]
             ), category="ALTER TABLE")
@@ -1951,7 +2063,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         """
         Carries out dropping table column.
 
-        @return  additionally deleted entities like indexes 
+        @return  additionally deleted entities like indexes
                  and UPDATE OF triggers firing on column,
                  as {category: {name: item}}
         """
@@ -2040,7 +2152,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             name2:     table new name if renamed else old name
             tempname:  table temporary name
             sql:       table CREATE statement with tempname
-            columns:   [(column name in old, column name in new)]
+            columns:   [(column name in old, column name in new)] for INSERTs
             fks        whether foreign key constraints are currently enabled
             ?table:    [{related table {name, tempname, sql, sql0, ?index, ?trigger}, using new names}, ]
             ?index:    [{related index {name, sql}, using new names}, ]
@@ -2120,6 +2232,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 if err: raise Exception(err)
             return result
 
+        def get_col2(c1): # Returns new column props if old exist else None
+            name2 = util.getval(myrenames, "column", tempname, c1["name"], default=c1["name"])
+            return next((c2 for c2 in item2["meta"]["columns"] if util.lceq(c2["name"], name2)), None)
+
         if drops:
             drops = [x.lower() for x in drops]
             sql = drop_from_sql(item2)
@@ -2138,12 +2254,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
         fks_on = next(iter(self.execute("PRAGMA foreign_keys", log=False).fetchone().values()))
         args = {"name": name1, "name2": name2, "tempname": tempname,
                 "sql": sql, "__type__": "COMPLEX ALTER TABLE", "fks": fks_on,
-                "columns": [(c1["name"],
-                             util.getval(myrenames, "column", tempname, c1["name"]) or c1["name"])
-                            for c1 in item1["meta"]["columns"] 
-                            if util.getval(myrenames, "column", tempname, c1["name"])
-                            or any(util.lceq(c1["name"], c2["name"])
-                                   for c2 in item2["meta"]["columns"])]}
+                "columns": [(c1["name"], c2["name"]) for c1 in item1["meta"]["columns"]
+                            for c2 in [get_col2(c1)] if c2 and c2.get("generated") is None]}
 
 
         mycols = [x["name"] for x in item1.get("columns", [])]
@@ -2241,6 +2353,12 @@ WARNING: misuse can easily result in a corrupt database file.""",
             try: self.execute("ROLLBACK")
             except Exception: pass
 
+if not Database.has_support("strict"):
+    Database.AFFINITY.pop("ANY", None)
+for name in Database.PRAGMA_SUPPORT:
+    if not Database.has_support(name):
+        Database.PRAGMA.pop(name, None)
+
 
 
 def is_sqlite_file(filename, path=None, empty=False, ext=True):
@@ -2283,41 +2401,36 @@ def detect_databases(progress=None):
                 search_paths.append(path)
                 break # for path
     else:
-        search_paths = [os.getenv("HOME"),
-                        "/Users" if "mac" == os.name else "/home"]
+        search_paths = [os.getenv("HOME"), "/Users" if "mac" == os.name else "/home"]
     search_paths = [util.to_unicode(x) for x in search_paths]
     for search_path in filter(os.path.exists, search_paths):
         if progress and not progress(): return
         logger.info("Looking for SQLite databases under %s.", search_path)
-        for root, _, files in os.walk(search_path):
-            results = []
-            for f in files:
-                if progress and not progress(): break # for f
-                if is_sqlite_file(f, root):
-                    results.append(os.path.realpath(os.path.join(root, f)))
-            if results: yield results
-    if progress and not progress(): return
+        for files in find_databases(search_path, progress): yield files
 
     # Then search current working directory for database files.
-    search_path = six.moves.getcwd()
-    logger.info("Looking for SQLite databases under %s.", search_path)
-    for root, _, files in os.walk(search_path):
-        if progress and not progress(): return
+    if progress and not progress(): return
+    logger.info("Looking for SQLite databases under %s.", six.moves.getcwd())
+    for files in find_databases(six.moves.getcwd(), progress): yield files
+
+
+def find_databases(folder, progress=None):
+    """
+    Yields lists of all SQLite databases under the specified folder.
+
+    @param   progress  callback function returning whether task should continue
+    """
+    for root, _, files in os.walk(folder):
+        if progress and not progress(): break # for root
         results = []
         for f in files:
             if progress and not progress(): break # for f
             if is_sqlite_file(f, root):
                 results.append(os.path.realpath(os.path.join(root, f)))
+            if len(results) >= 100:
+                yield results
+                results = []
         if results: yield results
-
-
-def find_databases(folder):
-    """Yields lists of all SQLite databases under the specified folder."""
-    for root, _, files in os.walk(folder):
-        yield []
-        for f in files:
-            p = os.path.join(root, f)
-            yield [p] if is_sqlite_file(p) else []
 
 
 def fmt_entity(name, force=True, limit=None):
@@ -2330,6 +2443,21 @@ def fmt_entity(name, force=True, limit=None):
     """
     v = util.unprint(grammar.quote(name, force=force))
     if limit is None: limit = 50
+    return util.ellipsize(v, limit) if limit else v
+
+
+def fmt_value(value, limit=None):
+    """
+    Formats the value for display as SQL, enclosed in quotes if text,
+    unprintable characters escaped, and ellipsized if too long.
+
+    @param   limit  max length for ellipsizing text, defaults to 20, 0 disables
+    """
+    if value is None: return "NULL"
+    if isinstance(value, bool): return str(value).upper()
+    if isinstance(value, six.integer_types + (float, )): return str(value)
+    v = util.unprint(grammar.quote(value, force=True))
+    if limit is None: limit = 20
     return util.ellipsize(v, limit) if limit else v
 
 

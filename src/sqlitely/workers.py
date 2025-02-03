@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.07.2024
+@modified    06.01.2025
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -21,6 +21,7 @@ import sqlite3
 import subprocess
 import sys
 import threading
+import time
 import traceback
 
 import six
@@ -56,16 +57,15 @@ class WorkerThread(threading.Thread):
         self._queue = queue.Queue()
 
 
-    def work(self, function, **kws):
+    def work(self, item, **kargs):
         """
         Registers new work to process. Starts thread if not running.
 
-        @param   function  callable to invoke as work
-        @param   kws       any additional parameters, will be returned
-                           in callback(data, **kws)
+        @param   item   callable to invoke as work, or work input in subclasses overriding run()
+        @param   kargs  any additional parameters, will be returned in callback(data, **kargs)
         """
         self._drop_results = False
-        self._queue.put((function, kws) if kws else function)
+        self._queue.put((item, kargs) if kargs else item)
         if not self._is_running:
             self.start()
 
@@ -85,11 +85,14 @@ class WorkerThread(threading.Thread):
         self._queue.put(None) # To wake up thread waiting on queue
 
 
-    def stop_work(self, drop=True):
+    def stop_work(self, drop=True, every=True):
         """
-        Signals to stop the currently ongoing work, if any. Obtained results
-        will be posted back, unless drop is false.
+        Signals to stop ongoing work, currently ongoing or every work item, if any.
+        Obtained results will be posted back, unless drop is false.
         """
+        while every and not self._queue.empty():
+            try: self._queue.get(block=False)
+            except queue.Empty: break
         self._is_working = False
         self._drop_results = drop
 
@@ -128,7 +131,6 @@ class WorkerThread(threading.Thread):
                 self._is_working = False
                 continue # while self._is_running
 
-            data = {"callable": func}
             if error: data = {"callable": func, "error": error}
             else: data = {"callable": func, "done": True, "result": result}
             self.postback(data, **kws)
@@ -342,19 +344,30 @@ class DetectDatabaseThread(WorkerThread):
 
     def run(self):
         self._is_running = True
+
+        def progress():
+            if self._is_working: time.sleep(0.001)
+            return self._is_working
+
         while self._is_running:
             search = self._queue.get()
             if not search: continue # while self._is_running
 
             self._is_working, self._drop_results = True, False
             all_filenames = set() # To handle potential duplicates
-            for filenames in database.detect_databases(lambda: self._is_working):
-                filenames = all_filenames.symmetric_difference(filenames)
-                if not self._drop_results:
-                    self.postback({"filenames": filenames})
+            batch, batch_count = [], 0 # Yield filenames in batches for smoother updates
+            for filenames in database.detect_databases(progress):
+                filenames = set(filenames) - all_filenames
                 all_filenames.update(filenames)
+                batch.extend(filenames)
+                batch_count += 1
+                if batch and (len(batch) >= 10 or batch_count >= 10) and not self._drop_results:
+                    self.postback({"filenames": batch})
+                    batch, batch_count = [], 0
                 if not self._is_working:
                     break # for filename
+            if batch and not self._drop_results:
+                self.postback({"filenames": batch})
 
             if not self._drop_results:
                 self.postback({"done": True, "count": len(all_filenames)})
@@ -372,18 +385,30 @@ class ImportFolderThread(WorkerThread):
 
     def run(self):
         self._is_running = True
+
+        def progress():
+            if self._is_working: time.sleep(0.001)
+            return self._is_working
+
         while self._is_running:
             path = self._queue.get()
             if not path: continue # while self._is_running
 
             self._is_working, self._drop_results = True, False
             all_filenames = set()
-            for filenames in database.find_databases(path):
+            batch, batch_count = [], 0 # Yield filenames in batches for smoother updates
+            for filenames in database.find_databases(path, progress):
+                filenames = set(filenames) - all_filenames
                 all_filenames.update(filenames)
-                if filenames and not self._drop_results:
-                    self.postback({"filenames": filenames, "folder": path})
+                batch.extend(filenames)
+                batch_count += 1
+                if batch and (len(batch) >= 10 or batch_count >= 10) and not self._drop_results:
+                    self.postback({"filenames": batch, "folder": path})
+                    batch, batch_count = [], 0
                 if not self._is_working:
                     break # for filename
+            if batch and not self._drop_results:
+                self.postback({"filenames": batch, "folder": path})
 
             if not self._drop_results:
                 self.postback({"done": True, "count": len(all_filenames), "folder": path})

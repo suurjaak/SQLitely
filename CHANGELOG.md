@@ -1,7 +1,79 @@
 CHANGELOG
 =========
 
-2.3, 2024-07-10
+2.4, 2025-02-01
+---------------
+- add support for generated columns
+- add find/replace dialog to data grids and column editors and database schema text
+- add dialog to manage shown and filtered columns in data grids; add EXACT- and NOT-option to column filter
+- update known and deprecated pragma directives up to SQLite version 3.46
+- upgrade embedded sqlite3_analyzer Windows binary from 3.29 to 3.43
+- upgrade ANTLR version from 4.9 to 4.13
+- upgrade snap distribution to Ubuntu 22 base using wxPython 4.2.0
+- show STRICT checkbox for STRICT table in schema editor even if current SQLite does not support it
+- add ANY as possible column type if SQLite version supports STRICT
+- add SQL functions to SQL editors auto-completes
+- add PRAGMA names as last column to PRAGMA window
+- add execution history to SQL page toolbar
+- improve converting changed values in table grids to original type for untyped columns
+- fix and improve editing and movement in hex editor
+- tweak initial size of resizable text controls in data grid row dialog
+- re-hide hidden columns on refreshing data grid
+- use double precision for floating-point values in column editor
+- do not highlight changes in hex view in value editor tool
+- do not reverse entities themselves in command-line interface on --reverse, only their rows
+- mark changed pragma values with asterisks
+- use unsaved changes when exporting table data grid to another database
+- use hourglass cursor while showing busy message
+- allow saving SVG image as SVG in column editor
+- restore last active SQL window on opening database
+- provide workaround for importing CSVs with mixed Windows and Unix linefeeds (issue #3)
+- improve support for dark mode in Windows 10+
+- improve layout speed in lengthy database lists
+- fix parsing []-enclosed identifiers in CREATE SQL statements
+- fix parsing context-specific keywords like ROWID and STRICT in identifiers
+- fix data grids lagging with very long column values in Linux (issue #4)
+- fix SQL query results starting to lag after lots of queries (issue #4)
+- fix errors in data grid on opening virtual tables with hidden columns
+- fix single instance checker stalling if existing instance has hung
+- fix entities not being sorted case insensitively
+- fix date arithmetic in automatic update check
+- fix error on cancelling export to another database
+- fix rolling back changes on error in schema editor test and save
+- fix renaming columns in related entities on column rename for quoted or complex expressions
+- fix error on keyword-only search
+- fix representing very large integers in column editor hex view
+- fix cutting and pasting text in column editor hex view
+- fix logic and formatting issues in column editor date/time tab
+- fix converting images to GIF in column editor image view
+- fix edits being discarded in column editor after setting NULL
+- fix compatibility issues with Python 3.6
+- fix compatibility issues with Python 3.10+
+- fix opening third-party license link in snaps
+- fix accounting for relation lines in schema diagram zoom to fit
+- fix pragma editor not disabling controls afterwards
+- fix not having counts/bytes on schema diagram in statistics export
+- fix renaming item in data/schema tree crashing in Linux
+- fix diagram items shifting on select at certain zoom levels
+- fix compiled binary crashing on waiting until timeout
+- fix error on adding column to trigger in schema editor
+- fix error on dropping table column used in related indexes or triggers
+- fix error on selecting opened temporary database from tray menu
+- fix not retaining complex ALTER TABLE results in related tables
+- fix not updating info page and statistics on adding new schema entity
+- fix not showing changes in write-only PRAGMA values
+- add all user-executed SQL to action history not only action queries
+- add "Refresh list" to database list context menu
+- shorten SQL parsing error texts in schema editor popups
+- refactor import-export functionality to classes
+- update SQL grammar up to SQLite version 3.46
+  (UPSERT, operator IS NOT? DISTINCT FROM, JSON operators -> ->>, window functions,
+   MATERIALIZED in common table expression, UPDATE FROM in trigger body, RIGHT JOIN, FULL JOIN,
+   ORDER BY in function calls, table alias in INSERT, column name list in UPDATE,
+   underscore separator in numeric literals, all 147 keywords)
+
+
+2.3, 2024-07-08
 ---------------
 - add command-line interface, with execute, export, import, parse, pragma, search, and stats
 - add option to rename SQL window pages

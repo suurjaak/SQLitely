@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.07.2024
+@modified    03.02.2025
 ------------------------------------------------------------------------------
 """
 try: from configparser import RawConfigParser                 # Py3
@@ -32,8 +32,8 @@ except ImportError: wx = None
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "2.3"
-VersionDate = "10.07.2024"
+Version = "2.4.dev268"
+VersionDate = "03.02.2025"
 
 Frozen, Snapped = getattr(sys, "frozen", False), (sys.executable or "").startswith("/snap/")
 if Frozen: # Running as a pyinstaller executable
@@ -57,7 +57,7 @@ ConfigFileStatic = False
 
 """List of attribute names that can be saved to and loaded from ConfigFile."""
 FileDirectives = ["AllowMultipleInstances", "ConsoleHistoryCommands", "DBFiles",
-    "DBSort", "LastActivePages", "LastExportType", "LastSearchResults",
+    "DBSort", "FindReplaceHistory", "LastActivePages", "LastExportType", "LastSearchResults",
     "LastSelectedFiles", "LastUpdateCheck", "ParseCache", "Plugins", "RecentFiles",
     "SchemaDiagrams", "SearchHistory", "SearchInMeta", "SearchInData",
     "SearchUseNewTab", "SearchCaseSensitive", "SQLWindowTexts", "TextLineNumbers",
@@ -75,33 +75,37 @@ OptionalFileDirectives = [
     "UpdateCheckInterval",
 ]
 Defaults = {}
+Overrides = []
 
-"""---------------------------- FileDirectives: ----------------------------"""
+"""---------------------------- File directives: ----------------------------"""
 
-"""All detected/added databases."""
-DBFiles = []
+"""Whether program can have multiple instances running, or reuses one instance."""
+AllowMultipleInstances = False
+
+"""History of commands entered in console."""
+ConsoleHistoryCommands = []
 
 """Database filename extensions, as ('.extension', )."""
 DBExtensions = [".db", ".db3", ".s3db", ".sl3", ".sqlite", ".sqlite3", ".sqlitedb"]
 
+"""All detected/added databases."""
+DBFiles = []
+
 """Database list sort state, [col, ascending]."""
 DBSort = []
 
-"""Whether program can have multiple instances running, or reuses one instance."""
-AllowMultipleInstances = False
+"""History of search/replace texts in find/replace dialogs, as {"find": [..], "replace": [..]}."""
+FindReplaceHistory = {}
+
+"""Identifier for inter-process communication."""
+IPCName = quote_plus("%s-%s" % (wx.GetUserId(), ApplicationFile)).encode("latin1", "replace") \
+          if wx else ""
 
 """
 Port for inter-process communication, receiving data from other
 launched instances if not AllowMultipleInstances.
 """
 IPCPort = 59987
-
-"""Identifier for inter-process communication."""
-IPCName = quote_plus("%s-%s" % (wx.GetUserId(), ApplicationFile)).encode("latin1", "replace") \
-          if wx else ""
-
-"""History of commands entered in console."""
-ConsoleHistoryCommands = []
 
 """Index of last active page in database tab, {db path: index}."""
 LastActivePages = {}
@@ -115,20 +119,38 @@ LastSearchResults = {}
 """Files selected in the database lists on last run."""
 LastSelectedFiles = []
 
+"""Date string of last time updates were checked."""
+LastUpdateCheck = None
+
+"""Whether to log all SQL statements to log window."""
+LogSQL = False
+
+"""Maximum number of console history commands to store."""
+MaxConsoleHistory = 1000
+
 """Maximum database file size for doing full COUNT(*) instead of estimating from MAX(ROWID)."""
 MaxDBSizeForFullCount = 500000000
-
-"""Maximum table ROWID for doing full COUNT(*) if database size over MaxDBSizeForFullCount."""
-MaxTableRowIDForFullCount = 1000
 
 """Maximum import file size to do full row count for."""
 MaxImportFilesizeForCount = 10 * 1e6
 
-"""Number of rows to seek ahead on data grids, when scrolling to end of retrieved rows."""
-SeekLength = 100
+"""Maximum number of cached SQL parse results."""
+MaxParseCache = 500
 
-"""Number of rows to seek ahead on data grids, when scrolling freely or jumping to data grid bottom."""
-SeekLeapLength = 10000
+"""How many items in the Recent Files menu."""
+MaxRecentFiles = 20
+
+"""Maximum number of search texts to store."""
+MaxSearchHistory = 500
+
+"""Maximum number of results to show in search results."""
+MaxSearchResults = 500
+
+"""Maximum table ROWID for doing full COUNT(*) if database size over MaxDBSizeForFullCount."""
+MaxTableRowIDForFullCount = 1000
+
+"""Minimum allowed size for the main window, as (width, height)."""
+MinWindowSize = (600, 400)
 
 """Cached parse results, as {CREATE SQL: {meta}}."""
 ParseCache = {}
@@ -140,6 +162,9 @@ E.g. {"ValueEditorFunctions": [{title, body, name, ?active}]} for column value e
 """
 Plugins = {}
 
+"""Whether to pop up message dialogs for unhandled errors."""
+PopupUnexpectedErrors = True
+
 """Contents of Recent Files menu."""
 RecentFiles = []
 
@@ -149,11 +174,14 @@ RunChecksums = True
 """Run statistics analysis automatically (may take a while for large databases)."""
 RunStatistics = True
 
+"""Whether database schema diagram is enabled."""
+SchemaDiagramEnabled = True
+
 """Database schema diagram settings, as {path: {..}}."""
 SchemaDiagrams = {}
 
-"""Whether database schema diagram is enabled."""
-SchemaDiagramEnabled = True
+"""Whether to do case-sensitive search."""
+SearchCaseSensitive = False
 
 """
 Texts entered in global search, used for drop down auto-complete.
@@ -161,20 +189,32 @@ Last value can be an empty string: search box had no text.
 """
 SearchHistory = []
 
-"""Whether to create a new tab for each search or reuse current."""
-SearchUseNewTab = True
-
-"""Whether to do case-sensitive search."""
-SearchCaseSensitive = False
+"""Whether to search in all columns of all tables and views."""
+SearchInData = True
 
 """Whether to search in database CREATE SQL."""
 SearchInMeta = False
 
-"""Whether to search in all columns of all tables and views."""
-SearchInData = True
+"""Number of search results to yield in one chunk from search thread."""
+SearchResultsChunk = 50
 
-"""Texts in SQL window, loaded on reopening a database {filename: [(name, text), ], }."""
+"""Whether to create a new tab for each search or reuse current."""
+SearchUseNewTab = True
+
+"""Number of rows to seek ahead on data grids, when scrolling freely or jumping to data grid bottom."""
+SeekLeapLength = 10000
+
+"""Number of rows to seek ahead on data grids, when scrolling to end of retrieved rows."""
+SeekLength = 100
+
+"""Texts in SQL window, loaded on reopening a database {filename: [(name, text, ?{opts}), ], }."""
 SQLWindowTexts = {}
+
+"""Width of the database statistics plots, in pixels."""
+StatisticsPlotWidth = 200
+
+"""Duration of status messages on StatusBar, in seconds."""
+StatusFlashLength = 20
 
 """Show line numbers in SQL controls, like database full schema panel."""
 TextLineNumbers = {}
@@ -188,11 +228,14 @@ TrayIconEnabled = True
 """Whether the program checks for updates every UpdateCheckInterval."""
 UpdateCheckAutomatic = True
 
-"""Whether the program has been minimized and hidden to tray."""
-WindowMinimizedToTray = False
+"""Days between automatic update checks."""
+UpdateCheckInterval = 7
 
 """Whether the program window has been maximized."""
 WindowMaximized = False
+
+"""Whether the program has been minimized and hidden to tray."""
+WindowMinimizedToTray = False
 
 """Main window position, (x, y)."""
 WindowPosition = None
@@ -200,7 +243,7 @@ WindowPosition = None
 """Main window size in pixels, as [w, h]."""
 WindowSize = (1080, 720)
 
-"""---------------------------- /FileDirectives ----------------------------"""
+"""---------------------------- /File directives ----------------------------"""
 
 """Currently opened databases, as {filename: db}."""
 DBsOpen = {}
@@ -216,49 +259,19 @@ DBAnalyzer = os.path.join(BinDirectory, "sqlite3_analyzer" + (
 """Whether logging to log window is enabled."""
 LogEnabled = True
 
-"""Whether to log all SQL statements to log window."""
-LogSQL = False
-
-"""Whether to pop up message dialogs for unhandled errors."""
-PopupUnexpectedErrors = True
-
 """Number of unhandled errors encountered during current runtime."""
 UnexpectedErrorCount = 0
 
-"""URLs for download list, changelog, submitting feedback and homepage."""
+"""URLs for download list, changelog, and homepage."""
 DownloadURL  = "https://erki.lap.ee/downloads/SQLitely/"
 ChangelogURL = "https://suurjaak.github.io/SQLitely/changelog.html"
 HomeUrl      = "https://suurjaak.github.io/SQLitely"
 
-"""Minimum allowed size for the main window, as (width, height)."""
-MinWindowSize = (600, 400)
-
 """Console window size in pixels, (width, height)."""
 ConsoleSize = (800, 300)
 
-"""Maximum number of console history commands to store."""
-MaxConsoleHistory = 1000
-
-"""Maximum number of cached SQL parse results."""
-MaxParseCache = 500
-
-"""Maximum number of search texts to store."""
-MaxSearchHistory = 500
-
-"""Days between automatic update checks."""
-UpdateCheckInterval = 7
-
-"""Date string of last time updates were checked."""
-LastUpdateCheck = None
-
 """Maximum length of a tab title, overflow will be cut on the left."""
 MaxTabTitleLength = 60
-
-"""Maximum number of results to show in search results."""
-MaxSearchResults = 500
-
-"""Number of search results to yield in one chunk from search thread."""
-SearchResultsChunk = 50
 
 """Name of font used in HTML content."""
 HtmlFontName = "Tahoma"
@@ -318,9 +331,6 @@ GridRowInsertedColour = "#B9EAFF"
 """Colour set to table/list cells that have been changed."""
 GridCellChangedColour = "#FFA5A5"
 
-"""Width of the database statistics plots, in pixels."""
-StatisticsPlotWidth = 200
-
 """Colour for tables plot in database statistics."""
 PlotTableColour = "#3399FF"
 
@@ -329,12 +339,6 @@ PlotIndexColour = "#1DAB48"
 
 """Background colour for plots in database statistics."""
 PlotBgColour = "#DDDDDD"
-
-"""Duration of status messages on StatusBar, in seconds."""
-StatusFlashLength = 20
-
-"""How many items in the Recent Files menu."""
-MaxRecentFiles = 20
 
 """Font files used for measuring text extent in export."""
 FontXlsxFile     = os.path.join(ResourceDirectory, "Carlito.ttf")
@@ -404,6 +408,14 @@ def load(configfile=None):
 
         for name in FileDirectives + OptionalFileDirectives:
             [setattr(module, name, v) for v, s in [parse_value(name)] if s]
+        ALLOWED_OVERRIDES = ["Analyzer", "Colour", "Font", "Length", "Log", "Search", "Size"]
+        for name in parser.options(section):
+            if hasattr(module, name) and name not in FileDirectives + OptionalFileDirectives \
+            and any(allowed in name for allowed in ALLOWED_OVERRIDES):
+                value, success = parse_value(name)
+                if success:
+                    setattr(module, name, value)
+                    Overrides.append(name)
     except Exception:
         pass # Fail silently
 
@@ -437,7 +449,7 @@ def save(configfile=None):
             except Exception: continue # for path
             else: break # for path
 
-        f.write("# %s configuration written on %s.\n" % 
+        f.write("# %s configuration written on %s.\n" %
                 (Title, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         for name in FileDirectives:
             try: parser.set(section, name, json.dumps(getattr(module, name)))
@@ -447,6 +459,9 @@ def save(configfile=None):
                 value = getattr(module, name, None)
                 if Defaults.get(name) != value:
                     parser.set(section, name, json.dumps(value))
+            except Exception: pass
+        for name in Overrides:
+            try: parser.set(section, name, json.dumps(getattr(module, name)))
             except Exception: pass
         parser.write(f)
         f.close()

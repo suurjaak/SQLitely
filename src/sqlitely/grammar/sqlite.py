@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    09.06.2024
+@modified    13.12.2024
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -16,7 +16,6 @@ from collections import defaultdict
 import json
 import logging
 import re
-import sys
 import traceback
 import uuid
 
@@ -167,7 +166,7 @@ def quote(val, force=False, allow="", embed=False):
 def unquote(val):
     """
     Returns unquoted string, if string within '' or "" or `` or [].
-    Convers value to string if not already.
+    Converts value to string if not already.
     """
     result = uni(val) or ""
     if re.match(r"^([\"].*[\"])|([\'].*[\'])|([\`].*[\`])|([\[].*[\]])$", result, re.DOTALL):
@@ -228,6 +227,8 @@ def strip_and_collapse(sql, literals=True, upper=True):
     # Reduce identifiers to empty strings or placeholders
     sql = re.sub("`([^`]|``)*`",  "``" if literals else repl, sql)
     sql = re.sub(r"\[([^\]])*\]", "[]" if literals else repl, sql)
+    # Strip whitespace inside brackets
+    sql = re.sub(r"\(\s+", "(", re.sub(r"\s+\)", ")", sql))
     # Collapse all whitespace to single space and strip surrounding whitespace and semicolons
     sql = re.sub(r"\s+", " ", re.sub(r"^[\s;]+|[\s;]*$", "", sql.upper() if upper else sql))
     # Replace temporary placeholders with original literals if any
@@ -252,10 +253,10 @@ def terminate(sql, data=None):
             parser = SQLiteParser(stream)
             parser.removeErrorListeners()
             tree = parser.parse()
-            cc = stream.filterForChannel(0, len(stream.tokens) - 1, channel=2) or []
-            data["__comments__"]   = {x.start: x.text for x in cc}
+            comments = stream.filterForChannel(0, len(stream.tokens) - 1, channel=2) or []
+            data["__comments__"]   = {x.start: x.text for x in comments}
             data["__terminated__"] = any(isinstance(x, TerminalNode) and ";" == x.getText() and
-                                         any(x.getSourceInterval()[0] < c.start for c in cc)
+                                         any(c.start > x.getSourceInterval()[0] for c in comments)
                                          for x in tree.children[0].children[1:])
         except Exception: pass
     if data and data.get("__terminated__"): return sql
@@ -268,7 +269,8 @@ def terminate(sql, data=None):
 def uni(x, encoding="utf-8"):
     """Convert anything to Unicode, except None."""
     if x is None or isinstance(x, six.text_type): return x
-    return six.text_type(str(x), encoding, errors="replace")
+    if isinstance(x, six.binary_type): return six.text_type(x, encoding, errors="replace")
+    return six.text_type(x)
 
 
 def collapse_whitespace(s):
@@ -333,18 +335,22 @@ class CTX(object):
     SELECT_COMPOUND      = SQLiteParser.Compound_select_stmtContext
     SELECT_FACTORED      = SQLiteParser.Factored_select_stmtContext
     SELECT_SIMPLE        = SQLiteParser.Simple_select_stmtContext
+    JOIN_CLAUSE          = SQLiteParser.Join_clauseContext
     UPDATE               = SQLiteParser.Update_stmtContext
     UPDATE_LIMITED       = SQLiteParser.Update_stmt_limitedContext
+    COLUMN_DEF           = SQLiteParser.Column_defContext
     COLUMN_NAME          = SQLiteParser.Column_nameContext
     INDEX_NAME           = SQLiteParser.Index_nameContext
-    SCHEMA_NAME          = SQLiteParser.Database_nameContext
+    SCHEMA_NAME          = SQLiteParser.Schema_nameContext
     TABLE_NAME           = SQLiteParser.Table_nameContext
     TRIGGER_NAME         = SQLiteParser.Trigger_nameContext
     VIEW_NAME            = SQLiteParser.View_nameContext
     EXPRESSION           = SQLiteParser.ExprContext
+    LITERAL_VALUE        = SQLiteParser.Literal_valueContext
     FOREIGN_TABLE        = SQLiteParser.Foreign_tableContext
     FOREIGN_KEY          = SQLiteParser.Foreign_key_clauseContext
-    SELECT_OR_VALUES     = SQLiteParser.Select_or_valuesContext
+    SELECT_CORE          = SQLiteParser.Select_coreContext
+    RESULT_COLUMN        = SQLiteParser.Result_columnContext
 
 
 """Words that need quoting if in name context, e.g. table name."""
@@ -374,12 +380,7 @@ class ParseError(Exception):
         Exception.__init__(self, message)
         self.message, self.line, self.column = message, line, column
 
-    def __getattribute__(self, name):
-        if name in dir(str): return getattr(self.message, name)
-        return Exception.__getattribute__(self, name)
-
-    def __repr__(self):           return repr(self.message)
-    def __str__ (self):           return str(self.message)
+    def __str__ (self): return str(self.message)
 
 
 
@@ -413,8 +414,6 @@ class Parser(object):
                          CTX.SELECT, CTX.SELECT_COMPOUND, CTX.SELECT_FACTORED, CTX.SELECT_SIMPLE,
                          CTX.UPDATE, CTX.UPDATE_LIMITED]
 
-    class ReparseException(Exception): pass
-
     class ErrorListener(object):
         """Collects errors during parsing."""
         def __init__(self): self._errors, self._stack = [], []
@@ -430,23 +429,21 @@ class Parser(object):
             self._errors.append(ParseError(err, line - 1, column)) # Line is 1-based
             if not self._stack:
                 stack = traceback.extract_stack()[:-1]
-                for i, (f, l, fn, t) in enumerate(stack):
-                    if f == __file__:
-                        del stack[:max(i-1, 0)]
+                for i, (filename, lineno, functionname, linetext) in enumerate(stack):
+                    if filename == __file__: # Retain only the stack from this file and lower
+                        del stack[:max(i - 1, 0)]
                         break # for i, (..)
                 self._stack = traceback.format_list(stack)
 
-        def getErrors(self, stack=False):
-            es = self._errors
-            res = es[0] if len(es) == 1 else "\n\n".join(e.message for e in es)
-            return "%s\n%s" % (res, "".join(self._stack)) if stack else res
+        def getErrors(self): return self._errors[:]
+
+        def getStack(self):  return self._stack[:]
 
 
     def __init__(self):
         self._category = None # "CREATE TABLE" etc
         self._stream   = None # antlr TokenStream
         self._tree     = None # Parsed context tree
-        self._repls    = []   # [(start index, end index, replacement)]
 
 
     def parse(self, sql, category=None, renames=None):
@@ -468,76 +465,83 @@ class Parser(object):
         @return            ({..}, None) or (None, error)
 
         """
-        def parse_tree(sql):
-            self._stream = CommonTokenStream(SQLiteLexer(InputStream(sql)))
-            parser, listener = SQLiteParser(self._stream), self.ErrorListener()
-            parser.removeErrorListeners()
-            parser.addErrorListener(listener)
+        result, err = None, None
+        ctx, errors = self.parse_tree(sql, category)
+        if not errors: result = self.build(ctx, renames)
+        else: err = "\n\n".join(util.ellipsize(e.message, limit=150) if isinstance(e, ParseError)
+                                else e for e in errors)
+        return result, err
 
-            tree = parser.parse()
-            if parser.getNumberOfSyntaxErrors():
-                logger.error('Errors parsing SQL "%s":\n\n%s', sql,
-                             listener.getErrors(stack=True))
-                return None, listener.getErrors()
 
-            if sum(not isinstance(x, TerminalNode) for x in tree.children) > 1 \
-            or sum(not isinstance(x, TerminalNode) for x in tree.children[0].children) > 1:
-                stmts = [x for x in tree.children if not isinstance(x, TerminalNode)] or \
-                        [x for x in tree.children[0].children if not isinstance(x, TerminalNode)]
-                logger.error('Error parsing SQL "%s":\n\n'
-                             "encountered %s statements where one was expected.", sql, len(stmts))
-                return None, "Too many statements"
+    def parse_tree(self, sql, category=None):
+        """
+        Parses the SQL statement, returns (root context, [ParseError or str, ] or None).
 
-            # parse ctx -> statement list ctx -> statement ctx -> specific type ctx
-            ctx = tree.children[0].children[0].children[0]
-            name = self.CTXS.get(type(ctx))
-            categoryname = self.CATEGORIES.get(category)
-            if category and name != categoryname or name not in self.BUILDERS:
-                error = "Unexpected statement category: '%s'%s."% (name,
-                         " (expected '%s')" % (categoryname or category)
-                         if category else "")
-                logger.error(error)
-                return None, error
-            self._category = name
-            self._tree = tree
-            return ctx, None
+        @param   sql       source SQL string
+        @param   category  expected statement category if any, like "table"
+        """
+        self._stream = CommonTokenStream(SQLiteLexer(InputStream(sql)))
+        parser, listener = SQLiteParser(self._stream), self.ErrorListener()
+        parser.removeErrorListeners()
+        parser.addErrorListener(listener)
 
-        def build(ctx):
-            if renames: self.recurse_rename([ctx], renames)
-            result = self.BUILDERS[self._category](self, ctx)
-            result["__type__"] = self._category
-            ctxitems, ctxtypes = [ctx], [CTX.TABLE_NAME]
-            if SQL.CREATE_TABLE == self._category: ctxtypes = [CTX.FOREIGN_TABLE]
-            if SQL.CREATE_TRIGGER == self._category: # Skip trigger header
-                ctxitems = [ctx.expr()] + ctx.select_stmt() + ctx.update_stmt() + \
-                           ctx.insert_stmt() + ctx.delete_stmt()
-            result["__tables__"] = self.recurse_collect(ctxitems, ctxtypes)
-            if renames and "schema" in renames:
-                if isinstance(renames["schema"], dict):
-                    for v1, v2 in renames["schema"].items():
-                        if util.lceq(result.get("schema"), v1):
-                            if v2: result["schema"] = v2
-                            else: result.pop("schema", None)
-                elif renames["schema"]: result["schema"] = renames["schema"]
-                else: result.pop("schema", None)
-                self.rename_schema(ctx, renames)
+        tree = parser.parse()
+        if parser.getNumberOfSyntaxErrors():
+            errors = listener.getErrors()
+            logger.error('Errors parsing SQL "%s":\n\n%s\n%s',
+                         sql, "\n\n".join(e.message for e in errors), "".join(listener.getStack()))
+            return None, errors
 
-            cc = self._stream.filterForChannel(0, len(self._stream.tokens) - 1, channel=2) or []
-            result["__comments__"] = {x.start: x.text for x in cc}
-            result["__terminated__"] = any(isinstance(x, TerminalNode) and ";" == x.getText() and
-                                           any(x.getSourceInterval()[0] < c.start for c in cc)
-                                           for x in self._tree.children[0].children[1:])
-            return result
+        if sum(not isinstance(x, TerminalNode) for x in tree.children) > 1 \
+        or sum(not isinstance(x, TerminalNode) for x in tree.children[0].children) > 1:
+            stmts = [x for x in tree.children if not isinstance(x, TerminalNode)] or \
+                    [x for x in tree.children[0].children if not isinstance(x, TerminalNode)]
+            logger.error('Error parsing SQL "%s":\n\n'
+                         "encountered %s statements where one was expected.", sql, len(stmts))
+            return None, ["Too many statements"]
 
-        result, error, tries = None, None, 0
-        while not result and not error:
-            ctx, error = parse_tree(sql)
-            if error: break # while
-            try: result = build(ctx)
-            except self.ReparseException as e:
-                sql, tries = e.message, tries + 1
-                if tries > 1: error = "Failed to parse SQL"
-        return result, error
+        # parse ctx -> statement list ctx -> statement ctx -> specific type ctx
+        ctx = tree.children[0].children[0].children[0]
+        name = self.CTXS.get(type(ctx))
+        categoryname = self.CATEGORIES.get(category)
+        if category and name != categoryname or name not in self.BUILDERS:
+            error = "Unexpected statement category: '%s'%s."% (name,
+                     " (expected '%s')" % (categoryname or category)
+                     if category else "")
+            logger.error(error)
+            return None, [error]
+        self._category = name
+        self._tree = tree
+        return ctx, None
+
+
+    def build(self, ctx, renames=None):
+        """Returns data structure built from CREATE context, with renames applied if any."""
+        if renames: self.recurse_rename([ctx], renames)
+        result = self.BUILDERS[self._category](self, ctx)
+        result["__type__"] = self._category
+        ctxitems, ctxtypes = [ctx], [CTX.TABLE_NAME]
+        if SQL.CREATE_TABLE == self._category: ctxtypes = [CTX.FOREIGN_TABLE]
+        if SQL.CREATE_TRIGGER == self._category: # Skip trigger header
+            ctxitems = [ctx.expr()] + ctx.select_stmt() + ctx.update_stmt() + \
+                       ctx.insert_stmt() + ctx.delete_stmt()
+        result["__tables__"] = self.recurse_collect(ctxitems, ctxtypes)
+        if renames and "schema" in renames:
+            if isinstance(renames["schema"], dict):
+                for v1, v2 in renames["schema"].items():
+                    if util.lceq(result.get("schema"), v1):
+                        if v2: result["schema"] = v2
+                        else: result.pop("schema", None)
+            elif renames["schema"]: result["schema"] = renames["schema"]
+            else: result.pop("schema", None)
+            self.rename_schema(ctx, renames)
+
+        comments = self._stream.filterForChannel(0, len(self._stream.tokens) - 1, channel=2) or []
+        result["__comments__"] = {x.start: x.text for x in comments}
+        result["__terminated__"] = any(isinstance(x, TerminalNode) and ";" == x.getText() and
+                                       any(c.start > x.getSourceInterval()[0] for c in comments)
+                                       for x in self._tree.children[0].children[1:])
+        return result
 
 
     def rename_schema(self, ctx, renames):
@@ -628,7 +632,7 @@ class Parser(object):
 
         result["name"]  = self.u(ctx.index_name)
         result["table"] = self.u(ctx.table_name)
-        if ctx.database_name(): result["schema"] = self.u(ctx.database_name)
+        if ctx.schema_name(): result["schema"] = self.u(ctx.schema_name)
         if ctx.K_UNIQUE(): result["unique"]  = True
         if ctx.K_EXISTS(): result["exists"]  = True
 
@@ -663,22 +667,13 @@ class Parser(object):
         result = {}
 
         result["name"] = self.u(ctx.table_name)
-        if ctx.database_name(): result["schema"]  = self.u(ctx.database_name)
+        if ctx.schema_name(): result["schema"]  = self.u(ctx.schema_name)
         if ctx.K_TEMP() or ctx.K_TEMPORARY(): result["temporary"] = True
         if ctx.K_EXISTS(): result["exists"]  = True
 
         result["columns"] = [self.build_table_column(x) for x in ctx.column_def()]
-        if self._repls:
-            sql, shift = self._stream.getText(0, sys.maxsize), 0
-            for start, end, repl in self._repls:
-                sql = sql[:start + shift] + repl + sql[end + shift:]
-                shift = len(repl) - end + start
-            del self._repls[:]
-            raise self.ReparseException(sql)
-
         if ctx.table_constraint():
-            result["constraints"] = [self.build_table_constraint(x)
-                                     for x in ctx.table_constraint()]
+            result["constraints"] = [self.build_table_constraint(x) for x in ctx.table_constraint()]
 
         for optctx in ctx.table_option():
             for flag, key in ((optctx.K_WITHOUT, "without"), (optctx.C_STRICT, "strict")):
@@ -707,7 +702,7 @@ class Parser(object):
         result = {}
 
         result["name"] = self.u(ctx.trigger_name)
-        if ctx.database_name(0): result["schema"]  = self.u(ctx.database_name(0))
+        if ctx.schema_name(0): result["schema"]  = self.u(ctx.schema_name(0))
         if ctx.K_TEMP() or ctx.K_TEMPORARY(): result["temporary"] = True
         if ctx.K_EXISTS(): result["exists"]  = True
 
@@ -751,7 +746,7 @@ class Parser(object):
         result = {}
 
         result["name"] = self.u(ctx.view_name)
-        if ctx.database_name(): result["schema"]  = self.u(ctx.database_name)
+        if ctx.schema_name(): result["schema"]  = self.u(ctx.schema_name)
         if ctx.K_TEMP() or ctx.K_TEMPORARY(): result["temporary"] = True
         if ctx.K_EXISTS(): result["exists"]  = True
 
@@ -775,7 +770,7 @@ class Parser(object):
         result = {}
 
         result["name"] = self.u(ctx.table_name)
-        if ctx.database_name(): result["schema"]  = self.u(ctx.database_name)
+        if ctx.schema_name(): result["schema"]  = self.u(ctx.schema_name)
         if ctx.K_EXISTS(): result["exists"]  = True
         result["module"] = {"name":  self.u(ctx.module_name)}
         args = ctx.module_argument()
@@ -829,13 +824,19 @@ class Parser(object):
               }
               ?match:          MATCH-clause value
           ?
+          ?generated:
+              ?name            constraint name
+              expr:            value or expression
+              ?type:           STORED | VIRTUAL
+              ?always:         True if GENERATED ALWAYS
+          ?
         }.
         """
         result = {}
         result["name"] = self.u(ctx.column_name().any_name)
         if ctx.type_name():
-            if ctx.type_name().type_name_text().ENCLOSED_IDENTIFIER():
-                result["type"] = self.u(ctx.type_name().type_name_text().ENCLOSED_IDENTIFIER).upper()
+            if isinstance(ctx.type_name().type_name_text().children[0], TerminalNode):
+                result["type"] = self.u(ctx.type_name().type_name_text().children[0]).upper()
             else:
                 ww = ctx.type_name().type_name_text().type_or_constraint_name_word()
                 result["type"] = unquote(" ".join(self.t(x).upper() for x in ww))
@@ -885,6 +886,14 @@ class Parser(object):
                 result[key] = self.build_fk_extra(fkctx)
                 result[key]["table"] = self.u(fkctx.foreign_table)
                 result[key]["key"] = self.u(fkctx.column_name(0) or "")
+
+            elif c.generated_clause():
+                key = "generated"
+                gctx = c.generated_clause()
+                result[key] = {"expr": self.r(gctx.expr())}
+                if gctx.K_GENERATED(): result[key]["always"] = True
+                if   gctx.C_STORED():  result[key]["type"] = "STORED"
+                elif gctx.K_VIRTUAL(): result[key]["type"] = "VIRTUAL"
 
             if key and c.constraint_name(): result[key]["name"] = self.u(c.constraint_name)
 
@@ -986,7 +995,7 @@ class Parser(object):
     def get_conflict(self, ctx):
         """Returns ctx.conflict_clause value like "ROLLBACK", if any."""
         conflict = ctx.conflict_clause()
-        if not conflict: return
+        if not conflict: return None
         action = (conflict.K_ROLLBACK() or
             conflict.K_ABORT() or conflict.K_FAIL() or conflict.K_IGNORE()
         )
@@ -1000,7 +1009,7 @@ class Parser(object):
         result, ptr = None, ctx
         while ptr and ptr.parentCtx:
             ptr = ptr.parentCtx
-            if any(isinstance(ptr, x) for x in types):
+            if isinstance(ptr, tuple(types)):
                 result = ptr
                 if not top: break # while ptr
         return result
@@ -1075,46 +1084,61 @@ class Parser(object):
         Recursively goes through all items and item children, renaming columns.
         """
         if stack is None:
-            stack = []
-            renames["column"] = {k.lower(): {c1.lower(): c2 for c1, c2 in v.items()}
-                                 for k, v in renames["column"].items()}
+            stack = [] # Nested ownerships as [(context, [entity nane, ])]
+            lowercased = {k.lower(): {c1.lower(): c2 for c1, c2 in v.items()}
+                          for k, v in renames["column"].items()}
+            renames = dict(renames, column=lowercased)
         for ctx in items:
-            ownerctx = None
-            if isinstance(ctx, CTX.SELECT_OR_VALUES):
+            namectx = None # Single context with owner name, or a list for SELECT/JOIN tables
+            if isinstance(ctx, CTX.SELECT_CORE):
                 tables = ctx.table_or_subquery()
-                if len(tables) == 1 and tables[0].table_name():
-                    ownerctx = tables[0].table_name
+                if ctx.join_clause(): tables += ctx.join_clause().table_or_subquery()
+                namectx = [c.table_name() for c in tables if c.table_name()]
+            elif isinstance(ctx, CTX.JOIN_CLAUSE):
+                tables = ctx.table_or_subquery()
+                namectx = [c.table_name() for c in tables if c.table_name()]
             elif isinstance(ctx, CTX.EXPRESSION):
-                if self.t(ctx.table_name): ownerctx = ctx.table_name
+                if self.t(ctx.table_name): namectx = ctx.table_name
             elif isinstance(ctx, CTX.FOREIGN_KEY):
-                ownerctx = ctx.foreign_table().any_name
+                namectx = ctx.foreign_table().any_name
             elif isinstance(ctx, CTX.CREATE_VIEW):
-                ownerctx = ctx.view_name
-            elif isinstance(ctx, (CTX.UPDATE, CTX.DELETE)):
-                ownerctx = ctx.qualified_table_name().table_name
+                namectx = ctx.view_name
+            elif isinstance(ctx, (CTX.UPDATE, CTX.UPDATE_LIMITED, CTX.DELETE, CTX.DELETE_LIMITED)):
+                namectx = ctx.qualified_table_name().table_name
             elif isinstance(ctx, (CTX.CREATE_TABLE, CTX.CREATE_VIRTUAL_TABLE,
                                   CTX.CREATE_INDEX, CTX.CREATE_TRIGGER, CTX.INSERT)):
-                ownerctx = ctx.table_name
-            if ownerctx:
-                name = self.u(ownerctx).lower()
-                if SQL.CREATE_TRIGGER == self._category and name in ("old", "new") \
+                namectx = ctx.table_name
+            if namectx:
+                names = [self.u(c).lower() for c in util.tuplefy(namectx)]
+                if SQL.CREATE_TRIGGER == self._category and names in (["old"], ["new"]) \
                 and stack and isinstance(stack[0][0], CTX.CREATE_TRIGGER):
-                    name = stack[0][1]
-                stack.append((ctx, name))
+                    names = stack[0][1]
+                stack.append((ctx, names))
 
-            if isinstance(ctx, CTX.COLUMN_NAME) and stack:
-                c = ctx # Get the deepest terminal, the one holding name value
-                while not isinstance(c, TerminalNode): c = c.children[0]
-                v0 = self.u(c).lower()
-
-                v = renames["column"].get(stack and stack[-1][1])
-                for v1, v2 in v.items() if v else ():
-                    if v0 == v1.lower(): c.getSymbol().text = quote(v2)
+            if stack:
+                renamectx = None
+                if isinstance(ctx, CTX.COLUMN_NAME):
+                    renamectx = ctx
+                elif isinstance(ctx, CTX.LITERAL_VALUE) and isinstance(ctx.parentCtx, CTX.EXPRESSION):
+                    PARENT_TYPES = [CTX.COLUMN_DEF, CTX.SELECT_CORE, CTX.UPDATE, CTX.DELETE]
+                    if self.get_parent(ctx, PARENT_TYPES) and self.t(ctx) != self.u(ctx):
+                        # Interpret any quoted string in potential column context as column
+                        renamectx = ctx
+                if renamectx:
+                    terminal = renamectx # Get the deepest terminal, the one holding name value
+                    while not isinstance(terminal, TerminalNode): terminal = terminal.children[0]
+                    text = self.u(terminal).lower()
+                    for ownername in stack[-1][1]:
+                        col_renames = renames["column"].get(ownername) or {}
+                        for name_old, name_new in col_renames.items():
+                            if text == name_old and not getattr(terminal, "__renamed__", False):
+                                terminal.getSymbol().text = quote(name_new)
+                                setattr(terminal, "__renamed__", True)
 
             if getattr(ctx, "children", None):
                 self.recurse_rename_column(ctx.children, renames, stack)
 
-            if ownerctx: stack.pop(-1)
+            if namectx: stack.pop(-1)
 
 
 
@@ -1298,137 +1322,7 @@ class Generator(object):
         return self.token(val, "CM") if val else ""
 
 
-
-def test():
-    logging.basicConfig()
-
-    TEST_STATEMENTS = [
-        u'''
-        CREATE UNIQUE INDEX IF NOT EXISTS
-        myschema.myindex ON mytable (mytablecol1, mytablecol2) WHERE mytable.mytablecol1 NOT BETWEEN mytable.mytablecol2 AND mytable.mytablecol3
-        ''',
-
-
-        """
-        -- comment
-        CREATE TEMP TABLE -- comment
-        -- comment
-        IF NOT EXISTS
-        -- comment
-        mytable (
-            -- first line comment
-            mytablecol1 TEXT PRIMARY KEY AUTOINCREMENT,
-            "mytable col2" INTEGER NOT NULL, -- my comment
-            mytablecol3
-            /* multiline
-            comment */
-            -- last line comment
-            UNIQUE NOT NULL
-        ) -- comment
-        WITHOUT ROWID -- comment
-        -- comment
-
-        """,
-
-
-        u'''
-        CREATE TABLE IF NOT EXISTS "mytable" (
-            mytablekey    INTEGER NOT NULL DEFAULT (mytablecol1),
-            mytablecol1   INTEGER NOT NULL ON CONFLICT ABORT DEFAULT /* uhuu */ -666.5 UNIQUE ON CONFLICT ROLLBACK,
-            mytablecol2   INTEGER CHECK (mytablecol3 IS /* hoho */ NULL) COLLATE /* haha */ BiNARY,
-            mytablecol3   TEXT NOT NULL DEFAULT "double "" quoted" CHECK (LENGTH(mytable.mytablecol1) > 0),
-            mytablecol4   TIMESTAMP WITH TIME ZONE,
-            mytablefk     INTEGER REFERENCES mytable2 (mytable2key) ON delete cascade on update no action match SIMPLE,
-            mytablefk2    INTEGER,
-            mytablefk3    INTEGER,
-            mytablecol5   DOUBLE TYPE,
-            PRIMARY KEY (mytablekey) ON CONFLICT ROLLBACK,
-            FOREIGN KEY (mytablefk2, mytablefk3) REFERENCES mytable2 (mytable2col1, mytable2col2) ON DELETE CASCADE ON UPDATE RESTRICT,
-            CONSTRAINT myconstraint CHECK (mytablecol1 != mytablecol2)
-        )
-        ''',
-
-
-        u'''
-        CREATE TRIGGER myschema.mytriggér AFTER UPDATE OF mytablecol1 ON mytable
-        WHEN 1 NOT IN (SELECT mytablecol2 FROM mytable)
-          BEGIN
-            SELECT mytablecol1, mytablecol2, "mytable col3" FROM mytable;
-            SELECT myviewcol1, myviewcol2 FROM myview;
-            UPDATE "my täble2" SET mytable2col1 = NEW.mytablecol1 WHERE mytable2col2 = OLD.mytablecol2;
-            INSERT INTO mytable2 (mytable2col1) VALUES (42);
-            DELETE FROM mytable2 WHERE mytable2col2 != old.mytablecol2;
-            UPDATE mytable2 SET mytable2col2 = new.mytablecol2 WHERE mytable2col1 = old.mytablecol1;
-          END;
-        ''',
-
-
-        u'''
-            CREATE TEMPORARY VIEW IF NOT EXISTS
-            myschema.myview (myviewcol1, myviewcol2, "myview col3")
-            AS SELECT mytablecol1, mytablecol2, "mytable col3" FROM mytable
-        ''',
-
-
-        u'''
-            CREATE TEMPORARY VIEW IF NOT EXISTS
-            myschema.myview (myviewcol1, myviewcol2, "myview col3")
-            AS SELECT mytablecol1, mytablecol2, "mytable col3" FROM mytable
-               UNION
-               SELECT mytable2col1, mytable2col2, "mytable2 col3" FROM mytable2
-               UNION
-               SELECT myview2col1, myview2col2, "myview2 col3" FROM myview2
-        ''',
-
-
-        u'''
-        CREATE VIRTUAL TABLE IF NOT EXISTS myschemaname.mytable
-        USING mymodule (myargument1, myargument2);
-        ''',
-    ]
-
-
-    indent = "  "
-    renames = {"table":   {"mytable": "renamed mytable", "mytable2": "renamed mytable2"},
-               "trigger": {u"mytriggér": u"renämed mytriggér"},
-               "index":   {"myindex":  u"renämed myindex"},
-               "view":    {"myview":  u"renämed myview",
-                           "myview2": u"renämed myview2"},
-               "column":  {
-                           "renamed mytable":  {"mytablecol1": u"renamed mytablecol1", "mytable col2": "renamed mytable col2", "mytablecol2": "renamed mytablecol2", "mytablecol3": "renamed mytablecol3", "mytable col3": "renamed mytable col3", "mytablekey": "renamed mytablekey", "mytablefk2": "renamed mytablefk2"},
-                           "renamed mytable2": {"mytable2col1": u"renamed mytable2col1", "mytable2col2": u"renamed mytable2col2", "mytable2key": "renamed mytable2key", "mytablefk2": "renamed mytablefk2"},
-                           u"renämed myview":  {"myviewcol1": "renamed myviewcol1", "myview col3": "renamed myview col3"},
-                           u"renämed myview2": {"myview2col1": "renamed myview2col1", "myview2 col3": "renamed myview2 col3"},
-               },
-               "schema":  u"renämed schéma"}
-    for sql1 in TEST_STATEMENTS:
-        print("\n%s\nORIGINAL:\n" % ("-" * 70))
-        print(sql1.encode("utf-8"))
-
-        x, err = parse(sql1)
-        if not x:
-            print("ERROR: %s" % err)
-            continue # for sql1
-
-        print("\n%s\nPARSED:" % ("-" * 70))
-        print(json.dumps(x, indent=2))
-        sql2, err2 = generate(x, indent)
-        if sql2:
-            print("\n%s\nGENERATED:\n" % ("-" * 70))
-            print(sql2.encode("utf-8") if sql2 else sql2)
-
-            print("\n%s\nTRANSFORMED:\n" % ("-" * 70))
-            sql3, err3 = transform(sql2, renames=renames, indent=indent)
-            print(sql3.encode("utf-8") if sql3 else sql3)
-
-
-
 __all__ = [
     "CTX", "Generator", "ParseError", "Parser", "SQL", "format", "generate", "get_type",
     "parse", "quote", "strip_and_collapse", "terminate", "transform", "unquote",
 ]
-
-
-
-if __name__ == '__main__':
-    test()

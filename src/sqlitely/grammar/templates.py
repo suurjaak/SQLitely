@@ -24,7 +24,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    20.11.2023
+@modified    08.09.2024
 ------------------------------------------------------------------------------
 """
 
@@ -383,7 +383,7 @@ COLUMN_DEFINITION = """<%
 from collections import OrderedDict
 
 get_constraints = lambda: ( # Yield column constraints in fixed order
-    (k, data[k]) for k in ("pk", "notnull", "unique", "default", "collate", "check", "fk")
+    (k, data[k]) for k in ("pk", "notnull", "unique", "default", "collate", "check", "fk", "generated")
     if data.get(k) is not None and (k != "collate" or data[k].get("value") not in (None, ""))
     and (k not in ("default", "check") or data[k].get("expr") not in (None, ""))
 )
@@ -525,6 +525,24 @@ for i, (ctype, cnstr) in enumerate(get_constraints()):
             %endif
         %endif
     %endif
+
+
+    %if data.get("generated") and any(v if k in ("expr", "type") else v or "" == v for k, v in data["generated"].items()):
+        %if cnstr_breaks["generated"]:
+  {{ LF() }}
+  {{ PAD("name", {"name": ""}) }}
+        %endif
+        %if data["generated"].get("name") is not None:
+  CONSTRAINT {{ Q(data["generated"]["name"]) }}
+        %endif
+        %if data["generated"].get("always"):
+  GENERATED ALWAYS
+        %endif
+  AS ({{ WS(data["generated"].get("expr") or "") }})
+        %if data["generated"].get("type"):
+  {{ data["generated"]["type"] }}
+        %endif
+    %endif
 """
 
 
@@ -553,7 +571,7 @@ INDEX
   IF NOT EXISTS
 %endif
 
-{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) if data.get("name") else "" }}
+{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) if data.get("name") is not None else "" }}
 {{ LF() if data.get("exists") and data.get("schema") else "" }}
 ON {{ Q(data["table"]) if "table" in data else "" }}{{ WS(" ") }}
 
@@ -584,7 +602,7 @@ TABLE
     %if data.get("exists"):
   IF NOT EXISTS
     %endif
-{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) if data.get("name") else "" }}{{ WS(" ") if data.get("schema") or data.get("name") else "" }}(
+{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) if data.get("name") is not None else "" }}{{ WS(" ") if data.get("schema") or data.get("name") is not None else "" }}(
 {{ LF() or GLUE() }}
 
 %for i, c in enumerate(data.get("columns") or []):
@@ -632,7 +650,7 @@ TRIGGER
   IF NOT EXISTS
 %endif
 
-{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) if data.get("name") else "" }}
+{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) if data.get("name") is not None else "" }}
 
 %if data.get("upon"):
   {{ data["upon"] }}
@@ -648,7 +666,7 @@ TRIGGER
 %endif
 
 ON
-{{ Q(data["table"]) if data.get("table") else "" }}
+{{ Q(data["table"]) if data.get("table") is not None else "" }}
 
 %if data.get("for"):
   FOR EACH ROW
@@ -681,7 +699,7 @@ VIEW
   IF NOT EXISTS
 %endif
 
-{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) if data.get("name") else "" }}
+{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) if data.get("name") is not None else "" }}
 
 %if data.get("columns"):
   {{ GLUE() }}{{ WS(" ") }}(
@@ -781,7 +799,7 @@ else: cmpath = ["constraints", i]
     %endfor
   )
 
-  REFERENCES  {{ Q(data["table"]) if data.get("table") else "" }}
+  REFERENCES  {{ Q(data["table"]) if data.get("table") is not None else "" }}
     %if data.get("key"):
   {{ GLUE() }}{{ WS(" ") }}
   (
