@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    30.12.2024
+@modified    03.02.2025
 ------------------------------------------------------------------------------
 """
 import base64
@@ -683,7 +683,7 @@ class SchemaDiagram(object):
         ns = {"title": title, "items": [], "lines": lines,
               "show_nulls": self._show_nulls, "show_labels": self._show_labels,
               "get_extent": self.GetTextExtent, "get_stats_texts": self.GetStatisticsTexts,
-              "font_faces": copy.deepcopy(self.FONTS), "embed": embed,
+              "font_faces": self.FONTS.copy(), "embed": embed,
               "fonts": {"normal": self._font, "bold": self._font_bold}}
         for o in self._objs.values():
             if items and o["name"] not in items: continue # for o
